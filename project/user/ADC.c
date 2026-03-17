@@ -1,92 +1,106 @@
 #include "zf_common_headfile.h"
-#define AD_VAL_MAX 3500 // 电感最大值上限（ADC 原始计数最大值，使用整数）
-#define NUM 4           // 电感数量4
-#define SORT_LENGTH 4   // 排序数组长度
+#include "ADC.h"
 
-/*********************************************
-             电感排布
-              四电感
+/* 内部常量定义 */
+#define ADC_RAW_MAX 3500 /* ADC 原始采样的理论最大有效值 */
+#define ADC_NORM_MAX 100 /* 归一化后的量程上限 */
+#define SORT_LENGTH 4    /* 滑动排序/均值滤波的样本长度 */
 
-    —     l       l     —
+/* 内部中间变量 */
+static uint16 AD_value[NUM][SORT_LENGTH] = {{0}}; /* 滤波缓冲区 */
+static uint16 adtemp = 0;                         /* 排序交换临时变量 */
+static uint32 ad_sum[NUM] = {0};                  /* 累加和 */
+static uint16 ad_ave[NUM] = {0};                  /* 平均值 */
+static uint16 AD_V[NUM] = {0};                    /* 当前周期的处理后值 */
+static uint8 adc_measure_enable = 1;              /* 默认开启最大值动态记录 */
 
-   ad1   ad2     ad3   ad4
+/* 默认标定参数（若无 EEPROM 加载则使用此值） */
+static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
+static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
+static const int limit = 100;
 
- *********************************************/
-static uint16 AD_value[NUM][SORT_LENGTH] = {{0}};                                // 存储电感原始值的二维数组（整数）
-static uint16 adtemp = 0;                                                        // 排序临时变量（整数）
-static uint32 ad_sum[NUM] = {0};                                                 // 电感值求和（防止溢出，使用32位）
-static uint16 ad_ave[NUM] = {0};                                                 // 电感值中值（整数）
-static uint16 AD_V[NUM] = {0}, AD_last[NUM] = {0};                               // 电感值处理后的结果（整数）
-uint16 RAW[NUM] = {0};                                                           // 电感原始值（整数，供显示/标定）
-uint16 ad1 = 0;                                                                  // 第1个电感值（归一化后，0-100）
-uint16 ad2 = 0;                                                                  // 第2个电感值（归一化后，0-100）
-uint16 ad3 = 0;                                                                  // 第6个电感值（归一化后，0-100）
-uint16 ad4 = 0;                                                                  // 第7个电感值（归一化后，0-100）
-static const uint16 MAX[NUM] = {AD_VAL_MAX, AD_VAL_MAX, AD_VAL_MAX, AD_VAL_MAX}; // 各电感最大值（常量）
-uint16 MA[NUM] = {0};                                                            // 扫描记录的最大值（整数）
-float Err = 0;                                                                   // 当前偏差值（整数，供 PID_Direction 使用）
-static const int limit = 100;                                                    // 偏差限幅（整数）
-void dispose(void)
+/* 全局导出变量 */
+volatile uint16 RAW[NUM] = {0};
+volatile uint16 MA[NUM] = {0};
+volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
+uint16 ad1 = 0;
+uint16 ad2 = 0;
+uint16 ad3 = 0;
+uint16 ad4 = 0;
+volatile float Err = 0.0f;
+
+/* 内部私有函数声明 */
+static void adc_read_channels(uint16 *raw_buffer);
+static uint16 adc_normalize_value(uint16 raw_value, uint16 min_value, uint16 max_value);
+static void dispose(void);
+
+/**
+ * @brief 处理电感偏差计算
+ * @details 采用四路电感的差比和算法，并支持参数 A_1, B_1, C_l 的加权修正
+ */
+static void dispose(void)
 {
-    float denom = 0;
-    denom = A_1 * (ad1 + ad4) + C_l * func_abs((int)ad2 - (int)ad3);
-    Err = limit * (A_1 * (ad1 - ad4) + B_1 * (ad2 - ad3)) / denom;
+    float denom = 0.0f;
+
+    /* 计算分母：加权和项 + 非线性偏差补偿项 */
+    denom = g_app_config.angle.A_1 * (float)(ad1 + ad4) +
+            g_app_config.angle.C_l * (float)func_abs((int)ad2 - (int)ad3);
+
+    /* 防除零保护 */
+    if (denom < 1.0f)
+    {
+        Err = 0.0f;
+        return;
+    }
+
+    /* 差比和计算公式：Err = limit * (加权差) / 加权项 */
+    Err = (float)limit * (g_app_config.angle.A_1 * (float)((int)ad1 - (int)ad4) + g_app_config.angle.B_1 * (float)((int)ad2 - (int)ad3)) / denom;
 }
 
 /**
- * @brief 扫描赛道获取电感最大值
- * @details 获取各个电感的当前值，并更新记录的最大值
- * @note 用于电感标定和归一化计算的参考值
+ * @brief 动态扫描电感的最大/最小值（用于自动标定）
  */
 void scan_track_max_value(void)
 {
-    int i = 0;
-    // 读取 ADC 原始值（uint16），全程使用整数，避免不必要的类型转换
-//    RAW[0] = adc_convert(ADC_CH1_P11); // 读取第1个电感AD值
-//    RAW[1] = adc_convert(ADC_CH0_P10); // 读取第2个电感AD值
-//    RAW[2] = adc_convert(ADC_CH8_P00); // 读取第3个电感AD值
-//    RAW[3] = adc_convert(ADC_CH9_P01); // 读取第4个电感AD值
-	
-	  RAW[0] = adc_convert(ADC_CH9_P01); // 采集第1个电感（uint16）
-      RAW[1] = adc_convert(ADC_CH8_P00); // 采集第2个电感（uint16）
-      RAW[2] = adc_convert(ADC_CH0_P10); // 采集第3个电感（uint16）
-      RAW[3] = adc_convert(ADC_CH1_P11); // 采集第4个电感（uint16）
+    int i;
+
+    if (!adc_measure_enable)
+        return;
+
     for (i = 0; i < NUM; i++)
     {
-        // 如果当前值大于记录的最大值，则更新最大值
+        if (RAW[i] == 0u)
+            continue;
+
+        /* 更新历史最大值 */
         if (RAW[i] > MA[i])
-        {
             MA[i] = RAW[i];
-        }
+
+        /* 更新历史最小值 */
+        if (RAW[i] < MI[i])
+            MI[i] = RAW[i];
     }
 }
 
 /**
- * @brief 读取并处理电感数据
- * @details 多次采样并排序滤波，对电感值进行归一化处理并计算偏差
- * @note 核心电感处理函数，用于赛道识别和循迹控制
+ * @brief 执行电感数据读取与处理全流程
+ * @details 包含：多通道采样 -> 冒泡排序 -> 去极值均值滤波 -> 归一化 -> 偏差计算
  */
 void read_AD(void)
 {
-    int i, j, k;
-    uint16 AD_ONE[NUM] = {0}; // 归一化后的电感值（0-100），使用整数定点
-    int min_idx = 0;
+    int i, j, k, min_idx;
+    uint16 raw_buffer[NUM];
+    uint16 AD_ONE[NUM];
 
-    // 1. 多次采样电感值
+    /* 1. 多次采样填充缓冲区 */
     for (i = 0; i < SORT_LENGTH; i++)
     {
-//	AD_value[0][i] = adc_convert(ADC_CH1_P11); // 采集第1个电感（uint16）
-//	AD_value[1][i] = adc_convert(ADC_CH0_P10); // 采集第2个电感（uint16）
-//	AD_value[2][i] = adc_convert(ADC_CH8_P00); // 采集第6个电感（uint16）
-//	AD_value[3][i] = adc_convert(ADC_CH9_P01); // 采集第7个电感（uint16）
-		
-		AD_value[0][i] = adc_convert(ADC_CH9_P01); // 采集第1个电感（uint16）
-        AD_value[1][i] = adc_convert(ADC_CH8_P00); // 采集第2个电感（uint16）
-        AD_value[2][i] = adc_convert(ADC_CH0_P10); // 采集第3个电感（uint16）
-        AD_value[3][i] = adc_convert(ADC_CH1_P11); // 采集第4个电感（uint16）
+        adc_read_channels(raw_buffer);
+        for (j = 0; j < NUM; j++)
+            AD_value[j][i] = raw_buffer[j];
     }
 
-    // 2. 对每个电感的采样值进行排序（选择排序算法）
+    /* 2. 对每个通道进行排序和基础滤波 */
     for (i = 0; i < NUM; i++)
     {
         for (j = 0; j < SORT_LENGTH - 1; j++)
@@ -95,9 +109,7 @@ void read_AD(void)
             for (k = j + 1; k < SORT_LENGTH; k++)
             {
                 if (AD_value[i][k] < AD_value[i][min_idx])
-                {
                     min_idx = k;
-                }
             }
             if (min_idx != j)
             {
@@ -107,40 +119,94 @@ void read_AD(void)
             }
         }
 
-        // 3. 中值计算（整数）- 数组长度为4，取中间两个值(下标1和2)的平均值
+        /* 取排序后的中间项计算均值，更新样本 */
         ad_sum[i] = (uint32)AD_value[i][1] + (uint32)AD_value[i][2];
-        ad_ave[i] = (uint16)((ad_sum[i] + 1u) / 2u); // +1做四舍五入
+        ad_ave[i] = (uint16)((ad_sum[i] + 1u) / 2u);
         AD_value[i][SORT_LENGTH - 1] = ad_ave[i];
     }
 
+    /* 3. 计算最终均值并进行初步限幅 */
     memset(ad_sum, 0, sizeof(ad_sum));
-
-    // 4. 计算每个电感的最终值并限幅
     for (i = 0; i < NUM; i++)
     {
         for (j = 0; j < SORT_LENGTH; j++)
-        {
             ad_sum[i] += (uint32)AD_value[i][j];
-        }
-        AD_V[i] = (uint16)(ad_sum[i] / SORT_LENGTH); // 求平均值（整数）
-        RAW[i] = AD_V[i];                            // 保存原始AD值（整数）
-        if (AD_V[i] > MAX[i])                        // 限幅处理
-        {
-            AD_V[i] = MAX[i];
-        }
+
+        AD_V[i] = (uint16)(ad_sum[i] / SORT_LENGTH);
+        RAW[i] = AD_V[i]; /* 保存原始值用于调试和标定 */
+
+        if (AD_V[i] > MAX_Err[i])
+            AD_V[i] = MAX_Err[i];
     }
 
-    // 5. 归一化处理（转换为0-100范围）
+    /* 4. 归一化映射 (映射到 0~100) */
     for (i = 0; i < NUM; i++)
     {
-        // 使用整数定点：百分比 = AD_V / MAX * 100
-        AD_ONE[i] = (uint16)((100u * (uint32)AD_V[i]) / (uint32)MAX[i]);
+        AD_ONE[i] = adc_normalize_value(AD_V[i], MIN_Err[i], MAX_Err[i]);
     }
 
-    // 6. 将处理后的值赋给各个电感变量
+    /* 5. 分配给全局变量 */
     ad1 = AD_ONE[0];
     ad2 = AD_ONE[1];
     ad3 = AD_ONE[2];
     ad4 = AD_ONE[3];
-    dispose(); // 处理电感数据，计算偏差值
+
+    /* 6. 执行偏差解算 */
+    dispose();
+}
+
+/**
+ * @brief 使能或禁止动态最大值记录
+ */
+void adc_measure_set_enable(uint8 enable)
+{
+    adc_measure_enable = enable;
+}
+
+/**
+ * @brief 重置标定记录
+ */
+void adc_measure_reset(void)
+{
+    int i;
+    for (i = 0; i < NUM; i++)
+    {
+        MA[i] = 0u;
+        MI[i] = ADC_RAW_MAX;
+    }
+}
+
+/**
+ * @brief 读取硬件 ADC 通道
+ */
+static void adc_read_channels(uint16 *raw_buffer)
+{
+    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左前电感 */
+    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左后电感 */
+    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右前电感 */
+    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右后电感 */
+}
+
+/**
+ * @brief 线性归一化函数
+ */
+static uint16 adc_normalize_value(uint16 raw, uint16 min, uint16 max)
+{
+    uint16 span;
+    uint32 scaled;
+
+    if (max <= min)
+    {
+        min = 0;
+        max = ADC_RAW_MAX;
+    }
+
+    span = max - min;
+    if (raw <= min)
+        return 0;
+    if (raw >= max)
+        return ADC_NORM_MAX;
+
+    scaled = (uint32)(raw - min) * ADC_NORM_MAX;
+    return (uint16)((scaled + (uint32)span / 2u) / (uint32)span);
 }

@@ -1,69 +1,132 @@
 #include "zf_common_headfile.h"
-#define TIME_0 5  // 定时器0中断周期(ms)
-#define TIME_1 10 // 定时器1中断周期(ms)
+#include "int_user.h"
+
+/* 定时器中断周期定义（单位：ms） */
+#define TIME_0 5  /* 核心控制环周期 */
+#define TIME_1 10 /* 辅助管理环周期 */
+
+/* 内部私有初始化函数声明 */
+static void hardware_init(void);
+static void control_init(void);
+static void app_init(void);
+static void clamp_steer_output(PID_Steer *pid);
+
+/**
+ * @brief 系统初始化总函数
+ */
 void int_user(void)
 {
-    // 系统初始化：传感器/存储/定时器/编码器/ADC/电机/无线
-    system_delay_init(); // 初始化延时模块
-    ips114_init();
-    imu660ra_init(); // 初始化 IMU660RA
-    eeprom_init();
-    pit_ms_init(TIM0_PIT, TIME_0);
-    pit_ms_init(TIM1_PIT, TIME_1);
-    encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04); // 编码器初始化
-    encoder_dir_init(TIM4_ENCOEDER, IO_P42, TIM4_ENCOEDER_P06); // 编码器初始化
-    adc_init(ADC_CH13_P05, ADC_8BIT);
-    adc_init(ADC_CH0_P10, ADC_12BIT);
-    adc_init(ADC_CH1_P11, ADC_12BIT);
-    adc_init(ADC_CH8_P00, ADC_12BIT);
-    adc_init(ADC_CH9_P01, ADC_12BIT);
-    motor_Init();         // 电机初始化
-    fuya_Init();          // 负压系统初始化
-    wireless_uart_init(); // 无线串口初始化
-	offset_init();
-    // 速度环 PID 初始化（误差限幅与输出限幅）
-    pid_speed_init(&PID.left_speed, 120, 50, 0, 9000, 9000);
-    pid_speed_init(&PID.right_speed, 120, 50, 0, 9000, 9000);
-    // 方向环 PID 初始化（误差KP/KD与陀螺KD分离）
-    pid_steer_init(&PID.steer, kp_Err, kd_Err, kp2_Err, limiting_Err, limiting_Err);   // 方向环
-    pid_steer_init(&PID.angle, kp_Angle, kd_Angle, 0, limiting_Angle, limiting_Angle); // 角度环
+    hardware_init(); /* 1. 硬件外设初始化 */
+    control_init();  /* 2. 控制算法参数初始化 */
+    app_init();      /* 3. 应用逻辑初始化 */
 }
 
-/*********************************************
- * 传感器零偏标定
- * 函数: offset_init()
- * 作用: 采样多次取平均，得到陀螺仪与加速度零偏
- * 日期: 2024/11/26
- * 备注: 调用前确保 IMU 已上电稳定
- *********************************************/
-float Gyro_offset_x = 0;
-float Gyro_offset_y = 0;
-float Gyro_offset_z = 0;
-float acc_offset_x = 0;
-float acc_offset_y = 0;
-float acc_offset_z = 0;
-int imu_flat_star=0;
-void offset_init(void)
+/**
+ * @brief 硬件驱动与底层外设初始化
+ */
+static void hardware_init(void)
 {
-    int rt = 50;
-    int i;
-    for (i = 0; i < rt; i++)
-    {
-        imu660ra_get_gyro();
-        imu660ra_get_acc();
-        Gyro_offset_x += imu660ra_gyro_transition(imu660ra_gyro_x);
-        Gyro_offset_y += imu660ra_gyro_transition(imu660ra_gyro_y);
-        Gyro_offset_z += imu660ra_gyro_transition(imu660ra_gyro_z);
-        acc_offset_x += (imu660ra_acc_transition(imu660ra_acc_x));
-        acc_offset_y += (imu660ra_acc_transition(imu660ra_acc_y));
-        acc_offset_z += (imu660ra_acc_transition(imu660ra_acc_z));
-        system_delay_ms(5);
-    }
-    Gyro_offset_x = Gyro_offset_x / rt;
-    Gyro_offset_y = Gyro_offset_y / rt;
-    Gyro_offset_z = Gyro_offset_z / rt;
-    acc_offset_x = acc_offset_x / rt;
-    acc_offset_y = acc_offset_y / rt;
-    acc_offset_z = acc_offset_z / rt;
-	imu_flat_star=1;
+    /* 基础系统组件 */
+    system_delay_init();
+    ips114_init();   /* IPS 屏幕 */
+    imu660ra_init(); /* 6轴惯性传感器 */
+    eeprom_init();   /* 配置存储管理 */
+
+    /* 定时器 PIT 初始化 */
+    pit_ms_init(TIM0_PIT, TIME_0);
+    pit_ms_init(TIM1_PIT, TIME_1);
+
+    /* 编码器正交解码初始化 */
+    encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04);
+    encoder_dir_init(TIM4_ENCOEDER, IO_P42, TIM4_ENCOEDER_P06);
+
+    /* ADC 通道初始化 */
+    adc_init(ADC_CH13_P05, ADC_8BIT); /* 电池电压采样 */
+    adc_init(ADC_CH0_P10, ADC_12BIT); /* 电感 1 */
+    adc_init(ADC_CH1_P11, ADC_12BIT); /* 电感 2 */
+    adc_init(ADC_CH8_P00, ADC_12BIT); /* 电感 3 */
+    adc_init(ADC_CH9_P01, ADC_12BIT); /* 电感 4 */
+
+    /* 应用层驱动 */
+    motor_Init();         /* 电机驱动 PWM 及方向 */
+    fuya_Init();          /* 负压风扇 PWM */
+    wireless_uart_init(); /* 无线串口（用于调试/下载） */
+}
+
+/**
+ * @brief 控制参数与 PID 实例初始化
+ */
+static void control_init(void)
+{
+    /* 速度环初始化：默认给定一组安全的基础参数 */
+    pid_speed_init(&PID.left_speed, 120.0f, 50.0f, 0.0f, 5000.0f, 5000.0f);
+    pid_speed_init(&PID.right_speed, 120.0f, 50.0f, 0.0f, 5000.0f, 5000.0f);
+
+    /* 转向环与角度环先清零，随后由 apply_config 从 EEPROM 加载 */
+    pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    pid_steer_init(&PID.angle, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+    /* 同步 EEPROM 参数 */
+    control_apply_config();
+}
+
+/**
+ * @brief 应用程序启动逻辑
+ */
+static void app_init(void)
+{
+    /* 执行 IMU 零偏校准 */
+    offset_init();
+}
+
+/**
+ * @brief 参数同步函数
+ * @details 将全局配置结构体 g_app_config 中的值写入到 PID 运行实例中
+ */
+void control_apply_config(void)
+{
+    /* 1. 同步转向环（基于电感）参数 */
+    PID.steer.Kp = g_app_config.speed.kp_Err;
+    PID.steer.Kd = g_app_config.speed.kd_Err;
+    PID.steer.Kp2 = g_app_config.speed.kp2_Err;
+    PID.steer.max_output = g_app_config.speed.limiting_Err;
+    PID.steer.min_output = g_app_config.speed.limiting_Err;
+    clamp_steer_output(&PID.steer);
+
+    /* 2. 同步角度环（基于陀螺仪）参数 */
+    PID.angle.Kp = g_app_config.angle.kp_Angle;
+    PID.angle.Kd = g_app_config.angle.kd_Angle;
+    PID.angle.Kp2 = 0.0f;
+    PID.angle.max_output = g_app_config.angle.limiting_Angle;
+    PID.angle.min_output = g_app_config.angle.limiting_Angle;
+    clamp_steer_output(&PID.angle);
+}
+
+/**
+ * @brief 保存配置
+ */
+void config_save(void)
+{
+    control_apply_config();
+    eeprom_flash();
+}
+
+/**
+ * @brief 加载配置
+ */
+void config_load(void)
+{
+    eeprom_init();
+    control_apply_config();
+}
+
+/**
+ * @brief 辅助限幅函数
+ */
+static void clamp_steer_output(PID_Steer *pid)
+{
+    if (pid->output > pid->max_output)
+        pid->output = pid->max_output;
+    else if (pid->output < -pid->min_output)
+        pid->output = -pid->min_output;
 }

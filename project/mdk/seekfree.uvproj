@@ -272,7 +272,7 @@
               <MiscControls></MiscControls>
               <Define></Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\libraries\zf_common;..\..\libraries\zf_components;..\..\libraries\zf_device;..\..\libraries\zf_driver;..\user;..\code</IncludePath>
+              <IncludePath>..\..\libraries\zf_common;..\..\libraries\zf_components;..\..\libraries\zf_device;..\..\libraries\zf_driver;..\user;..\service;..\code</IncludePath>
             </VariousControls>
           </C251>
           <Ax51>
@@ -625,24 +625,14 @@
               <FilePath>..\user\a_run.h</FilePath>
             </File>
             <File>
-              <FileName>eeprom.c</FileName>
+              <FileName>a_run_mode.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\user\eeprom.c</FilePath>
+              <FilePath>..\user\a_run_mode.c</FilePath>
             </File>
             <File>
-              <FileName>eeprom.h</FileName>
+              <FileName>a_run_mode.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\user\eeprom.h</FilePath>
-            </File>
-            <File>
-              <FileName>menu.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\menu.c</FilePath>
-            </File>
-            <File>
-              <FileName>menu.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\menu.h</FilePath>
+              <FilePath>..\user\a_run_mode.h</FilePath>
             </File>
             <File>
               <FileName>ADC.c</FileName>
@@ -653,16 +643,6 @@
               <FileName>ADC.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\ADC.h</FilePath>
-            </File>
-            <File>
-              <FileName>filter.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\filter.c</FilePath>
-            </File>
-            <File>
-              <FileName>filter.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\filter.h</FilePath>
             </File>
             <File>
               <FileName>FUYA.c</FileName>
@@ -695,56 +675,6 @@
               <FilePath>..\user\int_user.h</FilePath>
             </File>
             <File>
-              <FileName>key.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\key.c</FilePath>
-            </File>
-            <File>
-              <FileName>key.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\key.h</FilePath>
-            </File>
-            <File>
-              <FileName>motor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\motor.c</FilePath>
-            </File>
-            <File>
-              <FileName>motor.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\motor.h</FilePath>
-            </File>
-            <File>
-              <FileName>pid.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\pid.c</FilePath>
-            </File>
-            <File>
-              <FileName>pid.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\pid.h</FilePath>
-            </File>
-            <File>
-              <FileName>test.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\test.c</FilePath>
-            </File>
-            <File>
-              <FileName>test.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\test.h</FilePath>
-            </File>
-            <File>
-              <FileName>vofa.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\vofa.c</FilePath>
-            </File>
-            <File>
-              <FileName>vofa.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\user\vofa.h</FilePath>
-            </File>
-            <File>
               <FileName>AI8051U_32_MDU32.LIB</FileName>
               <FileType>4</FileType>
               <FilePath>.\AI8051U_32_MDU32.LIB</FilePath>
@@ -758,6 +688,101 @@
               <FileName>stc_usb_cdc_32g.LIB</FileName>
               <FileType>4</FileType>
               <FilePath>.\stc_usb_cdc_32g.LIB</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>service</GroupName>
+          <Files>
+            <File>
+              <FileName>debug_view.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\debug_view.c</FilePath>
+            </File>
+            <File>
+              <FileName>debug_view.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\debug_view.h</FilePath>
+            </File>
+            <File>
+              <FileName>eeprom.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\eeprom.c</FilePath>
+            </File>
+            <File>
+              <FileName>eeprom.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\eeprom.h</FilePath>
+            </File>
+            <File>
+              <FileName>menu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\menu.c</FilePath>
+            </File>
+            <File>
+              <FileName>menu.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\menu.h</FilePath>
+            </File>
+            <File>
+              <FileName>filter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\filter.c</FilePath>
+            </File>
+            <File>
+              <FileName>filter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\filter.h</FilePath>
+            </File>
+            <File>
+              <FileName>key.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\key.c</FilePath>
+            </File>
+            <File>
+              <FileName>key.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\key.h</FilePath>
+            </File>
+            <File>
+              <FileName>motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\motor.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\motor.h</FilePath>
+            </File>
+            <File>
+              <FileName>pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>pid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\pid.h</FilePath>
+            </File>
+            <File>
+              <FileName>test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\test.c</FilePath>
+            </File>
+            <File>
+              <FileName>test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\test.h</FilePath>
+            </File>
+            <File>
+              <FileName>vofa.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\vofa.c</FilePath>
+            </File>
+            <File>
+              <FileName>vofa.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\vofa.h</FilePath>
             </File>
           </Files>
         </Group>

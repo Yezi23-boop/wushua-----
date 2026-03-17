@@ -1,102 +1,82 @@
 #ifndef _IMU_H_
 #define _IMU_H_
-extern float gyro_z;
-/*
- * 模块说明
- * - 提供 IMU 姿态解算相关的类型、常量与接口声明；
- * - 与实现文件 imu.c 配合使用：先调用 Prepare_Data() 读取/预处理传感器，
- *   再调用 IMUupdate() 完成一次姿态更新，输出滚俯偏 Att_Angle。
- *
- * 坐标/单位约定
- * - 角度：输出单位为“度”。
- * - 角速度：Gyr_* 使用“弧度/秒”（rad/s）；若为“度/秒”，请先乘以 DegtoRad。
- * - 加速度：单位由底层转换函数 imu660ra_acc_transition 决定（g 或 m/s^2），
- *   姿态解算仅使用方向，内部会做归一化。
+
+#include "zf_common_typedef.h"
+
+/**
+ * @brief IMU 模块说明
+ * @details
+ * - 提供 6 轴惯性测量单元（IMU660RA）的数据读取与姿态解算。
+ * - 采用 Mahony 互补滤波算法，输出欧拉角（Roll, Pitch, Yaw）。
+ * - 坐标系约定：X 前、Y 左、Z 上（符合右手定则）。
  */
 
-/* 角度/弧度转换常量
- * RadtoDeg：弧度 -> 度 的比例系数（项目中约定为 57.324841f）
- * DegtoRad：度   -> 弧度 的比例系数（约 0.0174533f）
- */
-#define RadtoDeg 57.324841f
-#define DegtoRad 0.0174533f
+/* --- 转换常量 --- */
+#define RadtoDeg 57.324841f /**< 弧度转角度系数 */
+#define DegtoRad 0.0174533f /**< 角度转弧度系数 */
 
-/* 三轴浮点（通用 XYZ） */
+/* --- 数据结构定义 --- */
+
+/**
+ * @brief 三轴浮点坐标结构
+ */
 typedef struct
 {
-    float X; // X 轴分量
-    float Y; // Y 轴分量
-    float Z; // Z 轴分量
+    float X;
+    float Y;
+    float Z;
 } FLOAT_XYZ;
 
-/* 姿态角（单位：度）
- * rol：横滚（Roll，对应 X 轴）
- * pit：俯仰（Pitch，对应 Y 轴）
- * yaw：偏航（Yaw，对应 Z 轴）
+/**
+ * @brief 姿态角结构体（欧拉角）
  */
 typedef struct
 {
-    float rol;
-    float pit;
-    float yaw;
+    float rol; /**< 横滚角 (Roll) */
+    float pit; /**< 俯仰角 (Pitch) */
+    float yaw; /**< 偏航角 (Yaw) */
 } FLOAT_ANGLE;
 
-/* 四元数（全局，由 imu.c 内部管理）
- * - q0 为标量部，q1~q3 为向量部；
- * - 由 IMUupdate() 更新，外部可只读使用。
+/* --- 全局导出变量 --- */
+extern volatile float gyro_z;        /**< Z 轴实时角速度（度/s） */
+extern float q0, q1, q2, q3;         /**< 姿态四元数 */
+extern FLOAT_ANGLE Att_Angle;        /**< 全局欧拉角输出 */
+extern FLOAT_XYZ Acc_filt, Gyr_filt; /**< 滤波后的加速度与角速度数据 */
+
+/* --- 中间变量声明（用于调试查看） --- */
+extern float vx, vy, vz; /**< 重力向量在机体坐标系下的投影 */
+extern float ex, ey, ez; /**< 姿态误差项 */
+
+/* --- 函数声明 --- */
+
+/**
+ * @brief 初始化 IMU 零偏校准
+ * @details 建议在静止状态下调用，采集均值作为静差
  */
-extern float q0, q1, q2, q3;
+void offset_init(void);
 
-/* 全局姿态角输出（度） */
-extern FLOAT_ANGLE Att_Angle;
-
-/* 中间量（方向余弦矩阵与误差等，便于调试查看）
- * - vx,vy,vz：当前四元数对应的重力方向（机体坐标系下）
- * - ex,ey,ez：重力方向的偏差误差
- * - norm    ：归一化中间结果
- */
-extern float vx, vy, vz, ex, ey, ez, norm;
-
-/* 预处理后的传感器量
- * - Acc_filt：滤波后的加速度（仅方向用于姿态校正）
- * - Gyr_filt：滤波后的角速度（单位：rad/s）
- */
-extern FLOAT_XYZ Acc_filt, Gyr_filt;
-
-/* 快速 1/sqrt(x)
- * - 近似算法：速度快，精度对姿态解算已足够；
- * - 若在其它模块调用请关注其近似特性；项目中一般只在 imu.c 内部使用。
- */
-float invSqrt(float x);
-
-/* 快速 sqrt(x)
- * - 近似算法：速度快，精度对姿态解算已足够；
- * - 若在其它模块调用请关注其近似特性；项目中一般只在 imu.c 内部使用。
- */
-float SquareRootFloat(float number);
-
-/* 传感器数据预处理
- * 功能：
- * - 调用底层驱动读取一帧 IMU 原始数据；
- * - 完成单位转换与零偏校正；
- * - 更新全局 Acc_filt、Gyr_filt；
- * 先决条件：
- * - 已正确初始化 IMU 硬件与驱动；
- * - 提供 Gyro_offset_x/y/z（零偏）与 DegtoRad 常量；
+/**
+ * @brief 准备传感器数据
+ * @details 读取原始 ADC，执行零偏补偿与单位转换
  */
 void Prepare_Data(void);
 
-/* 姿态更新（主函数）
- * 参数：
- * - Gyr_rad  ：角速度（三轴，单位 rad/s）
- * - Acc_filt ：加速度（三轴，仅方向，内部先归一化）
- * - Att_Angle：输出姿态角（度）
- * 原理：
- * - 基于四元数的 PI 互补融合（加速度作为重力方向校正）；
- * - 内部管理四元数 q0~q3，并转换输出滚俯偏角度；
- * 调用频率与步长：
- * - 需与实际采样周期匹配（imu.c 中的 halfT/分频步长应对应实际 Ts）。
+/**
+ * @brief 姿态解算更新主函数
+ * @param Gyr_rad 实时角速度（弧度/s）
+ * @param Acc_filt 实时加速度（仅用于方向校正）
+ * @param Att_Angle 输出：更新后的欧拉角
  */
 void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc_filt, FLOAT_ANGLE *Att_Angle);
 
-#endif
+/**
+ * @brief 快速平方根倒数算法
+ */
+float invSqrt(float x);
+
+/**
+ * @brief 快速平方根算法
+ */
+float SquareRootFloat(float number);
+
+#endif /* _IMU_H_ */

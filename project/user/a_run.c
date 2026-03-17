@@ -1,153 +1,135 @@
 #include "zf_common_headfile.h"
+#include "a_run.h"
+#include "a_run_mode.h"
 
-int flat_statr = 0;
-static int flat_statr_date = 0;
-static int time_1;
+/* --- 全局状态变量 --- */
+volatile int flat_statr = 0; /* 运行状态机：0-待机，1-已准备，2-正在运行 */
+volatile int flat_fly = 0;   /* 飞坡/特殊元素标志位 */
 
-static int speed_active = 0;
-static int count_fly_1 = 0;
-static int count_fly_2 = 0;
+/* --- 内部私有变量 --- */
+static int time_1 = 0;       /* 分频计数器，用于在 5ms 任务中分出 10ms 逻辑 */
+static int speed_active = 0; /* 当前期望执行的物理速度 */
 
-int flat_fly = 0;
-void fly_slow_update(int *speed);
+/* 内部私有函数声明 */
+static void a_run_apply_iap_guard(void);
+
+/**
+ * @brief 5ms 周期核心任务
+ * @details 负责最高实时性的控制链路：采样 -> 滤波 -> PID -> 输出
+ */
 void run_time_1(void)
 {
-    if (!P32)
-    {
-        IAP_CONTR = 0x60; // 判断快速烧录
-    }
-    read_AD(); // 读取并处理电感数据
+    /* 1. 安全保护检查（如按键触发强制复位下载） */
+    a_run_apply_iap_guard();
+
+    /* 2. 传感器数据获取 */
+    read_AD();      /* 读取并处理电感 ADC */
+    Prepare_Data(); /* 读取 IMU 原始数据并预处理 */
+    Encoder_get(&PID.left_speed, &PID.right_speed); /* 获取左右编码器速度 */
+
+    /* 3. 分段执行转向 PID (此处 10ms 更新一次转向环) */
     time_1++;
-    Prepare_Data();
-    Encoder_get(&PID.left_speed, &PID.right_speed);
-    if (time_1 == 2)
+    if (time_1 >= 2)
     {
-        pid_steer_update(&PID.steer, Err); // 更新转向环
+        pid_steer_update(&PID.steer, Err); /* 更新基于电感偏差的转向环 */
         time_1 = 0;
     }
-    fly_slow_update(&speed_active);
-    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * 0.082);                             // 更新角度环
-    pid_speed_update(&PID.left_speed, speed_active - PID.angle.output, PID.left_speed.speed);   // 更新左轮速度环
-    pid_speed_update(&PID.right_speed, speed_active + PID.angle.output, PID.right_speed.speed); // 更新右轮速度环
+
+    /* 4. 特殊元素速度/方向策略更新 (如飞坡慢速处理) */
+   a_run_mode_update_fly_speed(&speed_active);
+
+    /* 5. 串级 PID 控制 */
+    /* 角度环：以转向环输出为目标角度，结合陀螺仪反馈 */
+    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * 0.082f);
+    
+    /* 速度环：基础速度叠加/删减角度环的差速调节量 */
+    pid_speed_update(&PID.left_speed, (float)speed_active - PID.angle.output, PID.left_speed.speed);
+    pid_speed_update(&PID.right_speed, (float)speed_active + PID.angle.output, PID.right_speed.speed);
+
+    /* 6. 执行电机物理输出 */
     if (flat_statr >= 2)
     {
-        motor_output((int)PID.left_speed.output, (int)PID.right_speed.output);
+        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
-//	  motor_output(4000, 4000);
 }
 
+/**
+ * @brief 10ms 周期管理任务
+ * @details 负责姿态解算、保护逻辑及低频状态更新
+ */
 void run_time_2(void)
 {
-    scan_track_max_value(); // 获取电感最大值
-    lost_lines();
-    dianya_jiance();
+    /* 1. 自动标定更新（更新电感最大最小值记录） */
+    scan_track_max_value();
+
+    /* 2. 系统保护逻辑 */
+    lost_lines();    /* 丢线停车保护 */
+    dianya_jiance(); /* 电池欠压保护 */
+
+    /* 3. 姿态解算更新（Mahony 算法） */
     IMUupdate(&Gyr_filt, &Acc_filt, &Att_Angle);
-    flat_statr_date++;
-    if (P35 == 0 && flat_statr_date > 50)
-    {
-        flat_statr++;
-        flat_statr_date = 0;
-    }
-    if (flat_statr >= 1 && start_flag == 1)
-    {
-        fuya_update_simple();
-    }
+
+    /* 4. 运行模式管理 */
+    a_run_mode_update_start_state(); /* 按键启动逻辑 */
+    a_run_mode_update_fuya_state();  /* 负压吸附状态更新 */
 }
 
+/**
+ * @brief 高级算法任务 (Pure Pursuit + Gyro Loop)
+ * @details 备用方案：采用纯追踪几何模型替代传统 PD 转向
+ */
 void run_time_3(void)
 {
-    float delta = 0.0f;
     float left_target = 0.0f;
     float right_target = 0.0f;
-    float dec_gain = 0.0f;
-    float acc_gain = 0.0f;
-    float abs_delta = 0.0f;
-    if (!P32)
-    {
-        IAP_CONTR = 0x60; // 判断快速烧录
-    }
-    read_AD(); // 读取并处理电感数据
+
+    a_run_apply_iap_guard();
+    read_AD();
     Prepare_Data();
     Encoder_get(&PID.left_speed, &PID.right_speed);
-    pid_steer_update(&PID.steer, Err);                                      // 更新转向环，增加陀螺仪抑制甩尾
-    pid_angle_update(&PID.angle, PID.steer.output, imu660ra_gyro_z * 0.01); // 更新角度环
 
-    // 方法1：使用原来的 PID 差速
-    // Pid_Differential(speed_run, &left_target, &right_target, 500);
+    /* 执行基础转向 PD 以获得稳定趋势 */
+    pid_steer_update(&PID.steer, Err);
 
-    // 方法2：使用纯追踪 (Pure Pursuit) 算法
-    // 假设 Err 最大值约为 100.0 (需根据实际电感数据范围调整归一化分母)
-    // 如果 Err 是原始 ADC 差值(如几千)，这里必须除以最大可能值
-    /*
+    /* 执行纯追踪融合算法 */
     {
-        float norm_err = Err / 100.0f;
-        Pure_Pursuit_Control(speed_run, norm_err, &left_target, &right_target);
-    }
-    */
-
-    // 方法3：使用纯追踪 + 陀螺仪混合控制 (推荐终极方案)
-    {
-        // 1. 归一化电感误差 (-1.0 ~ 1.0)
-        // 请务必确认你的 Err 最大值是多少！如果 Err 是原始 ADC 差值 (如 ±3000)，这里要除以 3000.0f
-        float norm_err = Err / 100.0f;
-
-        // 2. 获取陀螺仪 Z 轴角速度
-        // 注意：Pure_Pursuit_Gyro_Control 内部假设 gyro_z 单位是 度/秒
-        // 如果 imu660ra_gyro_z 是原始值，需确认其单位
-        float gyro_z = imu660ra_gyro_z * 0.01f; // 假设这里换算后是 度/秒
-
-        Pure_Pursuit_Gyro_Control(speed_run, norm_err, gyro_z, &left_target, &right_target);
+        float norm_err = Err / 100.0f; /* 归一化偏差 */
+        /* 假设 gyro_z 单位已转换为 rad/s 或度/s 匹配 Pure_Pursuit 内部要求 */
+        Pure_Pursuit_Gyro_Control(g_app_config.speed.speed_run, norm_err, gyro_z, &left_target, &right_target);
     }
 
+    /* 更新底层速度环并输出 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
+
     if (flat_statr >= 2)
     {
-        motor_output((int)PID.left_speed.output, (int)PID.right_speed.output);
-        //	 motor_output(1000, 1000);
+        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
-    //    test_speed();
 }
+/* --- 顶层测试包装函数 --- */
 
-void run_test_speed()
-{    if (!P32)
-    {
-        IAP_CONTR = 0x60; // 判断快速烧录
-    }
+void run_test_speed(void)
+{
+    a_run_apply_iap_guard();
     test_speed_func();
 }
-void run_test_angle()
-{    if (!P32)
-    {
-        IAP_CONTR = 0x60; // 判断快速烧录
-    }
+
+void run_test_angle(void)
+{
+    a_run_apply_iap_guard();
     test_angle_func();
     fuya_update_simple();
 }
-void fly_slow_update(int *speed)
+
+/**
+ * @brief 硬件复位守卫
+ * @details 检测 P32 引脚（通常连接物理按键），若按下则强制进入 IAP 下载模式
+ */
+static void a_run_apply_iap_guard(void)
 {
-    if (ad1 < 40 && ad2 < 15 && ad3 < 15 && ad4 < 40 && flat_fly == 0)
+    if (!P32)
     {
-        count_fly_1++;
-        if (count_fly_1 >= count_fly_time_1)
-        {
-            count_fly_1 = 0;
-            flat_fly = 1;
-        }
-    }
-    if (flat_fly == 1)
-    {
-        *speed = count_fly_speed;
-        PID.steer.output = count_fly_angle;
-        count_fly_2++;
-        if (count_fly_2 >= count_fly_time_2)
-        {
-            count_fly_2 = 0;
-            flat_fly = 0;
-        }
-    }
-    else
-    {
-        *speed = speed_run;
+        IAP_CONTR = 0x60; /* STC 强制复位到 ISP 监控区指令 */
     }
 }
