@@ -1,25 +1,25 @@
 #include "zf_common_headfile.h"
 #include "ADC.h"
 
-/* ÄÚ²¿³£Á¿¶¨Òå */
-#define ADC_RAW_MAX 3500 /* ADC Ô­Ê¼²ÉÑùµÄÀíÂÛ×î´óÓĞĞ§Öµ */
-#define ADC_NORM_MAX 100 /* ¹éÒ»»¯ºóµÄÁ¿³ÌÉÏÏŞ */
-#define SORT_LENGTH 4    /* »¬¶¯ÅÅĞò/¾ùÖµÂË²¨µÄÑù±¾³¤¶È */
+/* å†…éƒ¨å¸¸é‡å®šä¹‰ */
+#define ADC_RAW_MAX 3500 /* ADC åŸå§‹é‡‡æ ·çš„ç†è®ºæœ€å¤§æœ‰æ•ˆå€¼ */
+#define ADC_NORM_MAX 100 /* å½’ä¸€åŒ–åçš„é‡ç¨‹ä¸Šé™ */
+#define SORT_LENGTH 4    /* æ»‘åŠ¨æ’åº/å‡å€¼æ»¤æ³¢çš„æ ·æœ¬é•¿åº¦ */
 
-/* ÄÚ²¿ÖĞ¼ä±äÁ¿ */
-static uint16 AD_value[NUM][SORT_LENGTH] = {{0}}; /* ÂË²¨»º³åÇø */
-static uint16 adtemp = 0;                         /* ÅÅĞò½»»»ÁÙÊ±±äÁ¿ */
-static uint32 ad_sum[NUM] = {0};                  /* ÀÛ¼ÓºÍ */
-static uint16 ad_ave[NUM] = {0};                  /* Æ½¾ùÖµ */
-static uint16 AD_V[NUM] = {0};                    /* µ±Ç°ÖÜÆÚµÄ´¦ÀíºóÖµ */
-static uint8 adc_measure_enable = 1;              /* Ä¬ÈÏ¿ªÆô×î´óÖµ¶¯Ì¬¼ÇÂ¼ */
+/* å†…éƒ¨ä¸­é—´å˜é‡ */
+static uint16 AD_value[NUM][SORT_LENGTH] = {{0}}; /* æ»¤æ³¢ç¼“å†²åŒº */
+static uint16 adtemp = 0;                         /* æ’åºäº¤æ¢ä¸´æ—¶å˜é‡ */
+static uint32 ad_sum[NUM] = {0};                  /* ç´¯åŠ å’Œ */
+static uint16 ad_ave[NUM] = {0};                  /* å¹³å‡å€¼ */
+static uint16 AD_V[NUM] = {0};                    /* å½“å‰å‘¨æœŸçš„å¤„ç†åå€¼ */
+static uint8 adc_measure_enable = 1;              /* é»˜è®¤å¼€å¯æœ€å¤§å€¼åŠ¨æ€è®°å½• */
 
-/* Ä¬ÈÏ±ê¶¨²ÎÊı£¨ÈôÎŞ EEPROM ¼ÓÔØÔòÊ¹ÓÃ´ËÖµ£© */
+/* é»˜è®¤æ ‡å®šå‚æ•°ï¼ˆè‹¥æ—  EEPROM åŠ è½½åˆ™ä½¿ç”¨æ­¤å€¼ï¼‰ */
 static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
 static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 static const int limit = 100;
 
-/* È«¾Öµ¼³ö±äÁ¿ */
+/* å…¨å±€å¯¼å‡ºå˜é‡ */
 volatile uint16 RAW[NUM] = {0};
 volatile uint16 MA[NUM] = {0};
 volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
@@ -29,36 +29,36 @@ uint16 ad3 = 0;
 uint16 ad4 = 0;
 volatile float Err = 0.0f;
 
-/* ÄÚ²¿Ë½ÓĞº¯ÊıÉùÃ÷ */
+/* å†…éƒ¨ç§æœ‰å‡½æ•°å£°æ˜ */
 static void adc_read_channels(uint16 *raw_buffer);
 static uint16 adc_normalize_value(uint16 raw_value, uint16 min_value, uint16 max_value);
 static void dispose(void);
 
 /**
- * @brief ´¦Àíµç¸ĞÆ«²î¼ÆËã
- * @details ²ÉÓÃËÄÂ·µç¸ĞµÄ²î±ÈºÍËã·¨£¬²¢Ö§³Ö²ÎÊı A_1, B_1, C_l µÄ¼ÓÈ¨ĞŞÕı
+ * @brief å¤„ç†ç”µæ„Ÿåå·®è®¡ç®—
+ * @details é‡‡ç”¨å››è·¯ç”µæ„Ÿçš„å·®æ¯”å’Œç®—æ³•ï¼Œå¹¶æ”¯æŒå‚æ•° A_1, B_1, C_l çš„åŠ æƒä¿®æ­£
  */
 static void dispose(void)
 {
     float denom = 0.0f;
 
-    /* ¼ÆËã·ÖÄ¸£º¼ÓÈ¨ºÍÏî + ·ÇÏßĞÔÆ«²î²¹³¥Ïî */
+    /* è®¡ç®—åˆ†æ¯ï¼šåŠ æƒå’Œé¡¹ + éçº¿æ€§åå·®è¡¥å¿é¡¹ */
     denom = app.angle.A_1 * (float)(ad1 + ad4) +
             app.angle.C_l * (float)func_abs((int)ad2 - (int)ad3);
 
-    /* ·À³ıÁã±£»¤ */
+    /* é˜²é™¤é›¶ä¿æŠ¤ */
     if (denom < 1.0f)
     {
         Err = 0.0f;
         return;
     }
 
-    /* ²î±ÈºÍ¼ÆËã¹«Ê½£ºErr = limit * (¼ÓÈ¨²î) / ¼ÓÈ¨Ïî */
+    /* å·®æ¯”å’Œè®¡ç®—å…¬å¼ï¼šErr = limit * (åŠ æƒå·®) / åŠ æƒé¡¹ */
     Err = (float)limit * (app.angle.A_1 * (float)((int)ad1 - (int)ad4) + app.angle.B_1 * (float)((int)ad2 - (int)ad3)) / denom;
 }
 
 /**
- * @brief ¶¯Ì¬É¨Ãèµç¸ĞµÄ×î´ó/×îĞ¡Öµ£¨ÓÃÓÚ×Ô¶¯±ê¶¨£©
+ * @brief åŠ¨æ€æ‰«æç”µæ„Ÿçš„æœ€å¤§/æœ€å°å€¼ï¼ˆç”¨äºè‡ªåŠ¨æ ‡å®šï¼‰
  */
 void scan_track_max_value(void)
 {
@@ -72,19 +72,19 @@ void scan_track_max_value(void)
         if (RAW[i] == 0u)
             continue;
 
-        /* ¸üĞÂÀúÊ·×î´óÖµ */
+        /* æ›´æ–°å†å²æœ€å¤§å€¼ */
         if (RAW[i] > MA[i])
             MA[i] = RAW[i];
 
-        /* ¸üĞÂÀúÊ·×îĞ¡Öµ */
+        /* æ›´æ–°å†å²æœ€å°å€¼ */
         if (RAW[i] < MI[i])
             MI[i] = RAW[i];
     }
 }
 
 /**
- * @brief Ö´ĞĞµç¸ĞÊı¾İ¶ÁÈ¡Óë´¦ÀíÈ«Á÷³Ì
- * @details °üº¬£º¶àÍ¨µÀ²ÉÑù -> Ã°ÅİÅÅĞò -> È¥¼«Öµ¾ùÖµÂË²¨ -> ¹éÒ»»¯ -> Æ«²î¼ÆËã
+ * @brief æ‰§è¡Œç”µæ„Ÿæ•°æ®è¯»å–ä¸å¤„ç†å…¨æµç¨‹
+ * @details åŒ…å«ï¼šå¤šé€šé“é‡‡æ · -> å†’æ³¡æ’åº -> å»æå€¼å‡å€¼æ»¤æ³¢ -> å½’ä¸€åŒ– -> åå·®è®¡ç®—
  */
 void read_AD(void)
 {
@@ -92,7 +92,7 @@ void read_AD(void)
     uint16 raw_buffer[NUM];
     uint16 AD_ONE[NUM];
 
-    /* 1. ¶à´Î²ÉÑùÌî³ä»º³åÇø */
+    /* 1. å¤šæ¬¡é‡‡æ ·å¡«å……ç¼“å†²åŒº */
     for (i = 0; i < SORT_LENGTH; i++)
     {
         adc_read_channels(raw_buffer);
@@ -100,7 +100,7 @@ void read_AD(void)
             AD_value[j][i] = raw_buffer[j];
     }
 
-    /* 2. ¶ÔÃ¿¸öÍ¨µÀ½øĞĞÅÅĞòºÍ»ù´¡ÂË²¨ */
+    /* 2. å¯¹æ¯ä¸ªé€šé“è¿›è¡Œæ’åºå’ŒåŸºç¡€æ»¤æ³¢ */
     for (i = 0; i < NUM; i++)
     {
         for (j = 0; j < SORT_LENGTH - 1; j++)
@@ -119,13 +119,13 @@ void read_AD(void)
             }
         }
 
-        /* È¡ÅÅĞòºóµÄÖĞ¼äÏî¼ÆËã¾ùÖµ£¬¸üĞÂÑù±¾ */
+        /* å–æ’åºåçš„ä¸­é—´é¡¹è®¡ç®—å‡å€¼ï¼Œæ›´æ–°æ ·æœ¬ */
         ad_sum[i] = (uint32)AD_value[i][1] + (uint32)AD_value[i][2];
         ad_ave[i] = (uint16)((ad_sum[i] + 1u) / 2u);
         AD_value[i][SORT_LENGTH - 1] = ad_ave[i];
     }
 
-    /* 3. ¼ÆËã×îÖÕ¾ùÖµ²¢½øĞĞ³õ²½ÏŞ·ù */
+    /* 3. è®¡ç®—æœ€ç»ˆå‡å€¼å¹¶è¿›è¡Œåˆæ­¥é™å¹… */
     memset(ad_sum, 0, sizeof(ad_sum));
     for (i = 0; i < NUM; i++)
     {
@@ -133,30 +133,30 @@ void read_AD(void)
             ad_sum[i] += (uint32)AD_value[i][j];
 
         AD_V[i] = (uint16)(ad_sum[i] / SORT_LENGTH);
-        RAW[i] = AD_V[i]; /* ±£´æÔ­Ê¼ÖµÓÃÓÚµ÷ÊÔºÍ±ê¶¨ */
+        RAW[i] = AD_V[i]; /* ä¿å­˜åŸå§‹å€¼ç”¨äºè°ƒè¯•å’Œæ ‡å®š */
 
         if (AD_V[i] > MAX_Err[i])
             AD_V[i] = MAX_Err[i];
     }
 
-    /* 4. ¹éÒ»»¯Ó³Éä (Ó³Éäµ½ 0~100) */
+    /* 4. å½’ä¸€åŒ–æ˜ å°„ (æ˜ å°„åˆ° 0~100) */
     for (i = 0; i < NUM; i++)
     {
         AD_ONE[i] = adc_normalize_value(AD_V[i], MIN_Err[i], MAX_Err[i]);
     }
 
-    /* 5. ·ÖÅä¸øÈ«¾Ö±äÁ¿ */
+    /* 5. åˆ†é…ç»™å…¨å±€å˜é‡ */
     ad1 = AD_ONE[0];
     ad2 = AD_ONE[1];
     ad3 = AD_ONE[2];
     ad4 = AD_ONE[3];
 
-    /* 6. Ö´ĞĞÆ«²î½âËã */
+    /* 6. æ‰§è¡Œåå·®è§£ç®— */
     dispose();
 }
 
 /**
- * @brief Ê¹ÄÜ»ò½ûÖ¹¶¯Ì¬×î´óÖµ¼ÇÂ¼
+ * @brief ä½¿èƒ½æˆ–ç¦æ­¢åŠ¨æ€æœ€å¤§å€¼è®°å½•
  */
 void adc_measure_set_enable(uint8 enable)
 {
@@ -164,7 +164,7 @@ void adc_measure_set_enable(uint8 enable)
 }
 
 /**
- * @brief ÖØÖÃ±ê¶¨¼ÇÂ¼
+ * @brief é‡ç½®æ ‡å®šè®°å½•
  */
 void adc_measure_reset(void)
 {
@@ -177,18 +177,18 @@ void adc_measure_reset(void)
 }
 
 /**
- * @brief ¶ÁÈ¡Ó²¼ş ADC Í¨µÀ
+ * @brief è¯»å–ç¡¬ä»¶ ADC é€šé“
  */
 static void adc_read_channels(uint16 *raw_buffer)
 {
-    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* ×óÇ°µç¸Ğ */
-    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* ×óºóµç¸Ğ */
-    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* ÓÒÇ°µç¸Ğ */
-    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* ÓÒºóµç¸Ğ */
+    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* å·¦å‰ç”µæ„Ÿ */
+    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* å·¦åç”µæ„Ÿ */
+    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* å³å‰ç”µæ„Ÿ */
+    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* å³åç”µæ„Ÿ */
 }
 
 /**
- * @brief ÏßĞÔ¹éÒ»»¯º¯Êı
+ * @brief çº¿æ€§å½’ä¸€åŒ–å‡½æ•°
  */
 static uint16 adc_normalize_value(uint16 raw, uint16 min, uint16 max)
 {

@@ -3,52 +3,64 @@
 #include "a_run_mode.h"
 #include "../service/soft_timer.h"
 
-/* --- È«¾Ö×´Ì¬±äÁ¿ --- */
-volatile int flat_statr = 0; /* ÔËĞĞ×´Ì¬»ú£º0-´ı»ú£¬1-ÒÑ×¼±¸£¬2-ÕıÔÚÔËĞĞ */
-volatile int flat_fly = 0;   /* ·ÉÆÂ/ÌØÊâÔªËØ±êÖ¾Î» */
+#define TEST_TICK_MS 5
 
-/* --- ÄÚ²¿Ë½ÓĞ±äÁ¿ --- */
-static int time_1 = 0;       /* ·ÖÆµ¼ÆÊıÆ÷£¬ÓÃÓÚÔÚ 5ms ÈÎÎñÖĞ·Ö³ö 10ms Âß¼­ */
-static int speed_active = 0; /* µ±Ç°ÆÚÍûÖ´ĞĞµÄÎïÀíËÙ¶È */
+/* --- è¿è¡ŒçŠ¶æ€å˜é‡ --- */
+volatile int flat_statr = 0; /* è¿è¡ŒçŠ¶æ€é•œåƒï¼š0-åœæ­¢ï¼Œ1-é¢„å¯åŠ¨ï¼Œ2-è¿è¡Œä¸­ï¼Œ3-å¤–éƒ¨å¼ºåˆ¶å¯åŠ¨è¯·æ±‚ */
+volatile int flat_fly = 0;   /* é£å¡çŠ¶æ€æ ‡å¿—ä½ */
 
-/* ÄÚ²¿Ë½ÓĞº¯ÊıÉùÃ÷ */
-// ÒÑÔÚ a_run.h ÖĞÉùÃ÷ÎªÈ«¾Öº¯Êı
-// static void a_run_apply_iap_guard(void);
+volatile uint8 test_trial_active = 0;
+volatile uint8 test_trial_armed = 0;
+volatile uint16 test_trial_elapsed_ms = 0;
+volatile uint16 test_trial_limit_ms = 250;
+volatile uint16 test_trial_cooldown_elapsed_ms = 450;
+volatile uint16 test_trial_cooldown_ms = 450;
+volatile int16 test_fuya_pwm = 2000;
+volatile int32 test_left_pwm_output = 0;
+volatile int32 test_right_pwm_output = 0;
+
+/* --- å‘¨æœŸä»»åŠ¡å†…éƒ¨å˜é‡ --- */
+static int time_1 = 0;       /* 5ms åˆ†é¢‘è®¡æ•°å™¨ï¼Œç”¨äºæ¯ 10ms æ›´æ–°ä¸€æ¬¡è½¬å‘ç¯ */
+static int speed_active = 0; /* å½“å‰å‚ä¸é€Ÿåº¦ç¯è®¡ç®—çš„ç›®æ ‡é€Ÿåº¦ */
+
+static void ground_load_force_stop_output(void);
+static void ground_load_apply_stop(uint8 keep_armed, uint8 start_cooldown);
+static uint8 ground_load_mode_enabled(void);
 
 /**
- * @brief 5ms ÖÜÆÚºËĞÄÈÎÎñ
- * @details ¸ºÔğ×î¸ßÊµÊ±ĞÔµÄ¿ØÖÆÁ´Â·£º²ÉÑù -> ÂË²¨ -> PID -> Êä³ö
+ * @brief 5ms ä¸»æ§åˆ¶ä»»åŠ¡
+ * @details æŒ‰â€œé‡‡æ · -> è§£ç®— -> PID -> è¾“å‡ºâ€çš„é¡ºåºå®Œæˆä¸€è½®æ ¸å¿ƒæ§åˆ¶
  */
 void run_time_1(void)
 {
-    /* 1. °²È«±£»¤¼ì²é£¨Èç°´¼ü´¥·¢Ç¿ÖÆ¸´Î»ÏÂÔØ£© */
+    /* 1. æ‰§è¡Œ IAP ä¿æŠ¤ï¼Œé¿å…å¤ä½è„šå¼‚å¸¸æ—¶è¿›å…¥é”™è¯¯çŠ¶æ€ */
     a_run_apply_iap_guard();
 
-    /* 2. ´«¸ĞÆ÷Êı¾İ»ñÈ¡ */
-    read_AD();                                      /* ¶ÁÈ¡²¢´¦Àíµç¸Ğ ADC */
-    Prepare_Data();                                 /* ¶ÁÈ¡ IMU Ô­Ê¼Êı¾İ²¢Ô¤´¦Àí */
-    Encoder_get(&PID.left_speed, &PID.right_speed); /* »ñÈ¡×óÓÒ±àÂëÆ÷ËÙ¶È */
+    /* 2. é‡‡é›†ä¼ æ„Ÿå™¨ä¸ç¼–ç å™¨æ•°æ® */
+    read_AD();                                      /* é‡‡é›†å››è·¯ç”µæ„Ÿ ADC */
+    Prepare_Data();                                 /* æ›´æ–° IMU æ»¤æ³¢ç»“æœä¸å§¿æ€ç›¸å…³é‡ */
+    Encoder_get(&PID.left_speed, &PID.right_speed); /* è¯»å–å·¦å³è½®ç¼–ç å™¨é€Ÿåº¦ */
 
-    /* 3. ·Ö¶ÎÖ´ĞĞ×ªÏò PID (´Ë´¦ 10ms ¸üĞÂÒ»´Î×ªÏò»·) */
+    /* 3. è½¬å‘ç¯æŒ‰ 10ms é¢‘ç‡æ›´æ–°ä¸€æ¬¡ */
     time_1++;
     if (time_1 >= 2)
     {
-        pid_steer_update(&PID.steer, Err); /* ¸üĞÂ»ùÓÚµç¸ĞÆ«²îµÄ×ªÏò»· */
+        pid_steer_update(&PID.steer, Err); /* æ ¹æ®èµ›é“åå·®æ›´æ–°è½¬å‘ç¯ */
         time_1 = 0;
     }
 
-    /* 4. ÌØÊâÔªËØËÙ¶È/·½Ïò²ßÂÔ¸üĞÂ (Èç·ÉÆÂÂıËÙ´¦Àí) */
+    /* 4. æ ¹æ®é£å¡/èµ›é“çŠ¶æ€ä¿®æ­£å½“å‰ç›®æ ‡é€Ÿåº¦ */
     a_run_mode_update_fly_speed(&speed_active);
 
-    /* 5. ´®¼¶ PID ¿ØÖÆ */
-    /* Steering feedback loop uses calibrated gyro_z */
+    /* 5. ä¸²è”è§’åº¦ç¯ä¸é€Ÿåº¦ç¯ */
+    /* è½¬å‘åé¦ˆç¯ä½¿ç”¨æ ¡å‡†åçš„ gyro_z */
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
-    run_mode_update_angle_output(&PID.angle.output); /* ¸ù¾İ»·µº×´Ì¬»ú¿ÉÄÜ¸²¸Ç×ªÏòÊä³ö */
-    /* ËÙ¶È»·£º»ù´¡ËÙ¶Èµş¼Ó/É¾¼õ½Ç¶È»·µÄ²îËÙµ÷½ÚÁ¿ */
+    run_mode_update_angle_output(&PID.angle.output); /* ç¯å²›é˜¶æ®µå¯è¦†ç›–è§’åº¦ç¯è¾“å‡º */
+    /* å·¦å³è½®é€Ÿåº¦ç¯ç›®æ ‡ = åŸºç¡€é€Ÿåº¦ Â± å§¿æ€è¡¥å¿ */
     pid_speed_update(&PID.left_speed, (float)speed_active - PID.angle.output, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, (float)speed_active + PID.angle.output, PID.right_speed.speed);
 
-    /* 6. Ö´ĞĞµç»úÎïÀíÊä³ö */
+    /* 6. ä»…åœ¨è¿è¡Œæ€æ—¶å…è®¸ç”µæœºè¾“å‡º */
     if (a_run_mode_get_start_state() == 2)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
@@ -56,34 +68,34 @@ void run_time_1(void)
 }
 
 /**
- * @brief 10ms ÖÜÆÚ¹ÜÀíÈÎÎñ
- * @details ¸ºÔğ×ËÌ¬½âËã¡¢±£»¤Âß¼­¼°µÍÆµ×´Ì¬¸üĞÂ
+ * @brief 10ms çŠ¶æ€ç®¡ç†ä»»åŠ¡
+ * @details å®Œæˆèµ›é“æ£€æµ‹ã€å§¿æ€è§£ç®—ã€å¯åœçŠ¶æ€æ›´æ–°å’Œè½¯ä»¶å®šæ—¶å™¨ç»´æŠ¤
  */
 void run_time_2(void)
 {
-    /* 1. ×Ô¶¯±ê¶¨¸üĞÂ£¨¸üĞÂµç¸Ğ×î´ó×îĞ¡Öµ¼ÇÂ¼£© */
+    /* 1. æ›´æ–°ç”µæ„ŸåŠ¨æ€æœ€å¤§å€¼ï¼Œç”¨äºå½’ä¸€åŒ–ä¸æ ‡å®š */
     scan_track_max_value();
 
-    /* 2. ÏµÍ³±£»¤Âß¼­ */
-    lost_lines();    /* ¶ªÏßÍ£³µ±£»¤ */
-    dianya_jiance(); /* µç³ØÇ·Ñ¹±£»¤ */
+    /* 2. æ‰§è¡Œå„ç±»ä¿æŠ¤æ£€æµ‹ */
+    lost_lines();    /* ä¸¢çº¿ä¿æŠ¤ */
+    dianya_jiance(); /* ç”µæ± ç”µå‹æ£€æµ‹ */
 
-    /* 3. ×ËÌ¬½âËã¸üĞÂ£¨Mahony Ëã·¨£© */
+    /* 3. æ›´æ–° Mahony å§¿æ€è§£ç®— */
     IMUupdate(&Gyr_filt, &Acc_filt, &Att_Angle);
 
-    /* 4. ÔËĞĞÄ£Ê½¹ÜÀí */
-    a_run_mode_update_start_state(); /* °´¼üÆô¶¯Âß¼­£¬10ms¶¨Ê±ÍÆ½ø×´Ì¬»ú */
-    // ¸üĞÂÈ«¾ÖÔËĞĞ±êÖ¾
+    /* 4. æ›´æ–°å¯åœçŠ¶æ€ä¸è´Ÿå‹æ§åˆ¶ */
+    a_run_mode_update_start_state(); /* æŒ‰é”®/å¤–éƒ¨å‘½ä»¤çŠ¶æ€æœºï¼Œæ¯ 10ms åˆ·æ–°ä¸€æ¬¡ */
+    // åŒæ­¥å¯¹å¤–çŠ¶æ€é•œåƒ
     flat_statr = a_run_mode_get_start_state();
-    a_run_mode_update_fuya_state(); /* ¸ºÑ¹Îü¸½×´Ì¬¸üĞÂ */
+    a_run_mode_update_fuya_state(); /* æ ¹æ®å½“å‰çŠ¶æ€å†³å®šæ˜¯å¦å¯ç”¨è´Ÿå‹ */
 
-    /* 5. Èí¼ş¶¨Ê±Æ÷ºóÌ¨¸üĞÂ */
+    /* 5. æ›´æ–°è½¯ä»¶å®šæ—¶å™¨ */
     soft_timer_update_10ms();
 }
 
 /**
- * @brief ¸ß¼¶Ëã·¨ÈÎÎñ (Pure Pursuit + Gyro Loop)
- * @details ±¸ÓÃ·½°¸£º²ÉÓÃ´¿×·×Ù¼¸ºÎÄ£ĞÍÌæ´ú´«Í³ PD ×ªÏò
+ * @brief çº¯è¿½è¸ªå®éªŒä»»åŠ¡
+ * @details ä½¿ç”¨ Pure Pursuit ç”Ÿæˆå·¦å³è½®ç›®æ ‡é€Ÿåº¦ï¼Œå¹¶é€šè¿‡é€Ÿåº¦ç¯å®Œæˆé—­ç¯è¾“å‡º
  */
 void run_time_3(void)
 {
@@ -95,17 +107,17 @@ void run_time_3(void)
     Prepare_Data();
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* Ö´ĞĞ»ù´¡×ªÏò PD ÒÔ»ñµÃÎÈ¶¨Ç÷ÊÆ */
+    /* æ›´æ–°è½¬å‘ç¯ PD è¾“å‡º */
     pid_steer_update(&PID.steer, Err);
 
-    /* Ö´ĞĞ´¿×·×ÙÈÚºÏËã·¨ */
+    /* ç”±çº¯è¿½è¸ªç®—æ³•ç”Ÿæˆå·¦å³è½®ç›®æ ‡é€Ÿåº¦ */
     {
-        float norm_err = Err / 100.0f; /* ¹éÒ»»¯Æ«²î */
-        /* Keep using calibrated gyro_z in this experimental path */
+        float norm_err = Err / 100.0f; /* å°†åå·®ç¼©æ”¾åˆ°ç®—æ³•æ‰€éœ€é‡çº§ */
+        /* è¯¥å®éªŒè·¯å¾„åŒæ ·ä½¿ç”¨æ ¡å‡†åçš„ gyro_z */
         Pure_Pursuit_Gyro_Control(app.speed.speed_run, norm_err, gyro_z, &left_target, &right_target);
     }
 
-    /* ¸üĞÂµ×²ãËÙ¶È»·²¢Êä³ö */
+    /* å°†ç›®æ ‡è½®é€Ÿé€å…¥å·¦å³é€Ÿåº¦ç¯ */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
 
@@ -114,12 +126,145 @@ void run_time_3(void)
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
 }
-/* --- ¶¥²ã²âÊÔ°ü×°º¯Êı --- */
+
+/* --- åœ°é¢åŠ è½½æµ‹è¯•è¾…åŠ©é€»è¾‘ --- */
+
+static void ground_load_force_stop_output(void)
+{
+    pwm_set_duty(PWMB_CH2_P13, 0);
+    pwm_set_duty(PWMB_CH3_P52, 0);
+}
+
+static void ground_load_apply_stop(uint8 keep_armed, uint8 start_cooldown)
+{
+    stop = 1;
+    flat_statr = 0;
+    test_trial_active = 0;
+    test_trial_elapsed_ms = 0;
+
+    if (!keep_armed)
+    {
+        test_trial_armed = 0;
+    }
+
+    pid_speed_reset(&PID.left_speed);
+    pid_speed_reset(&PID.right_speed);
+    test_speed_value = 0.0f;
+    test_left_pwm_output = 0;
+    test_right_pwm_output = 0;
+    ground_load_force_stop_output();
+
+    if (start_cooldown)
+    {
+        test_trial_cooldown_elapsed_ms = 0;
+    }
+    else
+    {
+        test_trial_cooldown_elapsed_ms = test_trial_cooldown_ms;
+    }
+}
+
+static uint8 ground_load_mode_enabled(void)
+{
+    if (test_trial_active)
+    {
+        return 1;
+    }
+
+    if (test_trial_armed)
+    {
+        return 1;
+    }
+
+    if (test_trial_cooldown_elapsed_ms < test_trial_cooldown_ms)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+void ground_load_test_arm(void)
+{
+    test_trial_armed = 1;
+    ground_load_apply_stop(1, 0);
+    test_trial_armed = 1;
+}
+
+void ground_load_test_fire(void)
+{
+    if (!test_trial_armed)
+    {
+        return;
+    }
+
+    stop = 0;
+    flat_statr = 3;
+    test_trial_active = 1;
+    test_trial_elapsed_ms = 0;
+    test_trial_cooldown_elapsed_ms = 0;
+    pid_speed_reset(&PID.left_speed);
+    pid_speed_reset(&PID.right_speed);
+    test_left_pwm_output = 0;
+    test_right_pwm_output = 0;
+    ground_load_force_stop_output();
+}
+
+void ground_load_test_stop(void)
+{
+    ground_load_apply_stop(0, 0);
+    fuya_motor_output(0);
+}
 
 void run_test_speed(void)
 {
     a_run_apply_iap_guard();
+
+    if (ground_load_mode_enabled())
+    {
+        if (test_fuya_pwm > 0)
+        {
+            fuya_motor_output((int)test_fuya_pwm);
+        }
+        else
+        {
+            fuya_motor_output(0);
+        }
+
+        if (test_trial_active)
+        {
+            test_speed_func();
+            test_left_pwm_output = (int32)PID.left_speed.output;
+            test_right_pwm_output = (int32)PID.right_speed.output;
+            test_trial_elapsed_ms += TEST_TICK_MS;
+
+            if (test_trial_elapsed_ms >= test_trial_limit_ms)
+            {
+                ground_load_apply_stop(1, 1);
+            }
+        }
+        else
+        {
+            Encoder_get(&PID.left_speed, &PID.right_speed);
+            test_left_pwm_output = 0;
+            test_right_pwm_output = 0;
+            ground_load_force_stop_output();
+
+            if (test_trial_cooldown_elapsed_ms < test_trial_cooldown_ms)
+            {
+                test_trial_cooldown_elapsed_ms += TEST_TICK_MS;
+                if (test_trial_cooldown_elapsed_ms > test_trial_cooldown_ms)
+                {
+                    test_trial_cooldown_elapsed_ms = test_trial_cooldown_ms;
+                }
+            }
+        }
+        return;
+    }
+
     test_speed_func();
+    test_left_pwm_output = (int32)PID.left_speed.output;
+    test_right_pwm_output = (int32)PID.right_speed.output;
 }
 
 void run_test_angle(void)
@@ -128,23 +273,25 @@ void run_test_angle(void)
     test_angle_func();
     fuya_update_simple();
 }
+
 void run_test_motor(int speed_l, int speed_r)
 {
     a_run_apply_iap_guard();
-    /* 1. ×¼±¸×ËÌ¬Êı¾İ£¨²»ÒÀÀµ´ËÊı¾İ¿ÉÉ¾£© */
+    /* 1. æ›´æ–°å§¿æ€ä¸æ»¤æ³¢æ•°æ® */
     Prepare_Data();
-    /* 2. »ñÈ¡×óÓÒ±àÂëÆ÷ËÙ¶È */
+    /* 2. è¯»å–ç¼–ç å™¨é€Ÿåº¦åé¦ˆ */
     Encoder_get(&PID.left_speed, &PID.right_speed);
     motor_output(speed_l, speed_r);
 }
+
 /**
- * @brief Ó²¼ş¸´Î»ÊØÎÀ
- * @details ¼ì²â P32 Òı½Å£¨Í¨³£Á¬½ÓÎïÀí°´¼ü£©£¬Èô°´ÏÂÔòÇ¿ÖÆ½øÈë IAP ÏÂÔØÄ£Ê½
+ * @brief IAP ä¿æŠ¤å¤„ç†
+ * @details å½“ P32 è¢«æ‹‰ä½æ—¶ï¼Œå†™å…¥ STC çº¦å®šå€¼ï¼Œç¡®ä¿ ISP/IAP æ§åˆ¶çŠ¶æ€æ­£ç¡®åˆ‡æ¢
  */
 void a_run_apply_iap_guard(void)
 {
     if (!P32)
     {
-        IAP_CONTR = 0x60; /* STC Ç¿ÖÆ¸´Î»µ½ ISP ¼à¿ØÇøÖ¸Áî */
+        IAP_CONTR = 0x60; /* STC çº¦å®šå€¼ï¼šå…è®¸åˆ‡æ¢åˆ° ISP/IAP æ§åˆ¶æ¨¡å¼ */
     }
 }

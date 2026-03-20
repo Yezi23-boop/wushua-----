@@ -4,103 +4,108 @@
 #include "zf_common_headfile.h"
 
 /**
- * @brief ËÙ¶È»· PID ½á¹¹Ìå£¨ÔöÁ¿Ê½£©
- * @details ÓÃÓÚ×óÓÒÂÖµÄËÙ¶È±Õ»·¿ØÖÆ£¬²ÉÓÃÔöÁ¿Ê½ PID Ëã·¨¼õÉÙ»ı·Ö±¥ºÍÓ°Ïì
+ * @brief é€Ÿåº¦ç¯ PID ç»“æ„ä½“ï¼ˆå¢é‡å¼ï¼‰
+ * @details ç”¨äºå·¦å³è½®çš„é€Ÿåº¦é—­ç¯æ§åˆ¶ï¼Œé‡‡ç”¨å¢é‡å¼ PID ç®—æ³•å‡å°‘ç§¯åˆ†é¥±å’Œå½±å“
  */
 typedef struct
 {
-    float Kp;          /**< ±ÈÀıÏµÊı£ºÏìÓ¦ËÙ¶È£¬¹ı´óÒ×Õğµ´ */
-    float Ki;          /**< »ı·ÖÏµÊı£ºÏû³ı¾²²î£¬¹ı´óÒ×³¬µ÷ */
-    float Kd;          /**< Î¢·ÖÏµÊı£ºÒÖÖÆÕğµ´£¬ÔöÇ¿ÏµÍ³ÎÈ¶¨ĞÔ */
-    float error;       /**< µ±Ç°Îó²î£ºÄ¿±êÖµ - Êµ¼ÊÖµ */
-    float prev_error;  /**< ÉÏÒ»´ÎÎó²î£ºÓÃÓÚ¼ÆËãÎ¢·ÖÏîºÍ±ÈÀıÔöÁ¿ */
-    float prev2_error; /**< ÉÏÉÏ´ÎÎó²î£ºÓÃÓÚÔöÁ¿Ê½ PID ¼ÆËã */
-    float output;      /**< µ±Ç°Êä³öÖµ£ºPWM Õ¼¿Õ±È»òÄ¿±êµçÁ÷ */
-    float max_output;  /**< Êä³öÉÏÏŞÏŞ·ùÖµ */
-    float min_output;  /**< Êä³öÏÂÏŞÏŞ·ùÖµ */
-    float speed;       /**< µ±Ç°ÊµÊ±ËÙ¶È£ºÓÉ±àÂëÆ÷·´À¡¼ÆËãµÃµ½ */
+    float Kp;          /**< æ¯”ä¾‹ç³»æ•°ï¼šå“åº”é€Ÿåº¦ï¼Œè¿‡å¤§æ˜“éœ‡è¡ */
+    float Ki;          /**< ç§¯åˆ†ç³»æ•°ï¼šæ¶ˆé™¤é™å·®ï¼Œè¿‡å¤§æ˜“è¶…è°ƒ */
+    float Kd;          /**< å¾®åˆ†ç³»æ•°ï¼šæŠ‘åˆ¶éœ‡è¡ï¼Œå¢å¼ºç³»ç»Ÿç¨³å®šæ€§ */
+    float error;       /**< å½“å‰è¯¯å·®ï¼šç›®æ ‡å€¼ - å®é™…å€¼ */
+    float prev_error;  /**< ä¸Šä¸€æ¬¡è¯¯å·®ï¼šç”¨äºè®¡ç®—å¾®åˆ†é¡¹å’Œæ¯”ä¾‹å¢é‡ */
+    float prev2_error; /**< ä¸Šä¸Šæ¬¡è¯¯å·®ï¼šç”¨äºå¢é‡å¼ PID è®¡ç®— */
+    float output;      /**< å½“å‰è¾“å‡ºå€¼ï¼šPWM å ç©ºæ¯”æˆ–ç›®æ ‡ç”µæµ */
+    float max_output;  /**< è¾“å‡ºä¸Šé™é™å¹…å€¼ */
+    float min_output;  /**< è¾“å‡ºä¸‹é™é™å¹…å€¼ */
+    float speed;       /**< å½“å‰å®æ—¶é€Ÿåº¦ï¼šç”±ç¼–ç å™¨åé¦ˆè®¡ç®—å¾—åˆ° */
 } PID_Speed;
 
 /**
- * @brief ×ªÏò»·/½Ç¶È»· PID ½á¹¹Ìå£¨Î»ÖÃÊ½£©
- * @details ÓÃÓÚ·½Ïò¿ØÖÆ»ò×ËÌ¬¿ØÖÆ£¬Ö§³Ö´«Í³ PD ºÍÔöÇ¿ĞÍ·ÇÏßĞÔÏî
+ * @brief è½¬å‘ç¯/è§’åº¦ç¯ PID ç»“æ„ä½“ï¼ˆä½ç½®å¼ï¼‰
+ * @details ç”¨äºæ–¹å‘æ§åˆ¶æˆ–å§¿æ€æ§åˆ¶ï¼Œæ”¯æŒä¼ ç»Ÿ PD å’Œå¢å¼ºå‹éçº¿æ€§é¡¹
  */
 typedef struct
 {
-    float Kp;         /**< ±ÈÀıÏµÊı£ºÖ÷¿ØÏî */
-    float Kd;         /**< Î¢·ÖÏµÊı£º×èÄáÏî£¬ÒÖÖÆ×ªÏò¹ı³å */
-    float Kp2;        /**< ÔöÇ¿ÏîÏµÊı£ºÓÃÓÚ·ÇÏßĞÔ¿ØÖÆ»òÍÓÂİÒÇÇ°À¡ */
-    float error;      /**< µ±Ç°Îó²î£ºÈüµÀÆ«²î»ò½Ç¶ÈÆ«²î */
-    float prev_error; /**< ÉÏÒ»´ÎÎó²î£º¼ÆËãÎ¢·ÖÏî */
-    float output;     /**< µ±Ç°Êä³öÖµ£ºÍ¨³£×÷Îª²îËÙµş¼ÓÁ¿ */
-    float max_output; /**< Êä³öÉÏÏŞÏŞ·ùÖµ */
-    float min_output; /**< Êä³öÏÂÏŞÏŞ·ùÖµ */
+    float Kp;         /**< æ¯”ä¾‹ç³»æ•°ï¼šä¸»æ§é¡¹ */
+    float Kd;         /**< å¾®åˆ†ç³»æ•°ï¼šé˜»å°¼é¡¹ï¼ŒæŠ‘åˆ¶è½¬å‘è¿‡å†² */
+    float Kp2;        /**< å¢å¼ºé¡¹ç³»æ•°ï¼šç”¨äºéçº¿æ€§æ§åˆ¶æˆ–é™€èºä»ªå‰é¦ˆ */
+    float error;      /**< å½“å‰è¯¯å·®ï¼šèµ›é“åå·®æˆ–è§’åº¦åå·® */
+    float prev_error; /**< ä¸Šä¸€æ¬¡è¯¯å·®ï¼šè®¡ç®—å¾®åˆ†é¡¹ */
+    float output;     /**< å½“å‰è¾“å‡ºå€¼ï¼šé€šå¸¸ä½œä¸ºå·®é€Ÿå åŠ é‡ */
+    float max_output; /**< è¾“å‡ºä¸Šé™é™å¹…å€¼ */
+    float min_output; /**< è¾“å‡ºä¸‹é™é™å¹…å€¼ */
 } PID_Steer;
 
 /**
- * @brief È«¾Ö¿ØÖÆÆ÷¾ÛºÏ½á¹¹Ìå
- * @details Í³Ò»¹ÜÀíĞ¡³µËùÓĞµÄ PID ¿ØÖÆÆ÷ÊµÀı
+ * @brief å…¨å±€æ§åˆ¶å™¨èšåˆç»“æ„ä½“
+ * @details ç»Ÿä¸€ç®¡ç†å°è½¦æ‰€æœ‰çš„ PID æ§åˆ¶å™¨å®ä¾‹
  */
 typedef struct
 {
-    PID_Speed left_speed;  /**< ×óÂÖËÙ¶È»·¿ØÖÆÆ÷ */
-    PID_Speed right_speed; /**< ÓÒÂÖËÙ¶È»·¿ØÖÆÆ÷ */
-    PID_Steer steer;       /**< ×ªÏò»·¿ØÖÆÆ÷£¨»ùÓÚµç¸ĞÆ«²î£© */
-    PID_Steer angle;       /**< ½Ç¶È»·¿ØÖÆÆ÷£¨»ùÓÚÍÓÂİÒÇ£© */
+    PID_Speed left_speed;  /**< å·¦è½®é€Ÿåº¦ç¯æ§åˆ¶å™¨ */
+    PID_Speed right_speed; /**< å³è½®é€Ÿåº¦ç¯æ§åˆ¶å™¨ */
+    PID_Steer steer;       /**< è½¬å‘ç¯æ§åˆ¶å™¨ï¼ˆåŸºäºç”µæ„Ÿåå·®ï¼‰ */
+    PID_Steer angle;       /**< è§’åº¦ç¯æ§åˆ¶å™¨ï¼ˆåŸºäºé™€èºä»ªï¼‰ */
 } PID_Controllers;
 
-/* --- º¯ÊıÉùÃ÷ --- */
+/* --- å‡½æ•°å£°æ˜ --- */
 
 /**
- * @brief ³õÊ¼»¯ËÙ¶È»· PID ²ÎÊı
+ * @brief åˆå§‹åŒ–é€Ÿåº¦ç¯ PID å‚æ•°
  */
 void pid_speed_init(PID_Speed *pid, float kp, float ki, float kd, float max_out, float min_out);
 
 /**
- * @brief ³õÊ¼»¯×ªÏò»· PID ²ÎÊı
+ * @brief æ¸…é›¶é€Ÿåº¦ç¯è¿è¡Œæ—¶çŠ¶æ€
+ */
+void pid_speed_reset(PID_Speed *pid);
+
+/**
+ * @brief åˆå§‹åŒ–è½¬å‘ç¯ PID å‚æ•°
  */
 void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out, float min_out);
 
 /**
- * @brief ¶ÁÈ¡±àÂëÆ÷Êı¾İ²¢¸üĞÂµ½ PID ½á¹¹ÌåÖĞ
+ * @brief è¯»å–ç¼–ç å™¨æ•°æ®å¹¶æ›´æ–°åˆ° PID ç»“æ„ä½“ä¸­
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right);
 
 /**
- * @brief ¸üĞÂËÙ¶È»· PID ¼ÆËã£¨ÔöÁ¿Ê½£©
+ * @brief æ›´æ–°é€Ÿåº¦ç¯ PID è®¡ç®—ï¼ˆå¢é‡å¼ï¼‰
  */
 void pid_speed_update(PID_Speed *pid, float target, float actual);
 
 /**
- * @brief ¸üĞÂ×ªÏò»· PID ¼ÆËã£¨Î»ÖÃÊ½£©
+ * @brief æ›´æ–°è½¬å‘ç¯ PID è®¡ç®—ï¼ˆä½ç½®å¼ï¼‰
  */
 void pid_steer_update(PID_Steer *pid, float error);
 
 /**
- * @brief ¸üĞÂ½Ç¶È»· PID ¼ÆËã£¨Î»ÖÃÊ½£¬´øÍÓÂİÒÇ·´À¡£©
+ * @brief æ›´æ–°è§’åº¦ç¯ PID è®¡ç®—ï¼ˆä½ç½®å¼ï¼Œå¸¦é™€èºä»ªåé¦ˆï¼‰
  */
 void pid_angle_update(PID_Steer *pid, float error, float gyro);
 
 /**
- * @brief ²îËÙ·ÖÅäÂß¼­
- * @param speed_run »ù´¡ÔËĞĞËÙ¶È
- * @param left_target Êä³ö£º×óÂÖÄ¿±êËÙ¶ÈÖ¸Õë
- * @param right_target Êä³ö£ºÓÒÂÖÄ¿±êËÙ¶ÈÖ¸Õë
- * @param Scope ²îËÙÁéÃô¶È·¶Î§
+ * @brief å·®é€Ÿåˆ†é…é€»è¾‘
+ * @param speed_run åŸºç¡€è¿è¡Œé€Ÿåº¦
+ * @param left_target è¾“å‡ºï¼šå·¦è½®ç›®æ ‡é€Ÿåº¦æŒ‡é’ˆ
+ * @param right_target è¾“å‡ºï¼šå³è½®ç›®æ ‡é€Ÿåº¦æŒ‡é’ˆ
+ * @param Scope å·®é€Ÿçµæ•åº¦èŒƒå›´
  */
 void Pid_Differential(float speed_run, float *left_target, float *right_target, float Scope);
 
 /**
- * @brief ´¿×·×ÙËã·¨¿ØÖÆ£¨µç¸ĞÆ«²îÇı¶¯£©
+ * @brief çº¯è¿½è¸ªç®—æ³•æ§åˆ¶ï¼ˆç”µæ„Ÿåå·®é©±åŠ¨ï¼‰
  */
 void Pure_Pursuit_Control(float speed_ref, float norm_error, float *left_target, float *right_target);
 
 /**
- * @brief ´¿×·×Ù + ÍÓÂİÒÇ±Õ»·»ìºÏ¿ØÖÆ
+ * @brief çº¯è¿½è¸ª + é™€èºä»ªé—­ç¯æ··åˆæ§åˆ¶
  */
 void Pure_Pursuit_Gyro_Control(float speed_ref, float norm_error, float gyro_z, float *left_target, float *right_target);
 
-/* --- È«¾Ö±äÁ¿Íâ²¿ÉùÃ÷ --- */
+/* --- å…¨å±€å˜é‡å¤–éƒ¨å£°æ˜ --- */
 extern float speed_l, speed_r;
 extern PID_Controllers PID;
 

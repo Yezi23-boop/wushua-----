@@ -4,33 +4,46 @@
 #include "zf_common_typedef.h"
 
 /**
- * @brief ÔËĞĞ×´Ì¬È«¾Ö±êÖ¾
+ * @brief è¿è¡ŒçŠ¶æ€æ ‡å¿—
  */
-extern volatile int flat_statr; /**< ÔËĞĞ½×¶Î±êÖ¾£º0-Í£Ö¹£¬1-×¼±¸£¬2¼°ÒÔÉÏ-ÔËĞĞÖĞ */
-extern volatile int flat_fly;   /**< ·ÉÆÂ´¥·¢±êÖ¾£º1-ÕıÔÚ·ÉÆÂ/ÌØÊâÂıËÙ´¦Àí£¬0-Õı³£ */
+extern volatile int flat_statr; /**< è¿è¡ŒçŠ¶æ€é•œåƒï¼š0-åœæ­¢ï¼Œ1-é¢„å¯åŠ¨ï¼Œ2-è¿è¡Œä¸­ï¼Œ3-å¤–éƒ¨å¼ºåˆ¶å¯åŠ¨è¯·æ±‚ */
+extern volatile int flat_fly;   /**< é£å¡çŠ¶æ€æ ‡å¿—ï¼š1-é£å¡æ§åˆ¶ç”Ÿæ•ˆï¼Œ0-æ™®é€šå·¡çº¿çŠ¶æ€ */
+
+extern volatile uint8 test_trial_active;
+extern volatile uint8 test_trial_armed;
+extern volatile uint16 test_trial_elapsed_ms;
+extern volatile uint16 test_trial_limit_ms;
+extern volatile uint16 test_trial_cooldown_elapsed_ms;
+extern volatile uint16 test_trial_cooldown_ms;
+extern volatile int16 test_fuya_pwm;
+extern volatile int32 test_left_pwm_output;
+extern volatile int32 test_right_pwm_output;
 
 /**
- * @brief ºËĞÄ¿ØÖÆÈÎÎñ 1 (½¨Òé 5ms ÖÜÆÚ)
- * @details °üº¬£º´«¸ĞÆ÷¶ÁÈ¡¡¢PID Æ«²î¸üĞÂ¡¢µç»ú PWM Êä³ö
+ * @brief 5ms ä¸»æ§åˆ¶ä»»åŠ¡
+ * @details å®Œæˆé‡‡æ ·ã€å§¿æ€/è½¬å‘/é€Ÿåº¦ç¯è®¡ç®—ï¼Œå¹¶åœ¨å…è®¸è¿è¡Œæ—¶è¾“å‡º PWM
  */
 void run_time_1(void);
 
 /**
- * @brief ºËĞÄ¿ØÖÆÈÎÎñ 2 (½¨Òé 10ms ÖÜÆÚ)
- * @details °üº¬£ºIMU ×ËÌ¬½âËã¡¢µçÑ¹¼à²â¡¢¶ªÏß±£»¤¡¢±ê¶¨¸üĞÂ
+ * @brief 10ms çŠ¶æ€ç®¡ç†ä»»åŠ¡
+ * @details å¤„ç† IMU è§£ç®—ã€èµ›é“çŠ¶æ€æ£€æµ‹ã€å¯åœçŠ¶æ€æœºå’Œè½¯ä»¶å®šæ—¶å™¨
  */
 void run_time_2(void);
 
 /**
- * @brief ¸ß¼¶¿ØÖÆÈÎÎñ 3 (±¸ÓÃ/²âÊÔ)
- * @details ²ÉÓÃ´¿×·×Ù (Pure Pursuit) Ëã·¨ÓëÍÓÂİÒÇÈÚºÏ¿ØÖÆ
+ * @brief çº¯è¿½è¸ªå®éªŒä»»åŠ¡
+ * @details ä½¿ç”¨ Pure Pursuit ç”Ÿæˆç›®æ ‡è½®é€Ÿï¼Œå†ç”±é€Ÿåº¦ç¯å®Œæˆé—­ç¯è¾“å‡º
  */
 void run_time_3(void);
 
-/* --- ²âÊÔ½Ó¿Ú --- */
+/* --- æµ‹è¯•ä¸ä¿æŠ¤æ¥å£ --- */
 void run_test_speed(void);
 void run_test_angle(void);
 void run_test_motor(int speed_l, int speed_r);
 void a_run_apply_iap_guard(void);
+void ground_load_test_arm(void);
+void ground_load_test_fire(void);
+void ground_load_test_stop(void);
 
 #endif /* __A_RUN_H__ */

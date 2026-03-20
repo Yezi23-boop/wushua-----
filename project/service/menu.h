@@ -4,122 +4,122 @@
 #include "zf_common_typedef.h"
 
 /**
- * @brief ²Ëµ¥ÏµÍ³×´Ì¬±äÁ¿
- * @details display_codename ±íÊ¾µ±Ç°Ëù´¦µÄ²Ëµ¥Ò³Ãæ ID£¬ÓÃÓÚÒ³ÃæÇĞ»»ºÍäÖÈ¾
+ * @brief èœå•ç³»ç»ŸçŠ¶æ€å˜é‡
+ * @details display_codename è¡¨ç¤ºå½“å‰æ‰€å¤„çš„èœå•é¡µé¢ IDï¼Œç”¨äºé¡µé¢åˆ‡æ¢å’Œæ¸²æŸ“
  */
 extern int display_codename;
 
-/* --- ºËĞÄ¿ØÖÆº¯Êı --- */
+/* --- æ ¸å¿ƒæ§åˆ¶å‡½æ•° --- */
 
 /**
- * @brief ´¦Àí²Ëµ¥¹â±êÒÆ¶¯
+ * @brief å¤„ç†èœå•å…‰æ ‡ç§»åŠ¨
  */
 void Cursor(void);
 
 /**
- * @brief Ö´ĞĞ²Ëµ¥Ò³ÃæÌø×ªÂß¼­
+ * @brief æ‰§è¡Œèœå•é¡µé¢è·³è½¬é€»è¾‘
  */
 void Menu_Next_Back(void);
 
 /**
- * @brief ¼ì²éÖ¸¶¨µÄÒ³Ãæ ID ÊÇ·ñ°üº¬×Ó²Ëµ¥
+ * @brief æ£€æŸ¥æŒ‡å®šçš„é¡µé¢ ID æ˜¯å¦åŒ…å«å­èœå•
  */
 int Have_Sub_Menu(int menu_id);
 
 /**
- * @brief Í¨ÓÃ°´¼ü´¦Àíº¯Êı£¨ÓÃÓÚ²½½ø±¶ÊıÇĞ»»µÈ£©
+ * @brief é€šç”¨æŒ‰é”®å¤„ç†å‡½æ•°ï¼ˆç”¨äºæ­¥è¿›å€æ•°åˆ‡æ¢ç­‰ï¼‰
  */
 void HandleKeystroke(int keystroke_label);
 
-/* --- ²ÎÊıĞŞ¸Ä½»»¥º¯Êı --- */
+/* --- å‚æ•°ä¿®æ”¹äº¤äº’å‡½æ•° --- */
 
 /**
- * @brief ĞŞ¸Ä¶şÖµĞÍ²ÎÊı£¨Èç 1 »ò -1£©
+ * @brief ä¿®æ”¹äºŒå€¼å‹å‚æ•°ï¼ˆå¦‚ 1 æˆ– -1ï¼‰
  */
 void Keystroke_Special_Value(int16 *parameter);
 
 /**
- * @brief ĞŞ¸ÄÕûĞÍ²ÎÊı£¬Ö§³Ö¶¯Ì¬²½½ø±¶Êı
+ * @brief ä¿®æ”¹æ•´å‹å‚æ•°ï¼Œæ”¯æŒåŠ¨æ€æ­¥è¿›å€æ•°
  */
 void Keystroke_int(int *parameter, int change_unit_MIN);
 
 /**
- * @brief ĞŞ¸Ä¸¡µãĞÍ²ÎÊı£¬Ö§³Ö¶¯Ì¬²½½ø±¶Êı
+ * @brief ä¿®æ”¹æµ®ç‚¹å‹å‚æ•°ï¼Œæ”¯æŒåŠ¨æ€æ­¥è¿›å€æ•°
  */
 void Keystroke_float(float *parameter, float change_unit_MIN);
 
-/* --- Ò³ÃæÏÔÊ¾Óë´¦ÀíÖ÷º¯Êı --- */
+/* --- é¡µé¢æ˜¾ç¤ºä¸å¤„ç†ä¸»å‡½æ•° --- */
 
 /**
- * @brief ²Ëµ¥ÏµÍ³¶¥²ãµ÷¶Èº¯Êı
- * @details ÔÚÖ÷Ñ­»·ÖĞµ÷ÓÃ£¬¸ù¾İ display_codename ·Ö·¢µ½¸÷Ò³Ãæ´¦Àíº¯Êı
+ * @brief èœå•ç³»ç»Ÿé¡¶å±‚è°ƒåº¦å‡½æ•°
+ * @details åœ¨ä¸»å¾ªç¯ä¸­è°ƒç”¨ï¼Œæ ¹æ® display_codename åˆ†å‘åˆ°å„é¡µé¢å¤„ç†å‡½æ•°
  */
 void Keystroke_Menu(void);
 
 /**
- * @brief Ö÷½çÃæ£¨HOME£©äÖÈ¾Óë´¦Àí
+ * @brief ä¸»ç•Œé¢ï¼ˆHOMEï¼‰æ¸²æŸ“ä¸å¤„ç†
  */
 void Keystroke_Menu_HOME(void);
 
-/* --- ¸÷×ÓÒ³ÃæäÖÈ¾Óë´¦Àíº¯Êı --- */
+/* --- å„å­é¡µé¢æ¸²æŸ“ä¸å¤„ç†å‡½æ•° --- */
 
 /**
- * @brief Æô¶¯ÉèÖÃÒ³ÃæäÖÈ¾
+ * @brief å¯åŠ¨è®¾ç½®é¡µé¢æ¸²æŸ“
  */
 void Menu_Start_Show(uint8 control_line);
 
 /**
- * @brief Æô¶¯ÉèÖÃÒ³ÃæÂß¼­´¦Àí
+ * @brief å¯åŠ¨è®¾ç½®é¡µé¢é€»è¾‘å¤„ç†
  */
 void Menu_Start_Process(void);
 
 /**
- * @brief ËÙ¶È»· PID ²ÎÊıÒ³ÃæäÖÈ¾
+ * @brief é€Ÿåº¦ç¯ PID å‚æ•°é¡µé¢æ¸²æŸ“
  */
 void Menu_Speed_Show(uint8 control_line);
 
 /**
- * @brief ËÙ¶È»· PID ²ÎÊıÒ³ÃæÂß¼­´¦Àí
+ * @brief é€Ÿåº¦ç¯ PID å‚æ•°é¡µé¢é€»è¾‘å¤„ç†
  */
 void Menu_Speed_Process(void);
 
 /**
- * @brief ½Ç¶È»· PID ²ÎÊıÒ³ÃæäÖÈ¾
+ * @brief è§’åº¦ç¯ PID å‚æ•°é¡µé¢æ¸²æŸ“
  */
 void Menu_Angle_Show(uint8 control_line);
 
 /**
- * @brief ½Ç¶È»· PID ²ÎÊıÒ³ÃæÂß¼­´¦Àí
+ * @brief è§’åº¦ç¯ PID å‚æ•°é¡µé¢é€»è¾‘å¤„ç†
  */
 void Menu_Angle_Process(void);
 
 /**
- * @brief Ô²»·¿ØÖÆ²ÎÊıÒ³ÃæäÖÈ¾
+ * @brief åœ†ç¯æ§åˆ¶å‚æ•°é¡µé¢æ¸²æŸ“
  */
 void Menu_Circle_Show(uint8 control_line);
 
 /**
- * @brief Ô²»·¿ØÖÆ²ÎÊıÒ³ÃæÂß¼­´¦Àí
+ * @brief åœ†ç¯æ§åˆ¶å‚æ•°é¡µé¢é€»è¾‘å¤„ç†
  */
 void Menu_Circle_Process(void);
 
 /**
- * @brief ·ÉÆÂ¿ØÖÆ²ÎÊıÒ³ÃæäÖÈ¾
+ * @brief é£å¡æ§åˆ¶å‚æ•°é¡µé¢æ¸²æŸ“
  */
 void Menu_Fly_Show(uint8 control_line);
 
 /**
- * @brief ·ÉÆÂ¿ØÖÆ²ÎÊıÒ³ÃæÂß¼­´¦Àí
+ * @brief é£å¡æ§åˆ¶å‚æ•°é¡µé¢é€»è¾‘å¤„ç†
  */
 void Menu_Fly_Process(void);
 
 /**
- * @brief ´«¸ĞÆ÷ÊµÊ±ÊıÖµÒ³ÃæäÖÈ¾
+ * @brief ä¼ æ„Ÿå™¨å®æ—¶æ•°å€¼é¡µé¢æ¸²æŸ“
  */
 void Menu_Sensor_Show(void);
 
 /**
- * @brief ´«¸ĞÆ÷ÊµÊ±ÊıÖµÒ³ÃæÂß¼­´¦Àí
+ * @brief ä¼ æ„Ÿå™¨å®æ—¶æ•°å€¼é¡µé¢é€»è¾‘å¤„ç†
  */
 void Menu_Sensor_Process(void);
 

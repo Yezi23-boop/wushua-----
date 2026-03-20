@@ -4,20 +4,25 @@
 #include "zf_common_typedef.h"
 
 /**
- * @brief ¸ºÑ¹ÏµÍ³È«¾Ö±äÁ¿
+ * @brief è´Ÿå‹ç³»ç»Ÿå…¨å±€å˜é‡
  */
-extern volatile int fuya_date;          /**< ×îÖÕÊä³öµÄÆ½»¬Õ¼¿Õ±È */
-extern volatile float fuya_date_factor; /**< Ä¿±êÕ¼¿Õ±È£¨Î´ÂË²¨£© */
-extern volatile uint8 phase;            /**< µ±Ç°ÔË¶¯½×¶Î (0-4) */
+extern volatile int fuya_date;          /**< æœ€ç»ˆè¾“å‡ºçš„å¹³æ»‘å ç©ºæ¯” */
+extern volatile float fuya_date_factor; /**< ç›®æ ‡å ç©ºæ¯”ï¼ˆæœªæ»¤æ³¢ï¼‰ */
+extern volatile uint8 phase;            /**< å½“å‰è¿åŠ¨é˜¶æ®µ (0-4) */
 
 /**
- * @brief ¸ºÑ¹Îü¸½ÏµÍ³³õÊ¼»¯
+ * @brief è´Ÿå‹å¸é™„ç³»ç»Ÿåˆå§‹åŒ–
  */
 void fuya_Init(void);
 
 /**
- * @brief ¼òµ¥°æ¸ºÑ¹Õ¼¿Õ±È¸üĞÂÂß¼­
- * @details »ùÓÚ IMU ×ËÌ¬½âËã½á¹û£¬¶¯Ì¬µ÷Õû·çÉÈÎüÁ¦£¬ÊµÏÖÇ½Ãæ¡¢Ìì»¨°åµÄÎÈ¶¨Îü¸½
+ * @brief ç›´æ¥è¾“å‡ºè´Ÿå‹å ç©ºæ¯”
+ */
+void fuya_motor_output(int pwm);
+
+/**
+ * @brief ç®€å•ç‰ˆè´Ÿå‹å ç©ºæ¯”æ›´æ–°é€»è¾‘
+ * @details åŸºäº IMU å§¿æ€è§£ç®—ç»“æœï¼ŒåŠ¨æ€è°ƒæ•´é£æ‰‡å¸åŠ›ï¼Œå®ç°å¢™é¢ã€å¤©èŠ±æ¿çš„ç¨³å®šå¸é™„
  */
 void fuya_update_simple(void);
 

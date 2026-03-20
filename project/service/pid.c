@@ -1,26 +1,26 @@
 #include "pid.h"
 
-/* ÊµÀı»¯È«¾Ö¿ØÖÆÆ÷¾ÛºÏ½á¹¹ */
+/* å®ä¾‹åŒ–å…¨å±€æ§åˆ¶å™¨èšåˆç»“æ„ */
 PID_Controllers PID; 
 
-/* ±àÂëÆ÷µÍÍ¨ÂË²¨Æ÷ÊµÀı */
+/* ç¼–ç å™¨ä½é€šæ»¤æ³¢å™¨å®ä¾‹ */
 LowPassFilter_t encoder_l;
 LowPassFilter_t encoder_r;
 
-/* ÄÚ²¿ÖĞ¼ä±äÁ¿ */
-float delta_output = 0;   /* ÔöÁ¿Ê½ PID ¼ÆËã³öµÄÊä³öÔöÁ¿ */
-float speed_l = 0;        /* ×óÂÖµ±Ç°Æ½»¬ËÙ¶È */
-float speed_r = 0;        /* ÓÒÂÖµ±Ç°Æ½»¬ËÙ¶È */
-float max_integral = 0;   /* Ô¤Áô£º»ı·ÖÏŞ·ù£¨µ±Ç°ÔöÁ¿Ê½Î´Ö±½ÓÊ¹ÓÃ£© */
+/* å†…éƒ¨ä¸­é—´å˜é‡ */
+float delta_output = 0;   /* å¢é‡å¼ PID è®¡ç®—å‡ºçš„è¾“å‡ºå¢é‡ */
+float speed_l = 0;        /* å·¦è½®å½“å‰å¹³æ»‘é€Ÿåº¦ */
+float speed_r = 0;        /* å³è½®å½“å‰å¹³æ»‘é€Ÿåº¦ */
+float max_integral = 0;   /* é¢„ç•™ï¼šç§¯åˆ†é™å¹…ï¼ˆå½“å‰å¢é‡å¼æœªç›´æ¥ä½¿ç”¨ï¼‰ */
 
 /**
- * @brief ËÙ¶È»·³õÊ¼»¯£¨ÔöÁ¿Ê½£©
- * @param pid PID½á¹¹ÌåÖ¸Õë
- * @param kp ±ÈÀıÏµÊı
- * @param ki »ı·ÖÏµÊı
- * @param kd Î¢·ÖÏµÊı
- * @param max_out ÕıÏòÊä³öÏŞ·ù
- * @param min_out ·´ÏòÊä³öÏŞ·ù
+ * @brief é€Ÿåº¦ç¯åˆå§‹åŒ–ï¼ˆå¢é‡å¼ï¼‰
+ * @param pid PIDç»“æ„ä½“æŒ‡é’ˆ
+ * @param kp æ¯”ä¾‹ç³»æ•°
+ * @param ki ç§¯åˆ†ç³»æ•°
+ * @param kd å¾®åˆ†ç³»æ•°
+ * @param max_out æ­£å‘è¾“å‡ºé™å¹…
+ * @param min_out åå‘è¾“å‡ºé™å¹…
  */
 void pid_speed_init(PID_Speed *pid, float kp, float ki, float kd, float max_out, float min_out)
 {
@@ -31,18 +31,28 @@ void pid_speed_init(PID_Speed *pid, float kp, float ki, float kd, float max_out,
     pid->prev_error = 0.0f;
     pid->prev2_error = 0.0f;
     pid->output = 0.0f;
+    pid->speed = 0.0f;
     pid->max_output = max_out;
     pid->min_output = min_out;
 }
 
+void pid_speed_reset(PID_Speed *pid)
+{
+    pid->error = 0.0f;
+    pid->prev_error = 0.0f;
+    pid->prev2_error = 0.0f;
+    pid->output = 0.0f;
+    pid->speed = 0.0f;
+}
+
 /**
- * @brief ×ªÏò»·³õÊ¼»¯£¨Î»ÖÃÊ½£©
- * @param pid PID½á¹¹ÌåÖ¸Õë
- * @param kp ±ÈÀıÏµÊı
- * @param kd Î¢·ÖÏµÊı
- * @param Kp2 ÔöÇ¿Ïî/·ÇÏßĞÔÏµÊı
- * @param max_out ÕıÏòÊä³öÏŞ·ù
- * @param min_out ·´ÏòÊä³öÏŞ·ù
+ * @brief è½¬å‘ç¯åˆå§‹åŒ–ï¼ˆä½ç½®å¼ï¼‰
+ * @param pid PIDç»“æ„ä½“æŒ‡é’ˆ
+ * @param kp æ¯”ä¾‹ç³»æ•°
+ * @param kd å¾®åˆ†ç³»æ•°
+ * @param Kp2 å¢å¼ºé¡¹/éçº¿æ€§ç³»æ•°
+ * @param max_out æ­£å‘è¾“å‡ºé™å¹…
+ * @param min_out åå‘è¾“å‡ºé™å¹…
  */
 void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out, float min_out)
 {
@@ -57,51 +67,51 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out
 }
 
 /**
- * @brief ¶ÁÈ¡²¢´¦Àí±àÂëÆ÷Êı¾İ
- * @details ¶ÁÈ¡Ó²¼ş±àÂëÆ÷¼ÆÊıÖµ£¬×ª»»ÎªÎïÀíËÙ¶È£¬²¢½øĞĞµÍÍ¨ÂË²¨´¦Àí
- * @param left ×óÂÖ PID ½á¹¹Ö¸Õë
- * @param right ÓÒÂÖ PID ½á¹¹Ö¸Õë
+ * @brief è¯»å–å¹¶å¤„ç†ç¼–ç å™¨æ•°æ®
+ * @details è¯»å–ç¡¬ä»¶ç¼–ç å™¨è®¡æ•°å€¼ï¼Œè½¬æ¢ä¸ºç‰©ç†é€Ÿåº¦ï¼Œå¹¶è¿›è¡Œä½é€šæ»¤æ³¢å¤„ç†
+ * @param left å·¦è½® PID ç»“æ„æŒ‡é’ˆ
+ * @param right å³è½® PID ç»“æ„æŒ‡é’ˆ
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
     /* 
-     * ¶ÁÈ¡Ó²¼ş±àÂëÆ÷¼ÆÊıÖµ 
-     * ³ËÒÔ 0.2f ÊÇ½«Ô­Ê¼¼ÆÊıÖµ×ª»»ÎªÊµ¼ÊËÙ¶Èµ¥Î»µÄËõ·ÅÒò×Ó
-     * ×¢Òâ£º×óÂÖºÍÓÒÂÖ¿ÉÄÜÒòÎª°²×°·½Ïò²»Í¬¶øĞèÒªÈ¡·´
+     * è¯»å–ç¡¬ä»¶ç¼–ç å™¨è®¡æ•°å€¼ 
+     * ä¹˜ä»¥ 0.2f æ˜¯å°†åŸå§‹è®¡æ•°å€¼è½¬æ¢ä¸ºå®é™…é€Ÿåº¦å•ä½çš„ç¼©æ”¾å› å­
+     * æ³¨æ„ï¼šå·¦è½®å’Œå³è½®å¯èƒ½å› ä¸ºå®‰è£…æ–¹å‘ä¸åŒè€Œéœ€è¦å–å
      */
-    right->speed = encoder_get_count(TIM4_ENCOEDER) * 0.2f; /* ÓÒµç»ú±àÂëÆ÷ */
-    left->speed = -encoder_get_count(TIM3_ENCOEDER) * 0.2f;    /* ×óµç»ú±àÂëÆ÷ */
+    right->speed = encoder_get_count(TIM4_ENCOEDER) * 0.2f; /* å³ç”µæœºç¼–ç å™¨ */
+    left->speed = -encoder_get_count(TIM3_ENCOEDER) * 0.2f;    /* å·¦ç”µæœºç¼–ç å™¨ */
 
-    /* ¶ÔÔ­Ê¼ËÙ¶È½øĞĞÒ»½×µÍÍ¨ÂË²¨£¬¼õĞ¡±àÂëÆ÷ÔëÉù¶ÔËÙ¶È»·µÄÓ°Ïì */
-    low_pass_filter_mt(&encoder_l, &left->speed, 0.8f); /* alpha=1.0 ´ú±íÔİ²»ÂË²¨£¬¿É¸ù¾İĞèÒªµ÷Õû */
+    /* å¯¹åŸå§‹é€Ÿåº¦è¿›è¡Œä¸€é˜¶ä½é€šæ»¤æ³¢ï¼Œå‡å°ç¼–ç å™¨å™ªå£°å¯¹é€Ÿåº¦ç¯çš„å½±å“ */
+    low_pass_filter_mt(&encoder_l, &left->speed, 0.8f); /* alpha=1.0 ä»£è¡¨æš‚ä¸æ»¤æ³¢ï¼Œå¯æ ¹æ®éœ€è¦è°ƒæ•´ */
     low_pass_filter_mt(&encoder_r, &right->speed, 0.8f);
 
-    /* ÇåÁãÓ²¼ş¼ÆÊıÆ÷£¬×¼±¸ÏÂÒ»²ÉÑùÖÜÆÚµÄ¼ÆÊı */
+    /* æ¸…é›¶ç¡¬ä»¶è®¡æ•°å™¨ï¼Œå‡†å¤‡ä¸‹ä¸€é‡‡æ ·å‘¨æœŸçš„è®¡æ•° */
     encoder_clear_count(TIM3_ENCOEDER);
     encoder_clear_count(TIM4_ENCOEDER);
 }
 
 /**
- * @brief ËÙ¶È»· PID ¸üĞÂ£¨ÔöÁ¿Ê½Ëã·¨£©
- * @details ¹«Ê½£ºdelta_u = Kp*(e(k)-e(k-1)) + Ki*e(k) + Kd*(e(k)-2*e(k-1)+e(k-2))
- * @param pid PID ½á¹¹Ö¸Õë
- * @param target Ä¿±êËÙ¶È
- * @param actual Êµ¼Ê·´À¡ËÙ¶È
+ * @brief é€Ÿåº¦ç¯ PID æ›´æ–°ï¼ˆå¢é‡å¼ç®—æ³•ï¼‰
+ * @details å…¬å¼ï¼šdelta_u = Kp*(e(k)-e(k-1)) + Ki*e(k) + Kd*(e(k)-2*e(k-1)+e(k-2))
+ * @param pid PID ç»“æ„æŒ‡é’ˆ
+ * @param target ç›®æ ‡é€Ÿåº¦
+ * @param actual å®é™…åé¦ˆé€Ÿåº¦
  */
 void pid_speed_update(PID_Speed *pid, float target, float actual)
 {
-    /* ¼ÆËãµ±Ç°Æ«²î */
+    /* è®¡ç®—å½“å‰åå·® */
     pid->error = target - actual;
 
-    /* ÔöÁ¿Ê½ PID ¹«Ê½¼ÆËãÊä³öÔöÁ¿ */
+    /* å¢é‡å¼ PID å…¬å¼è®¡ç®—è¾“å‡ºå¢é‡ */
     delta_output = pid->Kp * (pid->error - pid->prev_error) + 
                    pid->Ki * pid->error + 
                    pid->Kd * (pid->error - 2.0f * pid->prev_error + pid->prev2_error);
 
-    /* ÀÛ¼ÓÔöÁ¿µ½µ±Ç°Êä³öÖµ */
+    /* ç´¯åŠ å¢é‡åˆ°å½“å‰è¾“å‡ºå€¼ */
     pid->output += delta_output;
 
-    /* Êä³öÏŞ·ù±£»¤ */
+    /* è¾“å‡ºé™å¹…ä¿æŠ¤ */
     if (pid->output > pid->max_output)
     {
         pid->output = pid->max_output;
@@ -111,31 +121,31 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
         pid->output = -pid->max_output;
     }
 
-    /* ¸üĞÂÎó²îÀúÊ·£¬¹©ÏÂÒ»ÖÜÆÚÊ¹ÓÃ */
+    /* æ›´æ–°è¯¯å·®å†å²ï¼Œä¾›ä¸‹ä¸€å‘¨æœŸä½¿ç”¨ */
     pid->prev2_error = pid->prev_error;
     pid->prev_error = pid->error;
 }
 
 /**
- * @brief ×ªÏò»· PID ¸üĞÂ£¨Î»ÖÃÊ½Ëã·¨£¬Ö§³Ö·ÇÏßĞÔÔöÇ¿£©
- * @details ÓÃÓÚ»ùÓÚµç¸ĞÆ«²îµÄ×ªÏò¿ØÖÆ
- * @param pid PID ½á¹¹Ö¸Õë
- * @param error µ±Ç°Î»ÖÃÆ«²î£¨Í¨³£À´×Ôµç¸Ğ¹éÒ»»¯¼ÆËã£©
+ * @brief è½¬å‘ç¯ PID æ›´æ–°ï¼ˆä½ç½®å¼ç®—æ³•ï¼Œæ”¯æŒéçº¿æ€§å¢å¼ºï¼‰
+ * @details ç”¨äºåŸºäºç”µæ„Ÿåå·®çš„è½¬å‘æ§åˆ¶
+ * @param pid PID ç»“æ„æŒ‡é’ˆ
+ * @param error å½“å‰ä½ç½®åå·®ï¼ˆé€šå¸¸æ¥è‡ªç”µæ„Ÿå½’ä¸€åŒ–è®¡ç®—ï¼‰
  */
 void pid_steer_update(PID_Steer *pid, float error)
 {
     pid->error = error;
 
     /* 
-     * Î»ÖÃÊ½ PID ¼ÆËã£º
-     * °üº¬±ÈÀıÏî¡¢·ÇÏßĞÔÏî£¨error * |error|£©ºÍÎ¢·ÖÏî
-     * ·ÇÏßĞÔÏîÓÃÓÚÔÚÎó²î½Ï´óÊ±Ìá¹©¸üÇ¿µÄ»Ø¹éÁ¦
+     * ä½ç½®å¼ PID è®¡ç®—ï¼š
+     * åŒ…å«æ¯”ä¾‹é¡¹ã€éçº¿æ€§é¡¹ï¼ˆerror * |error|ï¼‰å’Œå¾®åˆ†é¡¹
+     * éçº¿æ€§é¡¹ç”¨äºåœ¨è¯¯å·®è¾ƒå¤§æ—¶æä¾›æ›´å¼ºçš„å›å½’åŠ›
      */
     pid->output = pid->Kp * pid->error + 
                   pid->Kp2 * error * func_abs(error) + 
                   pid->Kd * (pid->error - pid->prev_error);
 
-    /* Êä³öÏŞ·ù */
+    /* è¾“å‡ºé™å¹… */
     if (pid->output > pid->max_output)
     {
         pid->output = pid->max_output;
@@ -145,26 +155,26 @@ void pid_steer_update(PID_Steer *pid, float error)
         pid->output = -pid->min_output;
     }
 
-    /* ¼ÇÂ¼Îó²îÓÃÓÚÏÂ´ÎÎ¢·Ö¼ÆËã */
+    /* è®°å½•è¯¯å·®ç”¨äºä¸‹æ¬¡å¾®åˆ†è®¡ç®— */
     pid->prev_error = pid->error;
 }
 
 /**
- * @brief ½Ç¶È»· PID ¸üĞÂ£¨Î»ÖÃÊ½Ëã·¨£©
+ * @brief è§’åº¦ç¯ PID æ›´æ–°ï¼ˆä½ç½®å¼ç®—æ³•ï¼‰
  * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
- * @param pid PID ½á¹¹Ö¸Õë
- * @param error Ä¿±êÆ«²î£¨Í¨³£ÊÇ Ä¿±ê½Ç¶È - µ±Ç°½Ç¶È£©
+ * @param pid PID ç»“æ„æŒ‡é’ˆ
+ * @param error ç›®æ ‡åå·®ï¼ˆé€šå¸¸æ˜¯ ç›®æ ‡è§’åº¦ - å½“å‰è§’åº¦ï¼‰
  * @param gyro Calibrated steering feedback value
  */
 void pid_angle_update(PID_Steer *pid, float error, float gyro)
 {
-    /* ¼ÆËã×ÛºÏÆ«²î */
+    /* è®¡ç®—ç»¼åˆåå·® */
     pid->error = error - gyro;
 
-    /* Î»ÖÃÊ½ PD ¿ØÖÆ */
+    /* ä½ç½®å¼ PD æ§åˆ¶ */
     pid->output = pid->Kp * pid->error + pid->Kd * (pid->error - pid->prev_error);
 
-    /* ÏŞ·ù´¦Àí */
+    /* é™å¹…å¤„ç† */
     if (pid->output > pid->max_output)
     {
         pid->output = pid->max_output;
@@ -178,32 +188,32 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
 }
 
 /**
- * @brief ²îËÙ·ÖÅäº¯Êı
- * @details ½«×ªÏò¿ØÖÆÆ÷µÄÊä³ö×ª»¯Îª×óÓÒÂÖµÄÄ¿±êËÙ¶È²î
- * @param speed_run »ù´¡ÔËĞĞËÙ¶È£¨Ö±µÀËÙ¶È£©
- * @param left_target Êä³ö£º×óÂÖÄ¿±êËÙ¶È
- * @param right_target Êä³ö£ºÓÒÂÖÄ¿±êËÙ¶È
- * @param Scope ²îËÙÏµÊıÓ³Éä·¶Î§£¨Í¨³£¸ù¾İÈüµÀ¿í¶ÈºÍ³µÌåÌØĞÔ±ê¶¨£©
+ * @brief å·®é€Ÿåˆ†é…å‡½æ•°
+ * @details å°†è½¬å‘æ§åˆ¶å™¨çš„è¾“å‡ºè½¬åŒ–ä¸ºå·¦å³è½®çš„ç›®æ ‡é€Ÿåº¦å·®
+ * @param speed_run åŸºç¡€è¿è¡Œé€Ÿåº¦ï¼ˆç›´é“é€Ÿåº¦ï¼‰
+ * @param left_target è¾“å‡ºï¼šå·¦è½®ç›®æ ‡é€Ÿåº¦
+ * @param right_target è¾“å‡ºï¼šå³è½®ç›®æ ‡é€Ÿåº¦
+ * @param Scope å·®é€Ÿç³»æ•°æ˜ å°„èŒƒå›´ï¼ˆé€šå¸¸æ ¹æ®èµ›é“å®½åº¦å’Œè½¦ä½“ç‰¹æ€§æ ‡å®šï¼‰
  */
 void Pid_Differential(float speed_run, float *left_target, float *right_target, float Scope)
 {
     float k;
-    float delta = PID.angle.output; /* »ñÈ¡½Ç¶È»·/×ªÏò»·µÄ¿ØÖÆÊä³ö */
+    float delta = PID.angle.output; /* è·å–è§’åº¦ç¯/è½¬å‘ç¯çš„æ§åˆ¶è¾“å‡º */
 
-    /* »ù´¡·À´í£º·ÀÖ¹³ıÁã */
+    /* åŸºç¡€é˜²é”™ï¼šé˜²æ­¢é™¤é›¶ */
     if (Scope < 0.001f) Scope = 100.0f;
 
-    if (delta >= 0.0f) /* ¿ØÖÆÊä³öÎªÕı£¬Í¨³£´ú±íĞèÒªÏò×ó×ª */
+    if (delta >= 0.0f) /* æ§åˆ¶è¾“å‡ºä¸ºæ­£ï¼Œé€šå¸¸ä»£è¡¨éœ€è¦å‘å·¦è½¬ */
     {
-        /* ¼ÆËã¹éÒ»»¯²îËÙÏµÊı k */
+        /* è®¡ç®—å½’ä¸€åŒ–å·®é€Ÿç³»æ•° k */
         k = delta / Scope;
-        if (k > 1.0f) k = 1.0f; /* ÏŞ·ù£º×î´ó²îËÙ²»³¬¹ı»ù´¡ËÙ¶È */
+        if (k > 1.0f) k = 1.0f; /* é™å¹…ï¼šæœ€å¤§å·®é€Ÿä¸è¶…è¿‡åŸºç¡€é€Ÿåº¦ */
 
-        /* ²îËÙ²ßÂÔ£ºÄÚ²àÂÖ¼õËÙ£¬Íâ²àÂÖÊÊµ±¼ÓËÙÒÔ²¹³¥×ªÍä°ë¾¶ */
+        /* å·®é€Ÿç­–ç•¥ï¼šå†…ä¾§è½®å‡é€Ÿï¼Œå¤–ä¾§è½®é€‚å½“åŠ é€Ÿä»¥è¡¥å¿è½¬å¼¯åŠå¾„ */
         *left_target = speed_run * (1.0f - k);
         *right_target = speed_run * (1.0f + k * 0.5f);
     }
-    else /* ¿ØÖÆÊä³öÎª¸º£¬´ú±íĞèÒªÏòÓÒ×ª */
+    else /* æ§åˆ¶è¾“å‡ºä¸ºè´Ÿï¼Œä»£è¡¨éœ€è¦å‘å³è½¬ */
     {
         k = -delta / Scope;
         if (k > 1.0f) k = 1.0f;
@@ -213,53 +223,53 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
     }
 }
 
-/* ´¿×·×ÙÏà¹Ø³£Á¿£¨½¨Òé·ÅÈëÍ·ÎÄ¼ş»òÅäÖÃ½á¹¹ÌåÖĞ£© */
-#define TRACK_WIDTH 80.0f /* ÂÖ¾à£¨²Î¿¼Öµ£¬µ¥Î» cm£© */
-#define BASE_L 150.0f     /* »ù´¡Ô¤Ãé¾àÀë£¨²Î¿¼Öµ£¬µ¥Î» cm£© */
-#define K_SPEED 0.5f      /* ËÙ¶ÈÏà¹ØµÄÔ¤ÃéÔöÒæ */
+/* çº¯è¿½è¸ªç›¸å…³å¸¸é‡ï¼ˆå»ºè®®æ”¾å…¥å¤´æ–‡ä»¶æˆ–é…ç½®ç»“æ„ä½“ä¸­ï¼‰ */
+#define TRACK_WIDTH 80.0f /* è½®è·ï¼ˆå‚è€ƒå€¼ï¼Œå•ä½ cmï¼‰ */
+#define BASE_L 150.0f     /* åŸºç¡€é¢„ç„è·ç¦»ï¼ˆå‚è€ƒå€¼ï¼Œå•ä½ cmï¼‰ */
+#define K_SPEED 0.5f      /* é€Ÿåº¦ç›¸å…³çš„é¢„ç„å¢ç›Š */
 
 /**
- * @brief ´¿×·×Ù + ÍÓÂİÒÇ±Õ»·»ìºÏ¿ØÖÆ (Pure Pursuit + Gyro Loop)
+ * @brief çº¯è¿½è¸ª + é™€èºä»ªé—­ç¯æ··åˆæ§åˆ¶ (Pure Pursuit + Gyro Loop)
  * @details 
- * 1. ÀûÓÃ´¿×·×ÙÄ£ĞÍ¼ÆËãÀíÂÛÄ¿±êÇúÂÊºÍ½ÇËÙ¶È
- * 2. ÀûÓÃÍÓÂİÒÇ½ÇËÙ¶È×÷Îª·´À¡£¬½øĞĞÄÚ»·±Õ»·¿ØÖÆ
- * 3. ÊµÏÖ¸üÆ½»¬µÄ¸ßËÙÑ­¼£ºÍ¿¹¸ÉÈÅÄÜÁ¦
- * @param speed_ref »ù´¡²Î¿¼ËÙ¶È
- * @param norm_error ¹éÒ»»¯ºóµÄÈüµÀÎ»ÖÃÆ«²î
+ * 1. åˆ©ç”¨çº¯è¿½è¸ªæ¨¡å‹è®¡ç®—ç†è®ºç›®æ ‡æ›²ç‡å’Œè§’é€Ÿåº¦
+ * 2. åˆ©ç”¨é™€èºä»ªè§’é€Ÿåº¦ä½œä¸ºåé¦ˆï¼Œè¿›è¡Œå†…ç¯é—­ç¯æ§åˆ¶
+ * 3. å®ç°æ›´å¹³æ»‘çš„é«˜é€Ÿå¾ªè¿¹å’ŒæŠ—å¹²æ‰°èƒ½åŠ›
+ * @param speed_ref åŸºç¡€å‚è€ƒé€Ÿåº¦
+ * @param norm_error å½’ä¸€åŒ–åçš„èµ›é“ä½ç½®åå·®
  * @param gyro_z Calibrated steering feedback value
- * @param left_target Êä³ö£º×óÂÖÄ¿±êËÙ¶È
- * @param right_target Êä³ö£ºÓÒÂÖÄ¿±êËÙ¶È
+ * @param left_target è¾“å‡ºï¼šå·¦è½®ç›®æ ‡é€Ÿåº¦
+ * @param right_target è¾“å‡ºï¼šå³è½®ç›®æ ‡é€Ÿåº¦
  */
 void Pure_Pursuit_Gyro_Control(float speed_ref, float norm_error, float gyro_z, float *left_target, float *right_target)
 {
     float look_ahead_L;
     float curvature;
-    float target_omega; /* Ä¿±ê½ÇËÙ¶È */
-    float diff_output;  /* ×îÖÕ²îËÙÊä³öÁ¿ */
+    float target_omega; /* ç›®æ ‡è§’é€Ÿåº¦ */
+    float diff_output;  /* æœ€ç»ˆå·®é€Ÿè¾“å‡ºé‡ */
 
-    /* 1. ¼ÆËã×ÔÊÊÓ¦Ô¤Ãé¾àÀë£ºËæËÙ¶ÈÔö´ó¶øÔö´ó£¬Ìá¸ß¸ßËÙÎÈ¶¨ĞÔ */
+    /* 1. è®¡ç®—è‡ªé€‚åº”é¢„ç„è·ç¦»ï¼šéšé€Ÿåº¦å¢å¤§è€Œå¢å¤§ï¼Œæé«˜é«˜é€Ÿç¨³å®šæ€§ */
     look_ahead_L = BASE_L + K_SPEED * speed_ref;
 
-    /* 2. ¸ù¾İ´¿×·×Ù¼¸ºÎÄ£ĞÍ¼ÆËãÇúÂÊ£ºcurvature = 2*sin(alpha) / L */
+    /* 2. æ ¹æ®çº¯è¿½è¸ªå‡ ä½•æ¨¡å‹è®¡ç®—æ›²ç‡ï¼šcurvature = 2*sin(alpha) / L */
     curvature = (2.0f * norm_error) / look_ahead_L;
 
-    /* ÇúÂÊÏŞ·ù£¬·ÀÖ¹¼ÆËã³öµÄ×ªÏò¹ıÓÚ¾çÁÒ */
+    /* æ›²ç‡é™å¹…ï¼Œé˜²æ­¢è®¡ç®—å‡ºçš„è½¬å‘è¿‡äºå‰§çƒˆ */
     if (curvature > 0.1f)  curvature = 0.1f;
     if (curvature < -0.1f) curvature = -0.1f;
 
-    /* 3. Convert curvature to the target turn rate */
-    /* Keep 57.3f to preserve the current control formula */
+    /* 3. å°†æ›²ç‡æ¢ç®—æˆç›®æ ‡è½¬å‘è§’é€Ÿåº¦ */
+    /* ä¿ç•™ 57.3f ç³»æ•°ï¼Œç»´æŒå½“å‰å·¥ç¨‹å·²æœ‰çš„æ§åˆ¶å…¬å¼é‡çº² */
     target_omega = speed_ref * curvature * 57.3f;
 
-    /* 4. Close the inner loop with calibrated gyro_z feedback */
-    /* Use the current project semantics for gyro_z */
+    /* 4. ä½¿ç”¨æ ¡å‡†åçš„ gyro_z åšå†…ç¯é—­ç¯åé¦ˆ */
+    /* æ­¤å¤„æ²¿ç”¨å½“å‰å·¥ç¨‹å¯¹ gyro_z çš„å®šä¹‰ä¸å•ä½ */
     pid_steer_update(&PID.angle, target_omega - gyro_z);
 
-    /* 5. »ñÈ¡ PID ¿ØÖÆÆ÷µÄÊä³ö×÷Îª²îËÙµ÷½ÚÁ¿ */
+    /* 5. è·å– PID æ§åˆ¶å™¨çš„è¾“å‡ºä½œä¸ºå·®é€Ÿè°ƒèŠ‚é‡ */
     diff_output = PID.angle.output;
 
-    /* 6. ½«µ÷½ÚÁ¿µş¼Óµ½»ù´¡ËÙ¶ÈÉÏ£¬ÊµÏÖ²îËÙ×ªÏò */
-    /* ²îËÙÂß¼­£º×ó×ªÊ± diff_output ÎªÕı£¬×óÂÖ¼õËÙ£¬ÓÒÂÖ¼ÓËÙ */
+    /* 6. å°†è°ƒèŠ‚é‡å åŠ åˆ°åŸºç¡€é€Ÿåº¦ä¸Šï¼Œå®ç°å·®é€Ÿè½¬å‘ */
+    /* å·®é€Ÿé€»è¾‘ï¼šå·¦è½¬æ—¶ diff_output ä¸ºæ­£ï¼Œå·¦è½®å‡é€Ÿï¼Œå³è½®åŠ é€Ÿ */
     *left_target = speed_ref - diff_output;
     *right_target = speed_ref + diff_output;
 }

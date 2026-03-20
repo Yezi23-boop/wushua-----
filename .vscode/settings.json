@@ -6,8 +6,6 @@
         "zf_device_ips114.h": "c",
         "vofa.h": "c"
     },
-    // 固定文件编码为 GBK（GB2312 的超集），避免中文注释乱码
-    "files.encoding": "gbk",
     "files.exclude": {
         "**/seekfree.uvproj": true,
         "**/seekfree.uvopt": true,

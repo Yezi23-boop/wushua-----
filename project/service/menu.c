@@ -1,36 +1,36 @@
 #include "zf_common_headfile.h"
 #include "menu.h"
 
-/* ??????????? */
-#define KEYSTROKE_ONE 1   /* ?? */
-#define KEYSTROKE_TWO 2   /* ?? */
-#define KEYSTROKE_THREE 3 /* ???/???????? */
-#define KEYSTROKE_FOUR 4  /* ????/???? */
+/* --- 菜单按键编码定义 --- */
+#define KEYSTROKE_ONE 1   /* 上移 */
+#define KEYSTROKE_TWO 2   /* 下移 */
+#define KEYSTROKE_THREE 3 /* 确认/切换倍率 */
+#define KEYSTROKE_FOUR 4  /* 返回/取消 */
 
-/* ??????????????? */
+/* --- 菜单长按事件编码 --- */
 #define KEYSTROKE_ONE_LONG 5
 #define KEYSTROKE_TWO_LONG 6
 #define KEYSTROKE_THREE_LONG 7
 #define KEYSTROKE_FOUR_LONG 8
 
-/* ?????????? */
-#define ROWS_MAX (7 * 18)      /* ???????????? */
-#define ROWS_MIN (1 * 18)      /* ????????????? */
-#define CENTER_COLUMN (12 * 8) /* ???????????? */
-#define EEPROM_MODE 1          /* ????? EEPROM ??????? */
+/* --- 菜单布局参数 --- */
+#define ROWS_MAX (7 * 18)      /* 光标可停留的最底部行 */
+#define ROWS_MIN (1 * 18)      /* 光标可停留的最顶部行 */
+#define CENTER_COLUMN (12 * 8) /* 标题居中显示的列坐标 */
+#define EEPROM_MODE 1          /* 返回主菜单时是否自动保存到 EEPROM */
 
-/* ???????????? */
-int display_codename = 0;       /* ?????? ID */
-int cursor_row = 2 * 18;        /* ?????????? */
-int previous_cursor_row = -1;   /* ?????????????????????? */
-int menu_next_flag = 0;         /* 1:????, -1:????, 0:?????? */
-int change_unit_multiplier = 1; /* ??????????????1, 10, 100?? */
-int keystroke_three_count = 0;  /* ???????????????????????? */
+/* --- 菜单运行状态 --- */
+int display_codename = 0;       /* 当前显示的菜单 ID */
+int cursor_row = 2 * 18;        /* 当前光标所在行 */
+int previous_cursor_row = -1;   /* 上一次光标所在行，用于擦除旧光标 */
+int menu_next_flag = 0;         /* 1-进入下级，-1-返回上级，0-保持当前页面 */
+int change_unit_multiplier = 1; /* 参数调节倍率，在 1、10、100 之间切换 */
+int keystroke_three_count = 0;  /* 确认键累计次数，用于轮换倍率 */
 
-/* ?????????????? */
+/* --- 内部辅助函数声明 --- */
 static void show_config_saved_prompt(void);
 
-/* ????????????????? ID ?????????????????? */
+/* 所有带子菜单的菜单 ID，用于判断是否允许继续进入下一级 */
 int menu_have_sub[] = {
     0, 1, 11, 12, 13, 14, 15, 16, 17,
     2, 21, 22, 23, 24, 25,
@@ -39,35 +39,35 @@ int menu_have_sub[] = {
     5, 51, 52, 53, 54, 55, 56,
     6, 61, 62, 63, 64, 65};
 
-/* --- ??????????? --- */
+/* --- 光标与层级控制 --- */
 
 /**
- * @brief ?????????????????????
- * @details ????????????????????????????
+ * @brief 根据按键更新菜单光标位置
+ * @details 上下键移动光标，确认和返回键只设置层级跳转标志
  */
 void Cursor(void)
 {
     menu_next_flag = 0;
     switch (keystroke_label)
     {
-    case KEYSTROKE_ONE: /* ?????????? */
+    case KEYSTROKE_ONE: /* 向上移动光标 */
         cursor_row = (cursor_row > ROWS_MIN) ? cursor_row - 18 : ROWS_MAX;
         break;
-    case KEYSTROKE_TWO: /* ?????????? */
+    case KEYSTROKE_TWO: /* 向下移动光标 */
         cursor_row = (cursor_row < ROWS_MAX) ? cursor_row + 18 : ROWS_MIN;
         break;
-    case KEYSTROKE_THREE: /* ???????? */
+    case KEYSTROKE_THREE: /* 请求进入下一级 */
         menu_next_flag = 1;
         break;
-    case KEYSTROKE_FOUR: /* ????????? */
+    case KEYSTROKE_FOUR: /* 请求返回上一级 */
         menu_next_flag = -1;
         break;
     }
 
-    /* ????????????? ">" */
+    /* 在当前行左侧显示光标 ">" */
     ips114_show_string(0, cursor_row, ">");
 
-    /* ????????????????????????????? */
+    /* 清除上一行光标，避免残留 */
     if (previous_cursor_row != cursor_row)
     {
         ips114_show_string(0, previous_cursor_row, " ");
@@ -76,20 +76,20 @@ void Cursor(void)
 }
 
 /**
- * @brief ?????????????
- * @details ???? cursor_row ?????????? ID ??????
+ * @brief 根据层级跳转标志进入子菜单或返回上一级
+ * @details 结合当前光标位置计算目标菜单 ID，并在切换时清屏
  */
 void Menu_Next_Back(void)
 {
     int menu_id = 0;
     switch (menu_next_flag)
     {
-    case -1: /* ?????????ID ???? 10 */
+    case -1: /* 返回上一级：菜单 ID 去掉最低位 */
         display_codename /= 10;
         cursor_row = ROWS_MIN;
         ips114_clear(RGB565_WHITE);
         break;
-    case 1: /* ?????????ID * 10 + ?????? */
+    case 1: /* 进入下一级：父 ID * 10 + 当前行号 */
         menu_id = display_codename * 10 + (cursor_row / 18);
         if (Have_Sub_Menu(menu_id))
         {
@@ -102,7 +102,7 @@ void Menu_Next_Back(void)
 }
 
 /**
- * @brief ??????? ID ???????????????
+ * @brief 判断指定菜单 ID 是否存在子菜单
  */
 int Have_Sub_Menu(int menu_id)
 {
@@ -116,8 +116,8 @@ int Have_Sub_Menu(int menu_id)
 }
 
 /**
- * @brief ???????????????????
- * @details ???????????????????????????
+ * @brief 处理菜单公共功能键
+ * @details 返回键回上级，确认键循环切换参数调节倍率
  */
 void HandleKeystroke(int label)
 {
@@ -129,7 +129,7 @@ void HandleKeystroke(int label)
         break;
     case KEYSTROKE_THREE:
         keystroke_three_count++;
-        /* ?????????? 1, 10, 100 ?????? */
+        /* 在 1、10、100 三档之间循环切换步进 */
         change_unit_multiplier = (keystroke_three_count % 3 == 0) ? 1 : (keystroke_three_count % 3 == 1) ? 10
                                                                                                          : 100;
         if (keystroke_three_count >= 3)
@@ -138,17 +138,17 @@ void HandleKeystroke(int label)
     }
 }
 
-/* --- ?????????? --- */
+/* --- 参数修改助手 --- */
 
 /**
- * @brief ????????????
+ * @brief 整数参数修改处理
  */
 void Keystroke_int(int *parameter, int change_unit_MIN)
 {
     int unit = change_unit_MIN * change_unit_multiplier;
     uint8 changed = 0;
 
-    /* ?????????????? */
+    /* 顶部显示当前整数步进 */
     ips114_show_int32(15 * 8, 0, unit, 4);
 
     Keystroke_Scan();
@@ -174,20 +174,20 @@ void Keystroke_int(int *parameter, int change_unit_MIN)
         break;
     }
 
-    /* ?????????????????????????????????????????? PID ?????? */
+    /* 参数变更后立即同步配置，避免界面值与控制器参数不一致 */
     if (changed)
         control_apply_config();
 }
 
 /**
- * @brief ??????????????
+ * @brief 浮点参数修改处理
  */
 void Keystroke_float(float *parameter, float change_unit_MIN)
 {
     float unit;
     uint8 changed = 0;
 
-    /* ??????????????????????????? */
+    /* 将基础步进按倍率放大，便于粗调和细调切换 */
     unit = change_unit_MIN * (float)change_unit_multiplier;
 
     ips114_show_float(14 * 8, 0, unit, 4, 3);
@@ -220,7 +220,7 @@ void Keystroke_float(float *parameter, float change_unit_MIN)
 }
 
 /**
- * @brief ??????????????????? 1 ?? -1 ??????
+ * @brief 特殊参数切换，仅在 1 和 -1 之间切换
  */
 void Keystroke_Special_Value(int16 *parameter)
 {
@@ -244,13 +244,13 @@ void Keystroke_Special_Value(int16 *parameter)
         control_apply_config();
 }
 
-/* --- ???????????? --- */
+/* --- 菜单入口分发 --- */
 
 void Keystroke_Menu(void)
 {
     /*
-     * ????????? ID ??????????
-     * ????????????????????????????????????
+     * 根据 display_codename 调度对应页面
+     * 每个页面函数负责自身的显示、按键处理和参数修改
      */
     switch (display_codename)
     {
@@ -308,31 +308,31 @@ void Keystroke_Menu(void)
 }
 
 /**
- * @brief ???????HOME?????
- * @details ?????????????????????????????????????
+ * @brief 主菜单页面处理
+ * @details 显示首页总览信息，并根据按键进入参数页或执行配置保存
  */
 void Keystroke_Menu_HOME(void)
 {
     while (menu_next_flag == 0)
     {
-        /* ??????? */
+        /* 显示主标题 */
         ips114_show_string(CENTER_COLUMN, 0, "MENU");
 
-        /* ???????????? */
-        ips114_show_string(16, 1 * 18, "STRAT");  /* ???????? */
-        ips114_show_string(16, 2 * 18, "PID_1");  /* ??? PID */
-        ips114_show_string(16, 3 * 18, "PID_2");  /* ??? PID */
-        ips114_show_string(16, 4 * 18, "PRINTF"); /* ??????/??????? */
-        ips114_show_string(16, 5 * 18, "RING");   /* ??????? */
-        ips114_show_string(16, 6 * 18, "FLY");    /* ??????? */
+        /* 显示一级菜单项 */
+        ips114_show_string(16, 1 * 18, "STRAT");  /* 启动相关 */
+        ips114_show_string(16, 2 * 18, "PID_1");  /* 速度 PID */
+        ips114_show_string(16, 3 * 18, "PID_2");  /* 角度 PID */
+        ips114_show_string(16, 4 * 18, "PRINTF"); /* 调试/传感器观测 */
+        ips114_show_string(16, 5 * 18, "RING");   /* 环岛参数 */
+        ips114_show_string(16, 6 * 18, "FLY");    /* 飞坡参数 */
 
-        /* ????????????? */
+        /* 显示首页实时监控项 */
         ips114_show_string(105, 1 * 18, "Err");
         ips114_show_string(105, 2 * 18, "steer");
         ips114_show_string(105, 3 * 18, "angle");
         ips114_show_string(105, 4 * 18, "V_bat");
 
-        /* ?????????????? */
+        /* 显示首页实时数值 */
         ips114_show_float(184, 1 * 18, Err, 3, 2);
         ips114_show_float(184, 2 * 18, PID.steer.output, 3, 1);
         ips114_show_float(184, 3 * 18, PID.angle.output, 3, 1);
@@ -342,7 +342,7 @@ void Keystroke_Menu_HOME(void)
         Cursor();
     }
 
-    /* ?????????????????????????? */
+    /* 确认键进入选中的子菜单 */
     if (menu_next_flag == 1)
     {
         int id = display_codename * 10 + (cursor_row / 18);
@@ -353,7 +353,7 @@ void Keystroke_Menu_HOME(void)
             ips114_clear(RGB565_WHITE);
         }
     }
-    /* ??????????????????????????????? EEPROM ??????? */
+    /* 返回键可触发参数保存，并给出 EEPROM 保存提示 */
     else if (menu_next_flag == -1 && EEPROM_MODE == 1)
     {
         config_save();
@@ -364,7 +364,7 @@ void Keystroke_Menu_HOME(void)
 }
 
 /**
- * @brief ??????????????
+ * @brief 弹出参数保存成功提示
  */
 static void show_config_saved_prompt(void)
 {
@@ -374,7 +374,7 @@ static void show_config_saved_prompt(void)
     ips114_clear(RGB565_WHITE);
 }
 
-/* --- ?????????????? (ID: 1x) --- */
+/* --- 启动配置页面 (ID: 1x) --- */
 
 void Menu_Start_Show(uint8 line)
 {
@@ -387,7 +387,7 @@ void Menu_Start_Show(uint8 line)
     ips114_show_int32(112, 2 * 18, app.start.circle_flags, 3);
     ips114_show_float(112, 3 * 18, app.start.fuya_xili, 4, 3);
 
-    /* ???????? */
+    /* 绘制当前选中行标记 */
     ips114_show_string(0, line, (line == 1) ? " " : "&");
 }
 
@@ -395,7 +395,7 @@ void Menu_Start_Process(void)
 {
     switch (display_codename)
     {
-    case 1: /* ??????? */
+    case 1: /* 一级菜单页面 */
         while (menu_next_flag == 0)
         {
             Menu_Start_Show(1);
@@ -419,7 +419,7 @@ void Menu_Start_Process(void)
     }
 }
 
-/* --- ??? PID ?????? (ID: 2x) --- */
+/* --- 速度参数页面 (ID: 2x) --- */
 
 void Menu_Speed_Show(uint8 line)
 {
@@ -475,7 +475,7 @@ void Menu_Speed_Process(void)
     }
 }
 
-/* --- ??? PID ?????? (ID: 3x) --- */
+/* --- 角度参数页面 (ID: 3x) --- */
 
 void Menu_Angle_Show(uint8 line)
 {
@@ -537,7 +537,7 @@ void Menu_Angle_Process(void)
     }
 }
 
-/* --- ???????????? (ID: 4) --- */
+/* --- 传感器观测页面 (ID: 4) --- */
 
 void Menu_Sensor_Show(void)
 {
@@ -552,7 +552,7 @@ void Menu_Sensor_Show(void)
     ips114_show_string(8, 4 * 18, "ad4");
     ips114_show_string(8, 6 * 18, "Err");
 
-    /* Row 0 is reserved for titles to avoid overlapping data. */
+    /* 第 0 行保留给标题，避免与数据区重叠 */
     ips114_show_int32(56, 1 * 18, ad1, 3);
     ips114_show_int32(56, 2 * 18, ad2, 3);
     ips114_show_int32(56, 3 * 18, ad3, 3);
@@ -582,8 +582,8 @@ void Menu_Sensor_Process(void)
     Menu_Next_Back();
 }
 
-/* --- ????????????????????????... --- */
-/* (????????????? Menu_Circle_Process ?? Menu_Fly_Process) */
+/* --- 环岛与飞坡页面 (ID: 5x / 6x) --- */
+/* 下方分别处理 Menu_Circle_Process 和 Menu_Fly_Process */
 void Menu_Circle_Show(uint8 line)
 {
     ips114_show_string(8, 0, "<<RING_CTRL");

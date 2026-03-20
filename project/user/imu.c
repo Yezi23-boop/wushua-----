@@ -3,36 +3,36 @@
 #include "imu.h"
 #include "../service/filter.h"
 
-/* --- È«¾Ö±äÁ¿¶¨Òå --- */
+/* --- å…¨å±€å˜é‡å®šä¹‰ --- */
 volatile float gyro_z = 0;
 float Gyro_offset_x = 0, Gyro_offset_y = 0, Gyro_offset_z = 0;
 float acc_offset_x = 0, acc_offset_y = 0, acc_offset_z = 0;
-int imu_flat_star = 0; /* ÁãÆ«³õÊ¼»¯Íê³É±êÖ¾ */
+int imu_flat_star = 0; /* é›¶ååˆå§‹åŒ–å®Œæˆæ ‡å¿— */
 
-/* Mahony Ëã·¨²ÎÊı£ºKp ¿ØÖÆÊÕÁ²ËÙ¶È£¬Ki ¿ØÖÆ¾²²î²¹³¥ */
+/* Mahony ç®—æ³•å‚æ•°ï¼šKp æ§åˆ¶æ”¶æ•›é€Ÿåº¦ï¼ŒKi æ§åˆ¶é™å·®è¡¥å¿ */
 #define Kp 5.0f
 #define Ki 0.007f
 
-/* ²ÉÑùÖÜÆÚÏà¹Ø£ºhalfT = 0.5 * Ts */
-/* Èô IMUupdate ÖÜÆÚÎª 10ms£¬Ôò halfT = 0.005f */
+/* é‡‡æ ·å‘¨æœŸç›¸å…³ï¼šhalfT = 0.5 * Ts */
+/* è‹¥ IMUupdate å‘¨æœŸä¸º 10msï¼Œåˆ™ halfT = 0.005f */
 #define halfT 0.005f
 
 #ifndef M_PI
 #define M_PI 3.14159265358979f
 #endif
 
-/* ÊµÀı¶ÔÏó */
+/* å®ä¾‹å¯¹è±¡ */
 FLOAT_ANGLE Att_Angle;
 FLOAT_XYZ Acc_filt;
 FLOAT_XYZ Gyr_filt;
 LowPassFilter_t Gyr_filt_lowpass;
 
-/* ËÄÔªÊı×´Ì¬ÏòÁ¿£¬³õÊ¼Îªµ¥Î»ËÄÔªÊı */
+/* å››å…ƒæ•°çŠ¶æ€å‘é‡ï¼Œåˆå§‹ä¸ºå•ä½å››å…ƒæ•° */
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
 float vx, vy, vz, ex, ey, ez, norm;
 
 /**
- * @brief ×Ô¶¨Òå atan2 Ëã·¨
+ * @brief è‡ªå®šä¹‰ atan2 ç®—æ³•
  */
 double my_atan2(double y, double x)
 {
@@ -60,11 +60,11 @@ double my_atan2(double y, double x)
 }
 
 /**
- * @brief Ö´ĞĞ IMU ÁãÆ«¾²Ì¬±ê¶¨
+ * @brief æ‰§è¡Œ IMU é›¶åé™æ€æ ‡å®š
  */
 void offset_init(void)
 {
-    int rt = 50; /* ²ÉÑù 50 ´ÎÈ¡¾ùÖµ */
+    int rt = 50; /* é‡‡æ · 50 æ¬¡å–å‡å€¼ */
     int i;
 
     for (i = 0; i < rt; i++)
@@ -72,7 +72,7 @@ void offset_init(void)
         imu660ra_get_gyro();
         imu660ra_get_acc();
 
-        /* ÀÛ¼ÓÔ­Ê¼ÎïÀíÁ¿ */
+        /* ç´¯åŠ åŸå§‹ç‰©ç†é‡ */
         Gyro_offset_x += imu660ra_gyro_transition(imu660ra_gyro_x);
         Gyro_offset_y += imu660ra_gyro_transition(imu660ra_gyro_y);
         Gyro_offset_z += imu660ra_gyro_transition(imu660ra_gyro_z);
@@ -83,7 +83,7 @@ void offset_init(void)
         system_delay_ms(5);
     }
 
-    /* ¼ÆËã¾ùÖµ×÷ÎªÁãÆ« */
+    /* è®¡ç®—å‡å€¼ä½œä¸ºé›¶å */
     Gyro_offset_x /= (float)rt;
     Gyro_offset_y /= (float)rt;
     Gyro_offset_z /= (float)rt;
@@ -95,8 +95,8 @@ void offset_init(void)
 }
 
 /**
- * @brief ´«¸ĞÆ÷Êı¾İÔ¤´¦Àí
- * @details ½«Ô­Ê¼Êı¾İ¼õÈ¥ÁãÆ«£¬²¢×ª»»Îª»¡¶È/s »ò g
+ * @brief ä¼ æ„Ÿå™¨æ•°æ®é¢„å¤„ç†
+ * @details å°†åŸå§‹æ•°æ®å‡å»é›¶åï¼Œå¹¶è½¬æ¢ä¸ºå¼§åº¦/s æˆ– g
  */
 void Prepare_Data(void)
 {
@@ -105,16 +105,16 @@ void Prepare_Data(void)
         imu660ra_get_acc();
         imu660ra_get_gyro();
 
-        /* ½ÇËÙ¶È£º(µ±Ç°Öµ - ÁãÆ«) * ½Ç¶È×ª»¡¶È */
+        /* è§’é€Ÿåº¦ï¼š(å½“å‰å€¼ - é›¶å) * è§’åº¦è½¬å¼§åº¦ */
         Gyr_filt.X = (imu660ra_gyro_transition(imu660ra_gyro_x) - Gyro_offset_x) * DegtoRad;
         Gyr_filt.Y = (imu660ra_gyro_transition(imu660ra_gyro_y) - Gyro_offset_y) * DegtoRad;
         Gyr_filt.Z = (imu660ra_gyro_transition(imu660ra_gyro_z) - Gyro_offset_z) * DegtoRad;
 
-        /* Calibrated Z-axis control feedback with low-pass filtering */
+        /* ç”Ÿæˆç”¨äºæ§åˆ¶åé¦ˆçš„æ ¡å‡†å Z è½´è§’é€Ÿåº¦ï¼Œå¹¶åšä¸€é˜¶ä½é€šæ»¤æ³¢ */
         gyro_z = (imu660ra_gyro_transition(imu660ra_gyro_z) - Gyro_offset_z) * 0.082f;
         low_pass_filter_mt(&Gyr_filt_lowpass, &gyro_z, 0.6f);
 
-        /* ¼ÓËÙ¶ÈÔ¤´¦Àí */
+        /* åŠ é€Ÿåº¦é¢„å¤„ç† */
         Acc_filt.X = imu660ra_acc_transition(imu660ra_acc_x);
         Acc_filt.Y = imu660ra_acc_transition(imu660ra_acc_y);
         Acc_filt.Z = imu660ra_acc_transition(imu660ra_acc_z);
@@ -122,8 +122,8 @@ void Prepare_Data(void)
 }
 
 /**
- * @brief Mahony ×ËÌ¬¸üĞÂËã·¨
- * @details ÀûÓÃ¼ÓËÙ¶È¼ÆĞŞÕıËÄÔªÊıÆ¯ÒÆ£¬²¢»ı·Ö½ÇËÙ¶ÈµÃµ½ÊµÊ±×ËÌ¬
+ * @brief Mahony å§¿æ€æ›´æ–°ç®—æ³•
+ * @details åˆ©ç”¨åŠ é€Ÿåº¦è®¡ä¿®æ­£å››å…ƒæ•°æ¼‚ç§»ï¼Œå¹¶ç§¯åˆ†è§’é€Ÿåº¦å¾—åˆ°å®æ—¶å§¿æ€
  */
 void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
 {
@@ -133,23 +133,23 @@ void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
     float q0_o, q1_o, q2_o, q3_o;
     float temp_vx;
 
-    /* 1. ¼ÓËÙ¶ÈÏòÁ¿¹éÒ»»¯£¨ÌáÈ¡ÖØÁ¦·½Ïò£© */
+    /* 1. åŠ é€Ÿåº¦å‘é‡å½’ä¸€åŒ–ï¼ˆæå–é‡åŠ›æ–¹å‘ï¼‰ */
     norm = invSqrt(ax * ax + ay * ay + az * az);
     ax *= norm;
     ay *= norm;
     az *= norm;
 
-    /* 2. ¼ÆËãµ±Ç°ËÄÔªÊıÍÆµ¼³öµÄÀíÂÛÖØÁ¦·½Ïò v = R' * [0,0,1]^T */
+    /* 2. è®¡ç®—å½“å‰å››å…ƒæ•°æ¨å¯¼å‡ºçš„ç†è®ºé‡åŠ›æ–¹å‘ v = R' * [0,0,1]^T */
     vx = 2.0f * (q1 * q3 - q0 * q2);
     vy = 2.0f * (q0 * q1 + q2 * q3);
     vz = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
 
-    /* 3. ²æ³ËÎó²î£ºÀíÂÛ·½Ïò v Óë Êµ¼Ê·½Ïò a µÄÆ«²î */
+    /* 3. å‰ä¹˜è¯¯å·®ï¼šç†è®ºæ–¹å‘ v ä¸ å®é™…æ–¹å‘ a çš„åå·® */
     ex = (ay * vz - az * vy);
     ey = (az * vx - ax * vz);
     ez = (ax * vy - ay * vx);
 
-    /* 4. Îó²î»ı·ÖÓë±ÈÀıĞ£Õı */
+    /* 4. è¯¯å·®ç§¯åˆ†ä¸æ¯”ä¾‹æ ¡æ­£ */
     exInt += ex * Ki;
     eyInt += ey * Ki;
     ezInt += ez * Ki;
@@ -157,7 +157,7 @@ void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
     gy += Kp * ey + eyInt;
     gz += Kp * ez + ezInt;
 
-    /* 5. ËÄÔªÊıÎ¢·Ö·½³Ì»ı·Ö¸üĞÂ */
+    /* 5. å››å…ƒæ•°å¾®åˆ†æ–¹ç¨‹ç§¯åˆ†æ›´æ–° */
     q0_o = q0;
     q1_o = q1;
     q2_o = q2;
@@ -167,30 +167,30 @@ void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
     q2 += (q0_o * gy - q1_o * gz + q3_o * gx) * halfT;
     q3 += (q0_o * gz + q1_o * gy - q2_o * gx) * halfT;
 
-    /* 6. ËÄÔªÊıÖØĞÂ¹éÒ»»¯ */
+    /* 6. å››å…ƒæ•°é‡æ–°å½’ä¸€åŒ– */
     norm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
     q0 *= norm;
     q1 *= norm;
     q2 *= norm;
     q3 *= norm;
 
-    /* 7. ¼ÆËãÅ·À­½Ç£¨¸©Ñö½Ç¡¢ºá¹ö½Ç£¬ÒÔ¼°Æ«º½½Ç£© */
+    /* 7. è®¡ç®—æ¬§æ‹‰è§’ï¼ˆä¿¯ä»°è§’ã€æ¨ªæ»šè§’ï¼Œä»¥åŠåèˆªè§’ï¼‰ */
     temp_vx = vx;
     if (temp_vx > 1.0f) temp_vx = 1.0f;
     if (temp_vx < -1.0f) temp_vx = -1.0f;
-    Angle->pit = (float)asin(-temp_vx) * RadtoDeg;          /* ¸©Ñö½Ç (Pitch) */
-    Angle->rol = (float)my_atan2(vy, vz) * RadtoDeg;        /* ºá¹ö½Ç (Roll) */
+    Angle->pit = (float)asin(-temp_vx) * RadtoDeg;          /* ä¿¯ä»°è§’ (Pitch) */
+    Angle->rol = (float)my_atan2(vy, vz) * RadtoDeg;        /* æ¨ªæ»šè§’ (Roll) */
 
-    /* Æ«º½½Ç²ÉÓÃ»ı·Ö·½Ê½£¬·ÀÖ¹ÍòÏò½ÚËÀËøÏÂµÄÌø±ä */
+    /* åèˆªè§’é‡‡ç”¨ç§¯åˆ†æ–¹å¼ï¼Œé˜²æ­¢ä¸‡å‘èŠ‚æ­»é”ä¸‹çš„è·³å˜ */
     if ((Gyr_rad->Z * RadtoDeg > 1.0f) || (Gyr_rad->Z * RadtoDeg < -1.0f))
     {
-        /* ÕâÀïµÄ 0.01f ÎªÊµ¼Êµ÷ÓÃ IMUupdate µÄ²ÉÑùÖÜÆÚ (10ms) */
+        /* è¿™é‡Œçš„ 0.01f ä¸ºå®é™…è°ƒç”¨ IMUupdate çš„é‡‡æ ·å‘¨æœŸ (10ms) */
         Angle->yaw += Gyr_rad->Z * RadtoDeg * 0.01f;
     }
 }
 
 /**
- * @brief ¿ìËÙÆ½·½¸ùµ¹Êı (Quake Fast Inverse Sqrt)
+ * @brief å¿«é€Ÿå¹³æ–¹æ ¹å€’æ•° (Quake Fast Inverse Sqrt)
  */
 float invSqrt(float x)
 {
@@ -204,7 +204,7 @@ float invSqrt(float x)
 }
 
 /**
- * @brief ¿ìËÙÆ½·½¸ùËã·¨
+ * @brief å¿«é€Ÿå¹³æ–¹æ ¹ç®—æ³•
  */
 float SquareRootFloat(float number)
 {

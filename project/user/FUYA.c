@@ -2,49 +2,49 @@
 #include "FUYA.h"
 #include <math.h>
 
-/* --- È«¾Ö×´Ì¬±äÁ¿ --- */
-volatile int fuya_date = 0;             /* µ±Ç°Êä³ö¸ø¸ºÑ¹Ö´ĞĞÆ÷µÄÆ½»¬Õ¼¿Õ±È */
-volatile float fuya_date_factor = 0.0f; /* Ä¿±êÕ¼¿Õ±È£¬ÓÃÓÚµ÷ÊÔ¹Û²ì */
-volatile uint8 phase = 0;               /* µ±Ç°Ëù´¦ÔË¶¯½×¶Î£¨0~4£© */
+/* --- å…¨å±€çŠ¶æ€å˜é‡ --- */
+volatile int fuya_date = 0;             /* å½“å‰è¾“å‡ºç»™è´Ÿå‹æ‰§è¡Œå™¨çš„å¹³æ»‘å ç©ºæ¯” */
+volatile float fuya_date_factor = 0.0f; /* ç›®æ ‡å ç©ºæ¯”ï¼Œç”¨äºè°ƒè¯•è§‚å¯Ÿ */
+volatile uint8 phase = 0;               /* å½“å‰æ‰€å¤„è¿åŠ¨é˜¶æ®µï¼ˆ0~4ï¼‰ */
 
-/* --- ¸ºÑ¹»ù×¼²ÎÊı (Õ¼¿Õ±ÈÁ¿³Ì 0~10000) --- */
-float DUTY_BOTTOM = 0;           /* Æ½µØ¶ÎÎüÁ¦»ù×¼£¨ÓÉÅäÖÃ¾ö¶¨£© */
-#define DUTY_LEFT 4500.0f        /* ×ó²àÊúÇ½ÎüÁ¦»ù×¼ */
-#define DUTY_RIGHT 4000.0f       /* ÓÒ²àÊúÇ½ÎüÁ¦»ù×¼ */
-#define DUTY_TOP 4000.0f         /* Ìì»¨°å£¨µ¹Á¢£©ÎüÁ¦»ù×¼ */
-#define PREFERENCE_OFFSET 500.0f /* Ç°ÏòÓÅ´ı×î´óĞŞÕıÆ«ÒÆ */
+/* --- è´Ÿå‹åŸºå‡†å‚æ•° (å ç©ºæ¯”é‡ç¨‹ 0~10000) --- */
+float DUTY_BOTTOM = 0;           /* å¹³åœ°æ®µå¸åŠ›åŸºå‡†ï¼ˆç”±é…ç½®å†³å®šï¼‰ */
+#define DUTY_LEFT 4500.0f        /* å·¦ä¾§ç«–å¢™å¸åŠ›åŸºå‡† */
+#define DUTY_RIGHT 4000.0f       /* å³ä¾§ç«–å¢™å¸åŠ›åŸºå‡† */
+#define DUTY_TOP 4000.0f         /* å¤©èŠ±æ¿ï¼ˆå€’ç«‹ï¼‰å¸åŠ›åŸºå‡† */
+#define PREFERENCE_OFFSET 500.0f /* å‰å‘ä¼˜å¾…æœ€å¤§ä¿®æ­£åç§» */
 
-/* --- ×ËÌ¬ÅĞ¶¨ãĞÖµ (»ùÓÚµ¥Î»ÏòÁ¿·ÖÁ¿) --- */
-#define VZC_GROUND_THRESH 0.93f   /* ÅĞ¶¨ÎªÆ½µØµÄ Z ·ÖÁ¿ãĞÖµ */
-#define VZC_VERTICAL_THRESH 0.15f /* ÅĞ¶¨ÎªÊúÖ±Ç½ÃæµÄ Z ·ÖÁ¿ãĞÖµ */
-#define VZC_INVERT_THRESH -0.9f   /* ÅĞ¶¨ÎªÍêÈ«µ¹Á¢µÄ Z ·ÖÁ¿ãĞÖµ */
-#define VXC_PLANE_MARGIN 0.06f    /* X ·ÖÁ¿Æ½µØÓàÁ¿ */
-#define VXC_WALL_MARGIN 0.06f     /* X ·ÖÁ¿Ç½ÃæÓàÁ¿ */
-#define VXC_WALL_RELEASE 0.02f    /* X ·ÖÁ¿ÊÍ·ÅãĞÖµ */
+/* --- å§¿æ€åˆ¤å®šé˜ˆå€¼ (åŸºäºå•ä½å‘é‡åˆ†é‡) --- */
+#define VZC_GROUND_THRESH 0.93f   /* åˆ¤å®šä¸ºå¹³åœ°çš„ Z åˆ†é‡é˜ˆå€¼ */
+#define VZC_VERTICAL_THRESH 0.15f /* åˆ¤å®šä¸ºç«–ç›´å¢™é¢çš„ Z åˆ†é‡é˜ˆå€¼ */
+#define VZC_INVERT_THRESH -0.9f   /* åˆ¤å®šä¸ºå®Œå…¨å€’ç«‹çš„ Z åˆ†é‡é˜ˆå€¼ */
+#define VXC_PLANE_MARGIN 0.06f    /* X åˆ†é‡å¹³åœ°ä½™é‡ */
+#define VXC_WALL_MARGIN 0.06f     /* X åˆ†é‡å¢™é¢ä½™é‡ */
+#define VXC_WALL_RELEASE 0.02f    /* X åˆ†é‡é‡Šæ”¾é˜ˆå€¼ */
 
-/* --- ¶¯Ì¬ÂË²¨ÏµÊı (Alpha) --- */
-#define ALPHA_UP1 0.92f    /* ½×¶Î 0/1 µÄÏìÓ¦ËÙ¶È */
-#define ALPHA_UP2 0.65f    /* ½×¶Î 2 µÄÏìÓ¦ËÙ¶È */
-#define ALPHA_DOWN1 0.55f  /* ½×¶Î 3 µÄÏìÓ¦ËÙ¶È */
-#define ALPHA_DOWN2 0.45f  /* ½×¶Î 4 µÄÏìÓ¦ËÙ¶È */
-#define ALPHA_DEFAULT 0.8f /* Ä¬ÈÏÏìÓ¦ËÙ¶È */
+/* --- åŠ¨æ€æ»¤æ³¢ç³»æ•° (Alpha) --- */
+#define ALPHA_UP1 0.92f    /* é˜¶æ®µ 0/1 çš„å“åº”é€Ÿåº¦ */
+#define ALPHA_UP2 0.65f    /* é˜¶æ®µ 2 çš„å“åº”é€Ÿåº¦ */
+#define ALPHA_DOWN1 0.55f  /* é˜¶æ®µ 3 çš„å“åº”é€Ÿåº¦ */
+#define ALPHA_DOWN2 0.45f  /* é˜¶æ®µ 4 çš„å“åº”é€Ÿåº¦ */
+#define ALPHA_DEFAULT 0.8f /* é»˜è®¤å“åº”é€Ÿåº¦ */
 
 /**
- * @brief ¸ºÑ¹·çÉÈÓ²¼ş³õÊ¼»¯
+ * @brief è´Ÿå‹é£æ‰‡ç¡¬ä»¶åˆå§‹åŒ–
  */
 void fuya_Init(void)
 {
-    /* ³õÊ¼»¯ PWMA Í¨µÀ 2N£¬Òı½Å P03£¬ÆµÂÊ 17kHz£¬ÓÃÓÚ¿ØÖÆ¸ºÑ¹·çÉÈ */
+    /* åˆå§‹åŒ– PWMA é€šé“ 2Nï¼Œå¼•è„š P03ï¼Œé¢‘ç‡ 17kHzï¼Œç”¨äºæ§åˆ¶è´Ÿå‹é£æ‰‡ */
     pwm_init(PWMA_CH2N_P03, 17000, 0);
 }
 
 /**
- * @brief Êä³ö PWM Õ¼¿Õ±Èµ½¸ºÑ¹Ö´ĞĞÆ÷
- * @param pwm Õ¼¿Õ±ÈÖµ (0~4000)
+ * @brief è¾“å‡º PWM å ç©ºæ¯”åˆ°è´Ÿå‹æ‰§è¡Œå™¨
+ * @param pwm å ç©ºæ¯”å€¼ (0~4000)
  */
 void fuya_motor_output(int pwm)
 {
-    /* °²È«ÏŞ·ù */
+    /* å®‰å…¨é™å¹… */
     if (pwm < 0)
         pwm = 0;
     if (pwm > 4000)
@@ -53,13 +53,13 @@ void fuya_motor_output(int pwm)
 }
 
 /**
- * @brief ¸ù¾İ×ËÌ¬ÏòÁ¿ÅĞ¶¨µ±Ç°µÄÔË¶¯½×¶Î
+ * @brief æ ¹æ®å§¿æ€å‘é‡åˆ¤å®šå½“å‰çš„è¿åŠ¨é˜¶æ®µ
  * @details
- * 0: Æ½µØ
- * 1: Æ½µØ -> ×óÇ½ (ÉÏÇ½)
- * 2: ×óÇ½ -> Ìì»¨°å
- * 3: Ìì»¨°å -> ÓÒÇ½ (ÏÂÇ½)
- * 4: ÓÒÇ½ -> Æ½µØ
+ * 0: å¹³åœ°
+ * 1: å¹³åœ° -> å·¦å¢™ (ä¸Šå¢™)
+ * 2: å·¦å¢™ -> å¤©èŠ±æ¿
+ * 3: å¤©èŠ±æ¿ -> å³å¢™ (ä¸‹å¢™)
+ * 4: å³å¢™ -> å¹³åœ°
  */
 uint8 get_current_phase(float vzc, float vxc)
 {
@@ -87,15 +87,15 @@ uint8 get_current_phase(float vzc, float vxc)
 }
 
 /**
- * @brief ¼ÆËãÇ°ÏòÓÅ´ıĞŞÕıÖµ
- * @details ÔÚÇ½Ãæ»òÇãĞ±³¡¾°ÏÂ£¬¸ù¾İĞ¡³µº½ÏòÓëÖØÁ¦·½ÏòµÄ¼Ğ½Ç£¬Î¢µ÷ÎüÁ¦ÒÔ»ñµÃ¸üºÃµÄ×¥µØÁ¦
+ * @brief è®¡ç®—å‰å‘ä¼˜å¾…ä¿®æ­£å€¼
+ * @details åœ¨å¢™é¢æˆ–å€¾æ–œåœºæ™¯ä¸‹ï¼Œæ ¹æ®å°è½¦èˆªå‘ä¸é‡åŠ›æ–¹å‘çš„å¤¹è§’ï¼Œå¾®è°ƒå¸åŠ›ä»¥è·å¾—æ›´å¥½çš„æŠ“åœ°åŠ›
  */
 static float calculate_forward_preference(float base_duty, float vzc, float vxc, float vyc)
 {
     float strength = 0.0f;
     float gt_norm, align_fwd, offset;
 
-    /* 1. ¼ÆËã³¡¾°Ç¿¶ÈÏµÊı (0~1) */
+    /* 1. è®¡ç®—åœºæ™¯å¼ºåº¦ç³»æ•° (0~1) */
     if ((float)fabs(vzc) < VZC_VERTICAL_THRESH)
     {
         strength = 1.0f;
@@ -112,18 +112,18 @@ static float calculate_forward_preference(float base_duty, float vzc, float vxc,
     if (strength < 0.1f)
         return base_duty;
 
-    /* 2. ¼ÆËãÆ½ÃæÄÚ¶ÔÆë¶È */
+    /* 2. è®¡ç®—å¹³é¢å†…å¯¹é½åº¦ */
     gt_norm = (float)sqrt(vxc * vxc + vyc * vyc);
     align_fwd = (gt_norm > 1e-6f) ? (float)fabs(vxc) / gt_norm : 0.5f;
     align_fwd = func_limit_ab(align_fwd, 0.0f, 1.0f);
 
-    /* 3. µş¼ÓÆ«ÒÆÁ¿ */
+    /* 3. å åŠ åç§»é‡ */
     offset = (align_fwd - 0.5f) * PREFERENCE_OFFSET;
     return base_duty + strength * offset;
 }
 
 /**
- * @brief ¼ÆËã¸÷½×¶ÎµÄ»ù´¡Ä¿±ê¸ºÑ¹
+ * @brief è®¡ç®—å„é˜¶æ®µçš„åŸºç¡€ç›®æ ‡è´Ÿå‹
  */
 static float calculate_base_duty(uint8 p, float vzc)
 {
@@ -134,19 +134,19 @@ static float calculate_base_duty(uint8 p, float vzc)
     {
     case 0:
         return DUTY_BOTTOM;
-    case 1: /* Ö¸ÊıĞÍ¹ı¶É£ºÆ½µØ -> ×óÇ½ */
+    case 1: /* æŒ‡æ•°å‹è¿‡æ¸¡ï¼šå¹³åœ° -> å·¦å¢™ */
         ratio = 1.0f - vzc;
         delta = 1.0f - (float)exp(-3.0f * ratio);
         return DUTY_BOTTOM + (DUTY_LEFT - DUTY_BOTTOM) * func_limit_ab(delta, 0.0f, 1.0f);
-    case 2: /* Ç½Ãæ -> Ìì»¨°å */
+    case 2: /* å¢™é¢ -> å¤©èŠ±æ¿ */
         ratio = -vzc;
         delta = 1.0f - (float)exp(-3.0f * ratio);
         return DUTY_LEFT - (DUTY_LEFT - DUTY_TOP) * func_limit_ab(delta, 0.0f, 1.0f);
-    case 3: /* Ìì»¨°å -> ÓÒÇ½ */
+    case 3: /* å¤©èŠ±æ¿ -> å³å¢™ */
         ratio = vzc + 1.0f;
         delta = 1.0f - (float)exp(-3.0f * ratio);
         return DUTY_TOP + (DUTY_RIGHT - DUTY_TOP) * func_limit_ab(delta, 0.0f, 1.0f);
-    case 4: /* ÓÒÇ½ -> Æ½µØ */
+    case 4: /* å³å¢™ -> å¹³åœ° */
         ratio = vzc;
         delta = 1.0f - (float)exp(-3.0f * ratio);
         return DUTY_RIGHT - (DUTY_RIGHT - DUTY_BOTTOM) * func_limit_ab(delta, 0.0f, 1.0f);
@@ -156,25 +156,25 @@ static float calculate_base_duty(uint8 p, float vzc)
 }
 
 /**
- * @brief ¸ºÑ¹¿ØÖÆºËĞÄ¸üĞÂº¯Êı
+ * @brief è´Ÿå‹æ§åˆ¶æ ¸å¿ƒæ›´æ–°å‡½æ•°
  */
 void fuya_update_simple(void)
 {
     float vzc, vxc, vyc, base_duty, target_duty, alpha;
 
-    /* 1. »ñÈ¡²¢ÏŞÖÆ´«¸ĞÆ÷ÊäÈë */
+    /* 1. è·å–å¹¶é™åˆ¶ä¼ æ„Ÿå™¨è¾“å…¥ */
     vzc = func_limit(vz, 1.0f);
     vxc = func_limit(vx, 1.0f);
     vyc = func_limit(vy, 1.0f);
 
-    /* 2. ×´Ì¬ÅĞ¶¨Óë»ù´¡¼ÆËã */
+    /* 2. çŠ¶æ€åˆ¤å®šä¸åŸºç¡€è®¡ç®— */
     phase = get_current_phase(vzc, vxc);
     base_duty = calculate_base_duty(phase, vzc);
 
-    /* 3. µş¼Ó¸ß¼¶ĞŞÕı */
+    /* 3. å åŠ é«˜çº§ä¿®æ­£ */
     target_duty = calculate_forward_preference(base_duty, vzc, vxc, vyc);
 
-    /* 4. Ö´ĞĞ¶¯Ì¬ÂË²¨Æ½»¬ */
+    /* 4. æ‰§è¡ŒåŠ¨æ€æ»¤æ³¢å¹³æ»‘ */
     switch (phase)
     {
     case 0:
@@ -196,7 +196,7 @@ void fuya_update_simple(void)
     fuya_date = (int)((float)fuya_date + alpha * (target_duty - (float)fuya_date));
     fuya_date_factor = target_duty;
 
-    /* 5. ×îÖÕÎïÀíÊä³ö */
-    /* ×¢Òâ£º´Ë´¦µ±Ç°Ó²±àÂëÎªÊ¹ÓÃÅäÖÃÖµ£¬ÈôĞè¶¯Ì¬µ÷½Ú¿É¸ÄÎª fuya_date */
+    /* 5. æœ€ç»ˆç‰©ç†è¾“å‡º */
+    /* æ³¨æ„ï¼šæ­¤å¤„å½“å‰ç¡¬ç¼–ç ä¸ºä½¿ç”¨é…ç½®å€¼ï¼Œè‹¥éœ€åŠ¨æ€è°ƒèŠ‚å¯æ”¹ä¸º fuya_date */
     fuya_motor_output((int)app.start.fuya_xili);
 }

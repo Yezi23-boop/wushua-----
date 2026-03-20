@@ -4,24 +4,24 @@
 #include "zf_common_typedef.h"
 
 /**
- * @brief ÓÃ»§²ã×Ü³õÊ¼»¯Èë¿Ú
- * @details ¸ºÔğµ÷ÓÃËùÓĞÓ²¼şÇı¶¯¡¢¿ØÖÆËã·¨¼°Ó¦ÓÃÂß¼­µÄ³õÊ¼»¯º¯Êı
+ * @brief ç”¨æˆ·å±‚æ€»åˆå§‹åŒ–å…¥å£
+ * @details è´Ÿè´£è°ƒç”¨æ‰€æœ‰ç¡¬ä»¶é©±åŠ¨ã€æ§åˆ¶ç®—æ³•åŠåº”ç”¨é€»è¾‘çš„åˆå§‹åŒ–å‡½æ•°
  */
 void int_user(void);
 
 /**
- * @brief Ó¦ÓÃ×îĞÂµÄÈ«¾ÖÅäÖÃµ½ PID ¿ØÖÆÆ÷
- * @details ½« app ÖĞµÄ²ÎÊıÍ¬²½µ½ÊµÊ±ÔËĞĞµÄ PID ÊµÀıÖĞ
+ * @brief åº”ç”¨æœ€æ–°çš„å…¨å±€é…ç½®åˆ° PID æ§åˆ¶å™¨
+ * @details å°† app ä¸­çš„å‚æ•°åŒæ­¥åˆ°å®æ—¶è¿è¡Œçš„ PID å®ä¾‹ä¸­
  */
 void control_apply_config(void);
 
 /**
- * @brief ±£´æµ±Ç°ÅäÖÃÖÁ EEPROM
+ * @brief ä¿å­˜å½“å‰é…ç½®è‡³ EEPROM
  */
 void config_save(void);
 
 /**
- * @brief ´Ó EEPROM ¼ÓÔØÅäÖÃ
+ * @brief ä» EEPROM åŠ è½½é…ç½®
  */
 void config_load(void);
 

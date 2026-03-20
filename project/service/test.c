@@ -1,46 +1,46 @@
 #include "zf_common_headfile.h"
 #include "test.h"
 
-/* ²âÊÔÓÃµÄÄ¿±êÉè¶¨Öµ */
+/* æµ‹è¯•ç”¨çš„ç›®æ ‡è®¾å®šå€¼ */
 float test_speed_value = 0;
 float test_angle_value = 0;
 
 /**
- * @brief ½Ç¶È/×ËÌ¬×·×Ù²âÊÔ
- * @details Ä£Äâ×ªÏò¿ØÖÆÂß¼­£¬Í¨¹ıĞŞ¸Ä test_angle_value ¹Û²ìµç»úÏìÓ¦
+ * @brief è§’åº¦/å§¿æ€è¿½è¸ªæµ‹è¯•
+ * @details æ¨¡æ‹Ÿè½¬å‘æ§åˆ¶é€»è¾‘ï¼Œé€šè¿‡ä¿®æ”¹ test_angle_value è§‚å¯Ÿç”µæœºå“åº”
  */
 void test_angle_func(void)
 {
-    /* 1. ×¼±¸´«¸ĞÆ÷Êı¾İ£¨²ÉÑù²¢³õ²½´¦Àí£© */
+    /* 1. å‡†å¤‡ä¼ æ„Ÿå™¨æ•°æ®ï¼ˆé‡‡æ ·å¹¶åˆæ­¥å¤„ç†ï¼‰ */
     Prepare_Data();
 
-    /* 2. »ñÈ¡±àÂëÆ÷·´À¡ËÙ¶È */
+    /* 2. è·å–ç¼–ç å™¨åé¦ˆé€Ÿåº¦ */
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* 3. Use calibrated gyro_z directly in the feedback path */
+    /* 3. ç›´æ¥ä½¿ç”¨æ ¡å‡†åçš„ gyro_z å‚ä¸åé¦ˆæ§åˆ¶ */
     pid_angle_update(&PID.angle, test_angle_value, gyro_z);
 
-    /* 4. ½«½Ç¶È¿ØÖÆÆ÷µÄÊä³ö×÷Îª²îËÙµ÷½ÚÁ¿£¬µş¼Óµ½ËÙ¶È»· */
-    /* ×¢Òâ£º×óÓÒÂÖÄ¿±êËÙ¶È·½ÏòÏà·´ÒÔÊµÏÖÔ­µØ»òĞĞ½ø¼ä×ªÍä */
+    /* 4. å°†è§’åº¦æ§åˆ¶å™¨çš„è¾“å‡ºä½œä¸ºå·®é€Ÿè°ƒèŠ‚é‡ï¼Œå åŠ åˆ°é€Ÿåº¦ç¯ */
+    /* æ³¨æ„ï¼šå·¦å³è½®ç›®æ ‡é€Ÿåº¦æ–¹å‘ç›¸åä»¥å®ç°åŸåœ°æˆ–è¡Œè¿›é—´è½¬å¼¯ */
     pid_speed_update(&PID.left_speed, -PID.angle.output, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, +PID.angle.output, PID.right_speed.speed);
 
-    /* 5. Ö´ĞĞµç»úÊä³ö */
+    /* 5. æ‰§è¡Œç”µæœºè¾“å‡º */
     motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
 }
 
 /**
- * @brief »ù´¡ËÙ¶È»·×·×Ù²âÊÔ
+ * @brief åŸºç¡€é€Ÿåº¦ç¯è¿½è¸ªæµ‹è¯•
  */
 void test_speed_func(void)
 {
-    /* 1. »ñÈ¡±àÂëÆ÷ÊµÊ±ËÙ¶È·´À¡ */
+    /* 1. è·å–ç¼–ç å™¨å®æ—¶é€Ÿåº¦åé¦ˆ */
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* 2. ¸üĞÂ×óÓÒÂÖËÙ¶È»· PID */
+    /* 2. æ›´æ–°å·¦å³è½®é€Ÿåº¦ç¯ PID */
     pid_speed_update(&PID.left_speed, test_speed_value, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, test_speed_value, PID.right_speed.speed);
 
-    /* 3. Ö±½ÓÊä³ö PID ¼ÆËãµÃµ½µÄÕ¼¿Õ±È */
+    /* 3. ç›´æ¥è¾“å‡º PID è®¡ç®—å¾—åˆ°çš„å ç©ºæ¯” */
     motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
 }

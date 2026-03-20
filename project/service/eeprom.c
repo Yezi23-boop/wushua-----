@@ -1,14 +1,14 @@
 #include "zf_common_headfile.h"
 #include "eeprom.h"
 
-/* Êı¾İ»º³åÇø£¬ÓÃÓÚÓë IAP ½Ó¿Ú½»»»Êı¾İ£¬´óĞ¡Îª 200 ×Ö½Ú */
+/* æ•°æ®ç¼“å†²åŒºï¼Œç”¨äºä¸ IAP æ¥å£äº¤æ¢æ•°æ®ï¼Œå¤§å°ä¸º 200 å­—èŠ‚ */
 uint8 date_buff[200];
-/* EEPROM ³õÊ¼»¯±êÖ¾Î»£¬ÓÃÓÚÅĞ¶ÏÊÇ·ñÎªÊ×´ÎÉÏµç£¨0-Ê×´Î£¬1-·ÇÊ×´Î£© */
+/* EEPROM åˆå§‹åŒ–æ ‡å¿—ä½ï¼Œç”¨äºåˆ¤æ–­æ˜¯å¦ä¸ºé¦–æ¬¡ä¸Šç”µï¼ˆ0-é¦–æ¬¡ï¼Œ1-éé¦–æ¬¡ï¼‰ */
 static uint8 eeprom_init_time = 0;
-/* È«¾ÖÅäÖÃ½á¹¹ÌåÊµÀı£¬ÔËĞĞÊ±ËùÓĞµÄ²ÎÊı¶¼´ÓÕâÀï¶ÁÈ¡ */
+/* å…¨å±€é…ç½®ç»“æ„ä½“å®ä¾‹ï¼Œè¿è¡Œæ—¶æ‰€æœ‰çš„å‚æ•°éƒ½ä»è¿™é‡Œè¯»å– */
 AppConfig app;
 
-/* ÄÚ²¿Ë½ÓĞº¯ÊıÉùÃ÷ */
+/* å†…éƒ¨ç§æœ‰å‡½æ•°å£°æ˜ */
 static void eeprom_load_defaults(AppConfig *config);
 static void eeprom_read_config(AppConfig *config);
 static void eeprom_write_config(const AppConfig *config);
@@ -18,26 +18,26 @@ static void save_float(float input, uint8 value_bit);
 static float read_float(uint8 value_bit);
 
 /**
- * @brief ¼ÓÔØÏµÍ³Ä¬ÈÏ²ÎÊı
- * @details µ±¼ì²âµ½ EEPROM ÖĞÎŞÓĞĞ§Êı¾İ£¨Ê×´ÎÔËĞĞ£©Ê±£¬Ê¹ÓÃ´Ëº¯Êı½«Ó²±àÂëµÄÄ¬ÈÏ²ÎÊıÌî³äµ½ config ½á¹¹ÌåÖĞ¡£
- * ÕâĞ©²ÎÊı¾­¹ıÔ¤ÏÈµ÷ÊÔ£¬ÄÜ±£Ö¤Ğ¡³µ»ù±¾µÄÎÈ¶¨ÔËĞĞ¡£
- * @param config Ö¸ÏòĞèÒªÌî³äÄ¬ÈÏÖµµÄÅäÖÃ½á¹¹ÌåÖ¸Õë
+ * @brief åŠ è½½ç³»ç»Ÿé»˜è®¤å‚æ•°
+ * @details å½“æ£€æµ‹åˆ° EEPROM ä¸­æ— æœ‰æ•ˆæ•°æ®ï¼ˆé¦–æ¬¡è¿è¡Œï¼‰æ—¶ï¼Œä½¿ç”¨æ­¤å‡½æ•°å°†ç¡¬ç¼–ç çš„é»˜è®¤å‚æ•°å¡«å……åˆ° config ç»“æ„ä½“ä¸­ã€‚
+ * è¿™äº›å‚æ•°ç»è¿‡é¢„å…ˆè°ƒè¯•ï¼Œèƒ½ä¿è¯å°è½¦åŸºæœ¬çš„ç¨³å®šè¿è¡Œã€‚
+ * @param config æŒ‡å‘éœ€è¦å¡«å……é»˜è®¤å€¼çš„é…ç½®ç»“æ„ä½“æŒ‡é’ˆ
  */
 static void eeprom_load_defaults(AppConfig *config)
 {
-    /* Æô¶¯Óë»ù´¡ÅäÖÃÄ¬ÈÏÖµ */
-    config->start.start_flag = 1;       /* Ä¬ÈÏÆô¶¯ */
-    config->start.circle_flags = 0;     /* Ä¬ÈÏ×Ô¶¯Ê¶±ğÔ²»··½Ïò */
-    config->start.fuya_xili = 2000.00f; /* Ä¬ÈÏ¸ºÑ¹ÎüÁ¦ */
+    /* å¯åŠ¨ä¸åŸºç¡€é…ç½®é»˜è®¤å€¼ */
+    config->start.start_flag = 1;       /* é»˜è®¤å¯åŠ¨ */
+    config->start.circle_flags = 0;     /* é»˜è®¤è‡ªåŠ¨è¯†åˆ«åœ†ç¯æ–¹å‘ */
+    config->start.fuya_xili = 2000.00f; /* é»˜è®¤è´Ÿå‹å¸åŠ› */
 
-    /* ËÙ¶È»· PID Ä¬ÈÏ²ÎÊı */
+    /* é€Ÿåº¦ç¯ PID é»˜è®¤å‚æ•° */
     config->speed.kp_Err = 0.70f;
     config->speed.kd_Err = 0.70f;
-    config->speed.speed_run = 30.00f;     /* Ä¬ÈÏ»ù´¡ËÙ¶È 30 */
-    config->speed.limiting_Err = 600.00f; /* ×ªÏòÏŞ·ù */
+    config->speed.speed_run = 30.00f;     /* é»˜è®¤åŸºç¡€é€Ÿåº¦ 30 */
+    config->speed.limiting_Err = 600.00f; /* è½¬å‘é™å¹… */
     config->speed.kp2_Err = 0.01f;
 
-    /* ½Ç¶È»· PID Ä¬ÈÏ²ÎÊı */
+    /* è§’åº¦ç¯ PID é»˜è®¤å‚æ•° */
     config->angle.kp_Angle = 0.60f;
     config->angle.kd_Angle = 0.20f;
     config->angle.limiting_Angle = 30.00f;
@@ -45,26 +45,26 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.B_1 = 1.00f;
     config->angle.C_l = 0.60f;
 
-    /* Ô²»·²ßÂÔÄ¬ÈÏ²ÎÊı */
-    config->ring.ring_encoder = 15.00f;           /* Èë»·»ı·ÖãĞÖµ */
-    config->ring.pre_ring_Gyro_set = 210.00f;     /* Èë»·´ò½ÇÁ¦¶È */
-    config->ring.in_ring_Gyroz = 220.00f;         /* »·ÄÚ½ÇËÙ¶È */
-    config->ring.pre_out_ring_Gyro_set = 170.00f; /* ³ö»·´ò½ÇÁ¦¶È */
-    config->ring.pre_out_ring_Gyroz = 350.00f;    /* ³ö»·½ÇËÙ¶ÈãĞÖµ */
-    config->ring.pre_out_ring_encoder = 30.00f;   /* ³ö»·»ı·ÖãĞÖµ */
+    /* åœ†ç¯ç­–ç•¥é»˜è®¤å‚æ•° */
+    config->ring.ring_encoder = 15.00f;           /* å…¥ç¯ç§¯åˆ†é˜ˆå€¼ */
+    config->ring.pre_ring_Gyro_set = 210.00f;     /* å…¥ç¯æ‰“è§’åŠ›åº¦ */
+    config->ring.in_ring_Gyroz = 220.00f;         /* ç¯å†…è§’é€Ÿåº¦ */
+    config->ring.pre_out_ring_Gyro_set = 170.00f; /* å‡ºç¯æ‰“è§’åŠ›åº¦ */
+    config->ring.pre_out_ring_Gyroz = 350.00f;    /* å‡ºç¯è§’é€Ÿåº¦é˜ˆå€¼ */
+    config->ring.pre_out_ring_encoder = 30.00f;   /* å‡ºç¯ç§¯åˆ†é˜ˆå€¼ */
 
-    /* ·ÉÆÂ²ßÂÔÄ¬ÈÏ²ÎÊı */
-    config->fly.count_fly_speed = 15;  /* ·ÉÆÂÂıËÙÖµ */
-    config->fly.count_fly_time_1 = 3;  /* ´¥·¢¼ì²â´ÎÊı */
-    config->fly.count_fly_time_2 = 50; /* ×´Ì¬±£³ÖÊ±¼ä (50 * 10ms = 500ms) */
-    config->fly.count_fly_angle = 0;   /* ¶æ»úËøËÀ½Ç¶È */
-    config->fly.fly_ramp_enable = 0;   /* Ä¬ÈÏ¹Ø±Õ·ÉÆÂ¼ì²â£¬·ÀÖ¹Îó´¥·¢ */
+    /* é£å¡ç­–ç•¥é»˜è®¤å‚æ•° */
+    config->fly.count_fly_speed = 15;  /* é£å¡æ…¢é€Ÿå€¼ */
+    config->fly.count_fly_time_1 = 3;  /* è§¦å‘æ£€æµ‹æ¬¡æ•° */
+    config->fly.count_fly_time_2 = 50; /* çŠ¶æ€ä¿æŒæ—¶é—´ (50 * 10ms = 500ms) */
+    config->fly.count_fly_angle = 0;   /* èˆµæœºé”æ­»è§’åº¦ */
+    config->fly.fly_ramp_enable = 0;   /* é»˜è®¤å…³é—­é£å¡æ£€æµ‹ï¼Œé˜²æ­¢è¯¯è§¦å‘ */
 }
 
 /**
- * @brief ´Ó EEPROM »º³åÇø½âÎöÅäÖÃÊı¾İµ½½á¹¹Ìå
- * @details °´ÕÕ¹Ì¶¨µÄË÷ÒıË³Ğò£¨value_bit£©£¬½« date_buff ÖĞµÄ¶ş½øÖÆÊı¾İ»¹Ô­Îª½á¹¹Ìå³ÉÔ±±äÁ¿¡£
- * @param config Ö¸Ïò½ÓÊÕÊı¾İµÄÅäÖÃ½á¹¹ÌåÖ¸Õë
+ * @brief ä» EEPROM ç¼“å†²åŒºè§£æé…ç½®æ•°æ®åˆ°ç»“æ„ä½“
+ * @details æŒ‰ç…§å›ºå®šçš„ç´¢å¼•é¡ºåºï¼ˆvalue_bitï¼‰ï¼Œå°† date_buff ä¸­çš„äºŒè¿›åˆ¶æ•°æ®è¿˜åŸä¸ºç»“æ„ä½“æˆå‘˜å˜é‡ã€‚
+ * @param config æŒ‡å‘æ¥æ”¶æ•°æ®çš„é…ç½®ç»“æ„ä½“æŒ‡é’ˆ
  */
 static void eeprom_read_config(AppConfig *config)
 {
@@ -100,10 +100,10 @@ static void eeprom_read_config(AppConfig *config)
 }
 
 /**
- * @brief ½«ÅäÖÃ½á¹¹ÌåĞòÁĞ»¯²¢Ğ´Èë Flash
- * @details °´ÕÕ¹Ì¶¨µÄË÷ÒıË³Ğò£¨value_bit£©£¬½«½á¹¹Ìå³ÉÔ±±äÁ¿×ª»»Îª¶ş½øÖÆ²¢Ğ´Èë Flash¡£
- * ×¢Òâ£ºÃ¿´Îµ÷ÓÃ save_xxx º¯Êı¶¼»á´¥·¢Ò»´Î Flash Ğ´Èë²Ù×÷¡£
- * @param config Ö¸ÏòÔ´Êı¾İµÄÅäÖÃ½á¹¹ÌåÖ¸Õë
+ * @brief å°†é…ç½®ç»“æ„ä½“åºåˆ—åŒ–å¹¶å†™å…¥ Flash
+ * @details æŒ‰ç…§å›ºå®šçš„ç´¢å¼•é¡ºåºï¼ˆvalue_bitï¼‰ï¼Œå°†ç»“æ„ä½“æˆå‘˜å˜é‡è½¬æ¢ä¸ºäºŒè¿›åˆ¶å¹¶å†™å…¥ Flashã€‚
+ * æ³¨æ„ï¼šæ¯æ¬¡è°ƒç”¨ save_xxx å‡½æ•°éƒ½ä¼šè§¦å‘ä¸€æ¬¡ Flash å†™å…¥æ“ä½œã€‚
+ * @param config æŒ‡å‘æºæ•°æ®çš„é…ç½®ç»“æ„ä½“æŒ‡é’ˆ
  */
 static void eeprom_write_config(const AppConfig *config)
 {
@@ -139,57 +139,57 @@ static void eeprom_write_config(const AppConfig *config)
 }
 
 /**
- * @brief EEPROM ³õÊ¼»¯Ö÷º¯Êı
+ * @brief EEPROM åˆå§‹åŒ–ä¸»å‡½æ•°
  * @details
- * 1. ³õÊ¼»¯ IAP Ä£¿é¡£
- * 2. ¶ÁÈ¡ Flash ÉÈÇø 0 µÄÈ«²¿Êı¾İµ½ÄÚ´æ»º³åÇø¡£
- * 3. ¼ì²éË÷Òı 0 ´¦µÄ±êÖ¾Î» `eeprom_init_time`¡£
- *    - Èô²»Îª 1£¬ËµÃ÷ÊÇÊ×´ÎÉÏµç»ò Flash ±»²Á³ı£¬´ËÊ±¼ÓÔØÄ¬ÈÏ²ÎÊı²¢Ğ´Èë Flash¡£
- *    - ÈôÎª 1£¬ËµÃ÷ Flash ÖĞÓĞÓĞĞ§ÅäÖÃ£¬Ö±½Ó´Ó Flash ¶ÁÈ¡²ÎÊıµ½ `app`¡£
+ * 1. åˆå§‹åŒ– IAP æ¨¡å—ã€‚
+ * 2. è¯»å– Flash æ‰‡åŒº 0 çš„å…¨éƒ¨æ•°æ®åˆ°å†…å­˜ç¼“å†²åŒºã€‚
+ * 3. æ£€æŸ¥ç´¢å¼• 0 å¤„çš„æ ‡å¿—ä½ `eeprom_init_time`ã€‚
+ *    - è‹¥ä¸ä¸º 1ï¼Œè¯´æ˜æ˜¯é¦–æ¬¡ä¸Šç”µæˆ– Flash è¢«æ“¦é™¤ï¼Œæ­¤æ—¶åŠ è½½é»˜è®¤å‚æ•°å¹¶å†™å…¥ Flashã€‚
+ *    - è‹¥ä¸º 1ï¼Œè¯´æ˜ Flash ä¸­æœ‰æœ‰æ•ˆé…ç½®ï¼Œç›´æ¥ä» Flash è¯»å–å‚æ•°åˆ° `app`ã€‚
  */
 void eeprom_init(void)
 {
-    /* ³õÊ¼»¯ IAP (In-Application Programming) Ä£¿é */
+    /* åˆå§‹åŒ– IAP (In-Application Programming) æ¨¡å— */
     iap_init();
-    /* ´ÓÉÈÇø 0 ¶ÁÈ¡ 200 ×Ö½Úµ½»º³åÇø */
+    /* ä»æ‰‡åŒº 0 è¯»å– 200 å­—èŠ‚åˆ°ç¼“å†²åŒº */
     iap_read_buff(0x00, date_buff, sizeof(date_buff));
 
-    /* Ô¤¼ÓÔØÄ¬ÈÏÖµµ½ÄÚ´æ½á¹¹Ìå£¨·ÀÖ¹¶ÁÈ¡Ê§°ÜÊ±ÎŞ³õÖµ£© */
+    /* é¢„åŠ è½½é»˜è®¤å€¼åˆ°å†…å­˜ç»“æ„ä½“ï¼ˆé˜²æ­¢è¯»å–å¤±è´¥æ—¶æ— åˆå€¼ï¼‰ */
     eeprom_load_defaults(&app);
 
-    /* ¼ì²éË÷Òı 0 µÄ±êÖ¾Î»£¬ÅĞ¶ÏÊÇ·ñÎªÓĞĞ§ÅäÖÃ */
+    /* æ£€æŸ¥ç´¢å¼• 0 çš„æ ‡å¿—ä½ï¼Œåˆ¤æ–­æ˜¯å¦ä¸ºæœ‰æ•ˆé…ç½® */
     eeprom_init_time = (uint8)read_int(0);
 
     if (eeprom_init_time != 1)
     {
-        /* ÈôÎ´³õÊ¼»¯£¬ÔòĞ´Èë³õÊ¼»¯±êÖ¾²¢±£´æÄ¬ÈÏÅäÖÃ */
+        /* è‹¥æœªåˆå§‹åŒ–ï¼Œåˆ™å†™å…¥åˆå§‹åŒ–æ ‡å¿—å¹¶ä¿å­˜é»˜è®¤é…ç½® */
         eeprom_init_time = 1;
         save_int(eeprom_init_time, 0);
         eeprom_flash();
     }
     else
     {
-        /* ÈôÒÑ³õÊ¼»¯£¬Ôò¼ÓÔØ EEPROM ÖĞµÄÕæÊµÊı¾İ¸²¸ÇÄÚ´æ½á¹¹Ìå */
+        /* è‹¥å·²åˆå§‹åŒ–ï¼Œåˆ™åŠ è½½ EEPROM ä¸­çš„çœŸå®æ•°æ®è¦†ç›–å†…å­˜ç»“æ„ä½“ */
         eeprom_read_config(&app);
     }
 }
 
 /**
- * @brief Ö´ĞĞ Flash Ë¢Ğ´²Ù×÷
- * @details ½«µ±Ç° `app` È«¾Ö±äÁ¿ÖĞµÄËùÓĞ²ÎÊı±£´æµ½ Flash ÖĞ¡£
- * Í¨³£ÔÚ²Ëµ¥ÖĞĞŞ¸Ä²ÎÊı²¢È·ÈÏ±£´æºóµ÷ÓÃ´Ëº¯Êı¡£
+ * @brief æ‰§è¡Œ Flash åˆ·å†™æ“ä½œ
+ * @details å°†å½“å‰ `app` å…¨å±€å˜é‡ä¸­çš„æ‰€æœ‰å‚æ•°ä¿å­˜åˆ° Flash ä¸­ã€‚
+ * é€šå¸¸åœ¨èœå•ä¸­ä¿®æ”¹å‚æ•°å¹¶ç¡®è®¤ä¿å­˜åè°ƒç”¨æ­¤å‡½æ•°ã€‚
  */
 void eeprom_flash(void)
 {
     eeprom_write_config(&app);
 }
 
-/* --- µ×²ã¶ÁĞ´¸¨Öúº¯Êı --- */
+/* --- åº•å±‚è¯»å†™è¾…åŠ©å‡½æ•° --- */
 
 /**
- * @brief ½« int32 ÀàĞÍÊı¾İ±£´æµ½»º³åÇøÖ¸¶¨Î»ÖÃ²¢Í¬²½µ½ Flash
- * @param input Òª±£´æµÄ 32 Î»ÕûĞÍÊı¾İ
- * @param value_bit Êı¾İ´æ´¢µÄÂß¼­Ë÷Òı£¨Ã¿¸öË÷ÒıÕ¼ÓÃ 4 ×Ö½Ú¿Õ¼ä£©
+ * @brief å°† int32 ç±»å‹æ•°æ®ä¿å­˜åˆ°ç¼“å†²åŒºæŒ‡å®šä½ç½®å¹¶åŒæ­¥åˆ° Flash
+ * @param input è¦ä¿å­˜çš„ 32 ä½æ•´å‹æ•°æ®
+ * @param value_bit æ•°æ®å­˜å‚¨çš„é€»è¾‘ç´¢å¼•ï¼ˆæ¯ä¸ªç´¢å¼•å ç”¨ 4 å­—èŠ‚ç©ºé—´ï¼‰
  */
 static void save_int(int32 input, uint8 value_bit)
 {
@@ -201,14 +201,14 @@ static void save_int(int32 input, uint8 value_bit)
     {
         date_buff[begin++] = *(p + i);
     }
-    /* Á¢¼´Ë¢Ğ´µ½ Flash ÉÈÇø 0 */
+    /* ç«‹å³åˆ·å†™åˆ° Flash æ‰‡åŒº 0 */
     extern_iap_write_buff(0x00, date_buff, sizeof(date_buff));
 }
 
 /**
- * @brief ´Ó»º³åÇø¶ÁÈ¡ int32 ÀàĞÍÊı¾İ
- * @param value_bit Êı¾İ´æ´¢µÄÂß¼­Ë÷Òı
- * @return ¶ÁÈ¡µ½µÄ 32 Î»ÕûĞÍÊı¾İ
+ * @brief ä»ç¼“å†²åŒºè¯»å– int32 ç±»å‹æ•°æ®
+ * @param value_bit æ•°æ®å­˜å‚¨çš„é€»è¾‘ç´¢å¼•
+ * @return è¯»å–åˆ°çš„ 32 ä½æ•´å‹æ•°æ®
  */
 static int32 read_int(uint8 value_bit)
 {
@@ -225,9 +225,9 @@ static int32 read_int(uint8 value_bit)
 }
 
 /**
- * @brief ½« float ÀàĞÍÊı¾İ±£´æµ½»º³åÇø²¢Í¬²½µ½ Flash
- * @param input Òª±£´æµÄ 32 Î»¸¡µãĞÍÊı¾İ
- * @param value_bit Êı¾İ´æ´¢µÄÂß¼­Ë÷Òı
+ * @brief å°† float ç±»å‹æ•°æ®ä¿å­˜åˆ°ç¼“å†²åŒºå¹¶åŒæ­¥åˆ° Flash
+ * @param input è¦ä¿å­˜çš„ 32 ä½æµ®ç‚¹å‹æ•°æ®
+ * @param value_bit æ•°æ®å­˜å‚¨çš„é€»è¾‘ç´¢å¼•
  */
 static void save_float(float input, uint8 value_bit)
 {
@@ -243,9 +243,9 @@ static void save_float(float input, uint8 value_bit)
 }
 
 /**
- * @brief ´Ó»º³åÇø¶ÁÈ¡ float ÀàĞÍÊı¾İ
- * @param value_bit Êı¾İ´æ´¢µÄÂß¼­Ë÷Òı
- * @return ¶ÁÈ¡µ½µÄ 32 Î»¸¡µãĞÍÊı¾İ
+ * @brief ä»ç¼“å†²åŒºè¯»å– float ç±»å‹æ•°æ®
+ * @param value_bit æ•°æ®å­˜å‚¨çš„é€»è¾‘ç´¢å¼•
+ * @return è¯»å–åˆ°çš„ 32 ä½æµ®ç‚¹å‹æ•°æ®
  */
 static float read_float(uint8 value_bit)
 {

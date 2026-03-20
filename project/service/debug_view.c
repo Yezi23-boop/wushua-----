@@ -2,58 +2,61 @@
 #include "zf_common_headfile.h"
 
 /**
- * @brief VOFA+ ÉÏÎ»»ú½»»¥·şÎñ
- * @details ¸ºÔğ½âÎöÀ´×ÔÎŞÏß´®¿ÚµÄ VOFA Ö¸Áî²¢´òÓ¡µ÷ÊÔ²¨ĞÎÊı¾İ
+ * @brief VOFA+ ä¸Šä½æœºäº¤äº’æœåŠ¡
+ * @details è´Ÿè´£è§£ææ¥è‡ªæ— çº¿ä¸²å£çš„ VOFA æŒ‡ä»¤å¹¶æ‰“å°è°ƒè¯•æ³¢å½¢æ•°æ®
  */
 void debug_vofa_service(void)
 {
     static char vofa_cmd[64];
 
-    /* ´Ó FIFO »º³åÇø½âÎö VOFA Ğ­ÒéÖ¡ */
+    /* ä» FIFO ç¼“å†²åŒºè§£æ VOFA åè®®å¸§ */
     vofa_parse_from_fifo();
 
-    /* ³¢ÊÔ»ñÈ¡Ò»ÌõÍêÕûµÄÖ¸Áî */
+    /* å°è¯•è·å–ä¸€æ¡å®Œæ•´çš„æŒ‡ä»¤ */
     if (vofa_get_command(vofa_cmd, 64))
     {
-        /* ´¦ÀíÖ¸Áî£¨ÈçĞŞ¸Ä²ÎÊı¡¢ÇĞ»»×´Ì¬µÈ£© */
+        /* å¤„ç†æŒ‡ä»¤ï¼ˆå¦‚ä¿®æ”¹å‚æ•°ã€åˆ‡æ¢çŠ¶æ€ç­‰ï¼‰ */
         handle_vofa_command(vofa_cmd);
     }
 
     /*
-     * Ïò´®¿Ú´òÓ¡²¨ĞÎÊı¾İ£¬VOFA+ ÉÏÎ»»ú¿ÉÍ¨¹ı´Ë¸ñÊ½ÏÔÊ¾ÊµÊ±ÇúÏß
-     * ¸ñÊ½£ºÊı¾İ1,Êı¾İ2,Êı¾İ3... \n
+     * å‘ä¸²å£æ‰“å°æ³¢å½¢æ•°æ®ï¼ŒVOFA+ ä¸Šä½æœºå¯é€šè¿‡æ­¤æ ¼å¼æ˜¾ç¤ºå®æ—¶æ›²çº¿
+     * æ ¼å¼ï¼šæ•°æ®1,æ•°æ®2,æ•°æ®3... \n
      */
-    printf("%f,%f,%f,%f\n", test_speed_value, PID.left_speed.speed, PID.right_speed.speed, 0.0f);
+    printf("%f,%f,%f,%ld,%ld,%d,%d\n", test_speed_value, PID.left_speed.speed, PID.right_speed.speed, (long)test_left_pwm_output, (long)test_right_pwm_output, (int)test_trial_active, (int)stop);
+
+    /* é™åˆ¶é¥æµ‹å‘é€é¢‘ç‡ï¼Œé¿å…æŒç»­å‘åŒ…æŒ¤å æ— çº¿ä¸²å£æ¥æ”¶å‘½ä»¤çš„æ—¶æœº */
+    system_delay_ms(10);
 }
 
 /**
- * @brief ÊµÊ±ÔËĞĞÊı¾İÏÔÊ¾
- * @details ÔÚ IPS ÆÁÄ»ÉÏÏÔÊ¾µç¸ĞÆ«²î¡¢ËÄÂ·Ô­Ê¼Öµ¡¢PID Êä³ö¼°µç³ØµçÑ¹
+ * @brief å®æ—¶è¿è¡Œæ•°æ®æ˜¾ç¤º
+ * @details åœ¨ IPS å±å¹•ä¸Šæ˜¾ç¤ºç”µæ„Ÿåå·®ã€å››è·¯åŸå§‹å€¼ã€PID è¾“å‡ºåŠç”µæ± ç”µå‹
  */
 void printf_date(void)
 {
-    /* µÚÒ»ÁĞ£ºÏÔÊ¾Æ«²îÓëËÄÂ·µç¸Ğ¹éÒ»»¯Öµ */
+    /* ç¬¬ä¸€åˆ—ï¼šæ˜¾ç¤ºåå·®ä¸å››è·¯ç”µæ„Ÿå½’ä¸€åŒ–å€¼ */
     ips114_show_int32(1 * 24, 18 * 0, Err, 3);
     ips114_show_int32(1 * 24, 18 * 1, ad1, 3);
     ips114_show_int32(1 * 24, 18 * 2, ad2, 3);
     ips114_show_int32(1 * 24, 18 * 3, ad3, 3);
     ips114_show_int32(1 * 24, 18 * 4, ad4, 3);
 
-    /* µÚÈıÁĞ£ºÏÔÊ¾ PID ×ªÏòÊä³ö¼°×óÓÒÄ¿±êËÙ¶È */
+    /* ç¬¬ä¸‰åˆ—ï¼šæ˜¾ç¤º PID è½¬å‘è¾“å‡ºåŠå·¦å³ç›®æ ‡é€Ÿåº¦ */
     ips114_show_float(3 * 24, 18 * 0, PID.steer.output, 3, 1);
     ips114_show_float(3 * 24, 18 * 1, app.speed.speed_run + PID.steer.output, 3, 1);
     ips114_show_float(3 * 24, 18 * 2, app.speed.speed_run - PID.steer.output, 3, 1);
 
-    /* µÚÁùÁĞ£ºÏÔÊ¾ÊµÊ±µç³ØµçÑ¹ */
+    /* ç¬¬å…­åˆ—ï¼šæ˜¾ç¤ºå®æ—¶ç”µæ± ç”µå‹ */
     ips114_show_int32(6 * 24, 18 * 1, (int32)dianya, 5);
 }
 
 /**
- * @brief µç¸ĞÔ­Ê¼Êı¾İÓë¾ùÖµÏÔÊ¾
+ * @brief ç”µæ„ŸåŸå§‹æ•°æ®ä¸å‡å€¼æ˜¾ç¤º
  */
 void printf_adc(void)
 {
-    /* ÏÔÊ¾¹éÒ»»¯ºóµÄµç¸ĞÖµ */
+    /* æ˜¾ç¤ºå½’ä¸€åŒ–åçš„ç”µæ„Ÿå€¼ */
     ips114_show_int32(1 * 24, 18 * 0, ad1, 3);
     ips114_show_int32(1 * 24, 18 * 1, ad2, 3);
     ips114_show_int32(1 * 24, 18 * 2, ad3, 3);
@@ -61,13 +64,13 @@ void printf_adc(void)
 
     ips114_show_int32(1 * 24, 18 * 6, Err, 4);
 
-    /* ÏÔÊ¾Ô­Ê¼²ÉÑùÖµ RAW */
+    /* æ˜¾ç¤ºåŸå§‹é‡‡æ ·å€¼ RAW */
     ips114_show_int32(3 * 24, 18 * 0, RAW[0], 4);
     ips114_show_int32(3 * 24, 18 * 1, RAW[1], 4);
     ips114_show_int32(3 * 24, 18 * 2, RAW[2], 4);
     ips114_show_int32(3 * 24, 18 * 3, RAW[3], 4);
 
-    /* ÏÔÊ¾»¬¶¯Æ½¾ùÂË²¨ºóµÄÖµ MA */
+    /* æ˜¾ç¤ºæ»‘åŠ¨å¹³å‡æ»¤æ³¢åçš„å€¼ MA */
     ips114_show_int32(7 * 24, 18 * 0, MA[0], 4);
     ips114_show_int32(7 * 24, 18 * 1, MA[1], 4);
     ips114_show_int32(7 * 24, 18 * 2, MA[2], 4);
@@ -75,21 +78,21 @@ void printf_adc(void)
 }
 
 /**
- * @brief IMU ×ËÌ¬´«¸ĞÆ÷Êı¾İÏÔÊ¾
+ * @brief IMU å§¿æ€ä¼ æ„Ÿå™¨æ•°æ®æ˜¾ç¤º
  */
 void printf_imu(void)
 {
-    /* ÏÔÊ¾ÂË²¨ºóµÄ½ÇËÙ¶È£¨ÍÓÂİÒÇ£© */
+    /* æ˜¾ç¤ºæ»¤æ³¢åçš„è§’é€Ÿåº¦ï¼ˆé™€èºä»ªï¼‰ */
     ips114_show_float(4 * 24, 18 * 0, Gyr_filt.X, 4, 2);
     ips114_show_float(4 * 24, 18 * 1, Gyr_filt.Y, 4, 2);
     ips114_show_float(4 * 24, 18 * 2, Gyr_filt.Z, 4, 2);
 
-    /* ÏÔÊ¾ÂË²¨ºóµÄ¼ÓËÙ¶È */
+    /* æ˜¾ç¤ºæ»¤æ³¢åçš„åŠ é€Ÿåº¦ */
     ips114_show_float(4 * 24, 18 * 4, Acc_filt.X, 4, 2);
     ips114_show_float(4 * 24, 18 * 5, Acc_filt.Y, 4, 2);
     ips114_show_float(4 * 24, 18 * 6, Acc_filt.Z, 4, 2);
 
-    /* ÏÔÊ¾¼ÆËã³öµÄËÙ¶ÈÓë¸ºÑ¹·çÉÈ×´Ì¬ */
+    /* æ˜¾ç¤ºè®¡ç®—å‡ºçš„é€Ÿåº¦ä¸è´Ÿå‹é£æ‰‡çŠ¶æ€ */
     ips114_show_float(7 * 24, 18 * 0, vx, 4, 2);
     ips114_show_float(7 * 24, 18 * 1, vy, 4, 2);
     ips114_show_float(7 * 24, 18 * 2, vz, 4, 2);
@@ -98,7 +101,7 @@ void printf_imu(void)
 }
 
 /**
- * @brief ËÙ¶ÈÓë½Ç¶È»·×ÛºÏ²âÊÔÏÔÊ¾
+ * @brief é€Ÿåº¦ä¸è§’åº¦ç¯ç»¼åˆæµ‹è¯•æ˜¾ç¤º
  */
 void printf_speed_test(void)
 {
@@ -109,13 +112,13 @@ void printf_speed_test(void)
     ips114_show_float(0, 75, gyro_z, 6, 2);
     ips114_show_float(0, 95, PID.angle.error, 6, 2);
 
-    /* ´®¿ÚÍ¬²½ÉÏ±¨²âÊÔÊı¾İ */
+    /* ä¸²å£åŒæ­¥ä¸ŠæŠ¥æµ‹è¯•æ•°æ® */
     printf("%f,%f,%f,%f\n", test_angle_value, gyro_z, PID.angle.error, PID.angle.output);
 }
 
 /**
- * @brief °´¼üÎïÀí×´Ì¬²âÊÔÏÔÊ¾
- * @details ¼ì²é¸÷°´¼üÒı½Å£¨P33-P37£©µÄÊµÊ±µçÆ½£¬·½±ãÅÅ²éÓ²¼ş°´¼ü¹ÊÕÏ
+ * @brief æŒ‰é”®ç‰©ç†çŠ¶æ€æµ‹è¯•æ˜¾ç¤º
+ * @details æ£€æŸ¥å„æŒ‰é”®å¼•è„šï¼ˆP33-P37ï¼‰çš„å®æ—¶ç”µå¹³ï¼Œæ–¹ä¾¿æ’æŸ¥ç¡¬ä»¶æŒ‰é”®æ•…éšœ
  */
 void printf_butten_test(void)
 {

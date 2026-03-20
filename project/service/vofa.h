@@ -3,31 +3,31 @@
 
 #include "zf_common_typedef.h"
 
-// VOFA+ FireWater Ğ­Òé»º³åÇø¶¨Òå
-#define VOFA_BUFFER_SIZE 64 // ½ÓÊÕ»º³åÇø´óĞ¡£¬´Ó64Ôö´óµ½256
-#define VOFA_MAX_CMD_LEN 32  // ×î´óÃüÁî³¤¶È£¬´Ó32Ôö´óµ½128
+// VOFA+ FireWater åè®®ç¼“å†²åŒºå®šä¹‰
+#define VOFA_BUFFER_SIZE 64 // æ¥æ”¶ç¼“å†²åŒºå¤§å°ï¼Œä»64å¢å¤§åˆ°256
+#define VOFA_MAX_CMD_LEN 32  // æœ€å¤§å‘½ä»¤é•¿åº¦ï¼Œä»32å¢å¤§åˆ°128
 
-// ½âÎö×´Ì¬
+// è§£æçŠ¶æ€
 typedef enum
 {
-    VOFA_PARSE_IDLE = 0,  // ¿ÕÏĞ×´Ì¬
-    VOFA_PARSE_RECEIVING, // ÕıÔÚ½ÓÊÕ
-    VOFA_PARSE_COMPLETE   // ½âÎöÍê³É
+    VOFA_PARSE_IDLE = 0,  // ç©ºé—²çŠ¶æ€
+    VOFA_PARSE_RECEIVING, // æ­£åœ¨æ¥æ”¶
+    VOFA_PARSE_COMPLETE   // è§£æå®Œæˆ
 } vofa_parse_state_enum;
 
-// VOFA Êı¾İ½á¹¹
+// VOFA æ•°æ®ç»“æ„
 typedef struct
 {
-    uint8 buffer[VOFA_BUFFER_SIZE];     // ½ÓÊÕ»º³åÇø
-    uint8 cmd_buffer[VOFA_MAX_CMD_LEN]; // ÃüÁî»º³åÇø
-    uint8 index;                        // µ±Ç°Ë÷Òı
-    uint8 cmd_len;                      // ÃüÁî³¤¶È
-    vofa_parse_state_enum state;        // ½âÎö×´Ì¬
+    uint8 buffer[VOFA_BUFFER_SIZE];     // æ¥æ”¶ç¼“å†²åŒº
+    uint8 cmd_buffer[VOFA_MAX_CMD_LEN]; // å‘½ä»¤ç¼“å†²åŒº
+    uint8 index;                        // å½“å‰ç´¢å¼•
+    uint8 cmd_len;                      // å‘½ä»¤é•¿åº¦
+    vofa_parse_state_enum state;        // è§£æçŠ¶æ€
 } vofa_data_struct;
 
-// º¯ÊıÉùÃ÷
+// å‡½æ•°å£°æ˜
 void vofa_init(void);
-void vofa_parse_from_fifo(void); // ´Ó FIFO ¶ÁÈ¡Êı¾İ²¢½âÎö£¨ÔÚÑ­»·ÖĞµ÷ÓÃ£©
+void vofa_parse_from_fifo(void); // ä» FIFO è¯»å–æ•°æ®å¹¶è§£æï¼ˆåœ¨å¾ªç¯ä¸­è°ƒç”¨ï¼‰
 uint8 vofa_get_command(char *cmd_out, uint8 max_len);
 void vofa_clear_buffer(void);
 void vofa_parse_command(char *cmd);

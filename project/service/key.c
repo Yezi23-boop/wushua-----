@@ -1,38 +1,38 @@
 #include "zf_common_headfile.h"
 #include "key.h"
 
-/* Ó²¼şÒı½Å¶¨Òå */
-#define KEY1_PIN P37 /* ÉÏ/Ôö¼Ó */
-#define KEY2_PIN P35 /* ÏÂ/¼õÉÙ */
-#define KEY3_PIN P34 /* È·¶¨/ÇĞ»» */
-#define KEY4_PIN P33 /* ·µ»Ø/È¡Ïû */
+/* ç¡¬ä»¶å¼•è„šå®šä¹‰ */
+#define KEY1_PIN P37 /* ä¸Š/å¢åŠ  */
+#define KEY2_PIN P35 /* ä¸‹/å‡å°‘ */
+#define KEY3_PIN P34 /* ç¡®å®š/åˆ‡æ¢ */
+#define KEY4_PIN P33 /* è¿”å›/å–æ¶ˆ */
 
 #define KEY_NUM 4
 
-/* É¨Ãè²ÎÊıÅäÖÃ */
-#define LONG_PRESS_THRESHOLD 3 /* ÅĞ¶¨³¤°´ËùĞèµÄÉ¨ÃèÖÜÆÚÊı */
-#define DEBOUNCE_THRESHOLD 1   /* Ïû¶¶È·ÈÏÖÜÆÚ */
-#define REPEAT_INTERVAL 1      /* ³¤°´´¥·¢Á¬·¢Ğ§¹ûµÄ¼ä¸ô */
+/* æ‰«æå‚æ•°é…ç½® */
+#define LONG_PRESS_THRESHOLD 3 /* åˆ¤å®šé•¿æŒ‰æ‰€éœ€çš„æ‰«æå‘¨æœŸæ•° */
+#define DEBOUNCE_THRESHOLD 1   /* æ¶ˆæŠ–ç¡®è®¤å‘¨æœŸ */
+#define REPEAT_INTERVAL 1      /* é•¿æŒ‰è§¦å‘è¿å‘æ•ˆæœçš„é—´éš” */
 
-/* È«¾Ö°´¼ü×´Ì¬±äÁ¿ */
-uint8 keystroke_label = 0;             /* ¶ÔÍâ·¢²¼µÄ°´¼üÊÂ¼ş±àÂë */
-uint8 key_last_status[KEY_NUM] = {0};  /* ÉÏ´ÎÎÈ¶¨×´Ì¬ */
-uint8 key_status[KEY_NUM] = {0};       /* µ±Ç°Ïû¶¶ºóµÄÎÈ¶¨×´Ì¬ */
-uint16 key_press_time[KEY_NUM] = {0};  /* ÀÛ¼Æ°´ÏÂÊ±³¤ */
-uint8 key_debounce_cnt[KEY_NUM] = {0}; /* Ïû¶¶¼ÆÊıÆ÷ */
+/* å…¨å±€æŒ‰é”®çŠ¶æ€å˜é‡ */
+uint8 keystroke_label = 0;             /* å¯¹å¤–å‘å¸ƒçš„æŒ‰é”®äº‹ä»¶ç¼–ç  */
+uint8 key_last_status[KEY_NUM] = {0};  /* ä¸Šæ¬¡ç¨³å®šçŠ¶æ€ */
+uint8 key_status[KEY_NUM] = {0};       /* å½“å‰æ¶ˆæŠ–åçš„ç¨³å®šçŠ¶æ€ */
+uint16 key_press_time[KEY_NUM] = {0};  /* ç´¯è®¡æŒ‰ä¸‹æ—¶é•¿ */
+uint8 key_debounce_cnt[KEY_NUM] = {0}; /* æ¶ˆæŠ–è®¡æ•°å™¨ */
 
 /**
- * @brief ÎïÀí°´¼üÉ¨ÃèÂß¼­
- * @details ²ÉÓÃ·Ç×èÈû×´Ì¬»úÊµÏÖ£¬Ö§³ÖËÄÂ·¶ÀÁ¢°´¼üµÄÏû¶¶¡¢¶Ì°´ºÍ³¤°´Ê¶±ğ
+ * @brief ç‰©ç†æŒ‰é”®æ‰«æé€»è¾‘
+ * @details é‡‡ç”¨éé˜»å¡çŠ¶æ€æœºå®ç°ï¼Œæ”¯æŒå››è·¯ç‹¬ç«‹æŒ‰é”®çš„æ¶ˆæŠ–ã€çŸ­æŒ‰å’Œé•¿æŒ‰è¯†åˆ«
  */
 void Keystroke_Scan(void)
 {
     uint8 i = 0;
     uint8 raw[KEY_NUM];
 
-    keystroke_label = 0; /* ±¾ÖÜÆÚÄ¬ÈÏÎŞ°´¼üÊÂ¼ş */
+    keystroke_label = 0; /* æœ¬å‘¨æœŸé»˜è®¤æ— æŒ‰é”®äº‹ä»¶ */
 
-    /* ¶ÁÈ¡Ó²¼şÒı½ÅÔ­Ê¼Öµ£¨µÍµçÆ½ÓĞĞ§£¬È¡·´ºó 1 ´ú±í°´ÏÂ£© */
+    /* è¯»å–ç¡¬ä»¶å¼•è„šåŸå§‹å€¼ï¼ˆä½ç”µå¹³æœ‰æ•ˆï¼Œå–åå 1 ä»£è¡¨æŒ‰ä¸‹ï¼‰ */
     raw[0] = (uint8)(!KEY1_PIN);
     raw[1] = (uint8)(!KEY2_PIN);
     raw[2] = (uint8)(!KEY3_PIN);
@@ -40,27 +40,27 @@ void Keystroke_Scan(void)
 
     for (i = 0; i < KEY_NUM; i++)
     {
-        /* --- Ïû¶¶Âß¼­ --- */
+        /* --- æ¶ˆæŠ–é€»è¾‘ --- */
         if (raw[i] != key_status[i])
         {
             key_debounce_cnt[i]++;
             if (key_debounce_cnt[i] >= DEBOUNCE_THRESHOLD)
             {
-                /* ×´Ì¬·¢ÉúÎÈ¶¨ÇĞ»» */
+                /* çŠ¶æ€å‘ç”Ÿç¨³å®šåˆ‡æ¢ */
                 key_last_status[i] = key_status[i];
                 key_status[i] = raw[i];
                 key_debounce_cnt[i] = 0;
 
                 if (key_status[i])
                 {
-                    key_press_time[i] = 0; /* ĞÂ°´ÏÂ£¬¿ªÊ¼¼ÆÊ± */
+                    key_press_time[i] = 0; /* æ–°æŒ‰ä¸‹ï¼Œå¼€å§‹è®¡æ—¶ */
                 }
                 else
                 {
-                    /* °´¼üÊÍ·Å£¬ÅĞ¶ÏÊÇ·ñÎªÓĞĞ§µÄ¶Ì°´ */
+                    /* æŒ‰é”®é‡Šæ”¾ï¼Œåˆ¤æ–­æ˜¯å¦ä¸ºæœ‰æ•ˆçš„çŸ­æŒ‰ */
                     if (key_last_status[i] && key_press_time[i] < LONG_PRESS_THRESHOLD)
                     {
-                        keystroke_label = (uint8)(i + 1); /* ²úÉú¶Ì°´ÊÂ¼ş (1-4) */
+                        keystroke_label = (uint8)(i + 1); /* äº§ç”ŸçŸ­æŒ‰äº‹ä»¶ (1-4) */
                         break;
                     }
                     key_press_time[i] = 0;
@@ -69,21 +69,21 @@ void Keystroke_Scan(void)
         }
         else
         {
-            key_debounce_cnt[i] = 0; /* µçÆ½ÎÈ¶¨£¬ÇåÁãÏû¶¶¼ÆÊı */
+            key_debounce_cnt[i] = 0; /* ç”µå¹³ç¨³å®šï¼Œæ¸…é›¶æ¶ˆæŠ–è®¡æ•° */
         }
 
-        /* --- ³¤°´ÓëÁ¬·¢Âß¼­ --- */
+        /* --- é•¿æŒ‰ä¸è¿å‘é€»è¾‘ --- */
         if (key_status[i])
         {
             key_press_time[i]++;
 
-            /* ¸Õ´ïµ½³¤°´ãĞÖµ£¬²úÉúÊ×¸ö³¤°´ÊÂ¼ş (5-8) */
+            /* åˆšè¾¾åˆ°é•¿æŒ‰é˜ˆå€¼ï¼Œäº§ç”Ÿé¦–ä¸ªé•¿æŒ‰äº‹ä»¶ (5-8) */
             if (key_press_time[i] == LONG_PRESS_THRESHOLD)
             {
                 keystroke_label = (uint8)(i + 5);
                 break;
             }
-            /* ³¬¹ıãĞÖµºó£¬°´ÕÕ REPEAT_INTERVAL ²úÉúÁ¬·¢ÊÂ¼ş */
+            /* è¶…è¿‡é˜ˆå€¼åï¼ŒæŒ‰ç…§ REPEAT_INTERVAL äº§ç”Ÿè¿å‘äº‹ä»¶ */
             else if (key_press_time[i] > LONG_PRESS_THRESHOLD)
             {
                 if (((key_press_time[i] - LONG_PRESS_THRESHOLD) % REPEAT_INTERVAL) == 0)
