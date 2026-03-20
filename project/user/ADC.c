@@ -43,8 +43,8 @@ static void dispose(void)
     float denom = 0.0f;
 
     /* 计算分母：加权和项 + 非线性偏差补偿项 */
-    denom = g_app_config.angle.A_1 * (float)(ad1 + ad4) +
-            g_app_config.angle.C_l * (float)func_abs((int)ad2 - (int)ad3);
+    denom = app.angle.A_1 * (float)(ad1 + ad4) +
+            app.angle.C_l * (float)func_abs((int)ad2 - (int)ad3);
 
     /* 防除零保护 */
     if (denom < 1.0f)
@@ -54,7 +54,7 @@ static void dispose(void)
     }
 
     /* 差比和计算公式：Err = limit * (加权差) / 加权项 */
-    Err = (float)limit * (g_app_config.angle.A_1 * (float)((int)ad1 - (int)ad4) + g_app_config.angle.B_1 * (float)((int)ad2 - (int)ad3)) / denom;
+    Err = (float)limit * (app.angle.A_1 * (float)((int)ad1 - (int)ad4) + app.angle.B_1 * (float)((int)ad2 - (int)ad3)) / denom;
 }
 
 /**

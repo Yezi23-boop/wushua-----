@@ -2,7 +2,7 @@
 
 ## 模块职责
 
-`eeprom.c` 负责项目配置参数的持久化读写。当前已经把原先分散的参数收拢成 `AppConfig g_app_config`。
+`eeprom.c` 负责项目配置参数的持久化读写。当前已经把原先分散的参数收拢成 `AppConfig g_app_config`。app_config
 
 ## 对外入口函数
 
@@ -11,7 +11,7 @@
 
 ## 对外配置对象
 
-- `g_app_config`
+- `app`
 
 其内部按语义分成：
 
@@ -48,7 +48,7 @@
 1. 读取 EEPROM 缓冲区
 2. 判断是否已初始化
 3. 未初始化则写入默认配置
-4. 已初始化则按旧地址布局恢复到 `g_app_config`
+4. 已初始化则按旧地址布局恢复到 `g_app_coapp_config
 
 ## 高频路径注意事项
 

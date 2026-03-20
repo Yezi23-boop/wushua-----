@@ -15,7 +15,7 @@
 依赖：
 
 - `vx / vy / vz`
-- `g_app_config.start.fuya_xili`
+- `app.start.fuya_xili`
 - 启停状态和起跑状态
 
 被依赖：

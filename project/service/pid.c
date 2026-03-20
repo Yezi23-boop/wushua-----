@@ -69,12 +69,12 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
      * 乘以 0.2f 是将原始计数值转换为实际速度单位的缩放因子
      * 注意：左轮和右轮可能因为安装方向不同而需要取反
      */
-    right->speed = -encoder_get_count(TIM4_ENCOEDER) * 0.2f; /* 右电机编码器 */
-    left->speed = encoder_get_count(TIM3_ENCOEDER) * 0.2f;    /* 左电机编码器 */
+    right->speed = encoder_get_count(TIM4_ENCOEDER) * 0.2f; /* 右电机编码器 */
+    left->speed = -encoder_get_count(TIM3_ENCOEDER) * 0.2f;    /* 左电机编码器 */
 
     /* 对原始速度进行一阶低通滤波，减小编码器噪声对速度环的影响 */
-    low_pass_filter_mt(&encoder_l, &left->speed, 1.0f); /* alpha=1.0 代表暂不滤波，可根据需要调整 */
-    low_pass_filter_mt(&encoder_r, &right->speed, 1.0f);
+    low_pass_filter_mt(&encoder_l, &left->speed, 0.8f); /* alpha=1.0 代表暂不滤波，可根据需要调整 */
+    low_pass_filter_mt(&encoder_r, &right->speed, 0.8f);
 
     /* 清零硬件计数器，准备下一采样周期的计数 */
     encoder_clear_count(TIM3_ENCOEDER);
@@ -151,10 +151,10 @@ void pid_steer_update(PID_Steer *pid, float error)
 
 /**
  * @brief 角度环 PID 更新（位置式算法）
- * @details 主要利用陀螺仪 Z 轴角速度进行闭环，抑制车身摆动或实现定角转向
+ * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
  * @param pid PID 结构指针
  * @param error 目标偏差（通常是 目标角度 - 当前角度）
- * @param gyro 陀螺仪实时反馈值
+ * @param gyro Calibrated steering feedback value
  */
 void pid_angle_update(PID_Steer *pid, float error, float gyro)
 {
@@ -226,7 +226,7 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
  * 3. 实现更平滑的高速循迹和抗干扰能力
  * @param speed_ref 基础参考速度
  * @param norm_error 归一化后的赛道位置偏差
- * @param gyro_z 陀螺仪 Z 轴实时角速度
+ * @param gyro_z Calibrated steering feedback value
  * @param left_target 输出：左轮目标速度
  * @param right_target 输出：右轮目标速度
  */
@@ -247,12 +247,12 @@ void Pure_Pursuit_Gyro_Control(float speed_ref, float norm_error, float gyro_z, 
     if (curvature > 0.1f)  curvature = 0.1f;
     if (curvature < -0.1f) curvature = -0.1f;
 
-    /* 3. 将目标曲率转换为目标角速度 (Omega = V * Curvature) */
-    /* 57.3f 是弧度转角度系数（假设 gyro_z 单位为 度/s） */
+    /* 3. Convert curvature to the target turn rate */
+    /* Keep 57.3f to preserve the current control formula */
     target_omega = speed_ref * curvature * 57.3f;
 
-    /* 4. 陀螺仪内环闭环控制 */
-    /* 以理论角速度为目标，实测角速度为反馈，更新 PID 控制器 */
+    /* 4. Close the inner loop with calibrated gyro_z feedback */
+    /* Use the current project semantics for gyro_z */
     pid_steer_update(&PID.angle, target_omega - gyro_z);
 
     /* 5. 获取 PID 控制器的输出作为差速调节量 */

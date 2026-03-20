@@ -2,8 +2,8 @@
 #include "debug_view.h"
 
 /* --- 功能模块开关控制 --- */
-#define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
-#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
+#define MAIN_ENABLE_VOFA 1       /* 是否使能 VOFA+ 上位机串口交互 */
+#define MAIN_ENABLE_MENU 0       /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 
 /**

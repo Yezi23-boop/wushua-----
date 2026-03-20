@@ -17,8 +17,8 @@ void test_angle_func(void)
     /* 2. 获取编码器反馈速度 */
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* 3. 更新角度闭环控制器（反馈项 gyro_z 乘以系数 0.082 进行单位对齐） */
-    pid_angle_update(&PID.angle, test_angle_value, gyro_z * 0.082f);
+    /* 3. Use calibrated gyro_z directly in the feedback path */
+    pid_angle_update(&PID.angle, test_angle_value, gyro_z);
 
     /* 4. 将角度控制器的输出作为差速调节量，叠加到速度环 */
     /* 注意：左右轮目标速度方向相反以实现原地或行进间转弯 */

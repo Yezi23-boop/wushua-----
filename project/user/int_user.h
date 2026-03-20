@@ -11,7 +11,7 @@ void int_user(void);
 
 /**
  * @brief 应用最新的全局配置到 PID 控制器
- * @details 将 g_app_config 中的参数同步到实时运行的 PID 实例中
+ * @details 将 app 中的参数同步到实时运行的 PID 实例中
  */
 void control_apply_config(void);
 

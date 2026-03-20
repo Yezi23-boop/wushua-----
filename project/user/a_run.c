@@ -1,6 +1,7 @@
 #include "zf_common_headfile.h"
 #include "a_run.h"
 #include "a_run_mode.h"
+#include "../service/soft_timer.h"
 
 /* --- 全局状态变量 --- */
 volatile int flat_statr = 0; /* 运行状态机：0-待机，1-已准备，2-正在运行 */
@@ -11,7 +12,8 @@ static int time_1 = 0;       /* 分频计数器，用于在 5ms 任务中分出 10ms 逻辑 */
 static int speed_active = 0; /* 当前期望执行的物理速度 */
 
 /* 内部私有函数声明 */
-static void a_run_apply_iap_guard(void);
+// 已在 a_run.h 中声明为全局函数
+// static void a_run_apply_iap_guard(void);
 
 /**
  * @brief 5ms 周期核心任务
@@ -23,8 +25,8 @@ void run_time_1(void)
     a_run_apply_iap_guard();
 
     /* 2. 传感器数据获取 */
-    read_AD();      /* 读取并处理电感 ADC */
-    Prepare_Data(); /* 读取 IMU 原始数据并预处理 */
+    read_AD();                                      /* 读取并处理电感 ADC */
+    Prepare_Data();                                 /* 读取 IMU 原始数据并预处理 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 获取左右编码器速度 */
 
     /* 3. 分段执行转向 PID (此处 10ms 更新一次转向环) */
@@ -36,18 +38,18 @@ void run_time_1(void)
     }
 
     /* 4. 特殊元素速度/方向策略更新 (如飞坡慢速处理) */
-   a_run_mode_update_fly_speed(&speed_active);
+    a_run_mode_update_fly_speed(&speed_active);
 
     /* 5. 串级 PID 控制 */
-    /* 角度环：以转向环输出为目标角度，结合陀螺仪反馈 */
-    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * 0.082f);
-    
+    /* Steering feedback loop uses calibrated gyro_z */
+    pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
+    run_mode_update_angle_output(&PID.angle.output); /* 根据环岛状态机可能覆盖转向输出 */
     /* 速度环：基础速度叠加/删减角度环的差速调节量 */
     pid_speed_update(&PID.left_speed, (float)speed_active - PID.angle.output, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, (float)speed_active + PID.angle.output, PID.right_speed.speed);
 
     /* 6. 执行电机物理输出 */
-    if (flat_statr >= 2)
+    if (a_run_mode_get_start_state() == 2)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
@@ -70,8 +72,13 @@ void run_time_2(void)
     IMUupdate(&Gyr_filt, &Acc_filt, &Att_Angle);
 
     /* 4. 运行模式管理 */
-    a_run_mode_update_start_state(); /* 按键启动逻辑 */
-    a_run_mode_update_fuya_state();  /* 负压吸附状态更新 */
+    a_run_mode_update_start_state(); /* 按键启动逻辑，10ms定时推进状态机 */
+    // 更新全局运行标志
+    flat_statr = a_run_mode_get_start_state();
+    a_run_mode_update_fuya_state(); /* 负压吸附状态更新 */
+
+    /* 5. 软件定时器后台更新 */
+    soft_timer_update_10ms();
 }
 
 /**
@@ -94,15 +101,15 @@ void run_time_3(void)
     /* 执行纯追踪融合算法 */
     {
         float norm_err = Err / 100.0f; /* 归一化偏差 */
-        /* 假设 gyro_z 单位已转换为 rad/s 或度/s 匹配 Pure_Pursuit 内部要求 */
-        Pure_Pursuit_Gyro_Control(g_app_config.speed.speed_run, norm_err, gyro_z, &left_target, &right_target);
+        /* Keep using calibrated gyro_z in this experimental path */
+        Pure_Pursuit_Gyro_Control(app.speed.speed_run, norm_err, gyro_z, &left_target, &right_target);
     }
 
     /* 更新底层速度环并输出 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
 
-    if (flat_statr >= 2)
+    if (a_run_mode_get_start_state() == 2)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
@@ -121,12 +128,20 @@ void run_test_angle(void)
     test_angle_func();
     fuya_update_simple();
 }
-
+void run_test_motor(int speed_l, int speed_r)
+{
+    a_run_apply_iap_guard();
+    /* 1. 准备姿态数据（不依赖此数据可删） */
+    Prepare_Data();
+    /* 2. 获取左右编码器速度 */
+    Encoder_get(&PID.left_speed, &PID.right_speed);
+    motor_output(speed_l, speed_r);
+}
 /**
  * @brief 硬件复位守卫
  * @details 检测 P32 引脚（通常连接物理按键），若按下则强制进入 IAP 下载模式
  */
-static void a_run_apply_iap_guard(void)
+void a_run_apply_iap_guard(void)
 {
     if (!P32)
     {

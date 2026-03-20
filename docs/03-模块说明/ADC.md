@@ -14,7 +14,7 @@
 依赖：
 
 - ADC 硬件接口
-- `g_app_config.angle.A_1 / B_1 / C_l`
+- `app.angle.A_1 / B_1 / C_l`
 
 被依赖：
 

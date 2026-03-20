@@ -59,8 +59,8 @@ static void hardware_init(void)
 static void control_init(void)
 {
     /* 速度环初始化：默认给定一组安全的基础参数 */
-    pid_speed_init(&PID.left_speed, 120.0f, 50.0f, 0.0f, 5000.0f, 5000.0f);
-    pid_speed_init(&PID.right_speed, 120.0f, 50.0f, 0.0f, 5000.0f, 5000.0f);
+    pid_speed_init(&PID.left_speed, 120.0f, 50.0f, 0.0f, 8000.0f, 8000.0f);
+    pid_speed_init(&PID.right_speed, 120.0f, 50.0f, 0.0f, 8000.0f, 8000.0f);
 
     /* 转向环与角度环先清零，随后由 apply_config 从 EEPROM 加载 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
@@ -81,24 +81,24 @@ static void app_init(void)
 
 /**
  * @brief 参数同步函数
- * @details 将全局配置结构体 g_app_config 中的值写入到 PID 运行实例中
+ * @details 将全局配置结构体 app 中的值写入到 PID 运行实例中
  */
 void control_apply_config(void)
 {
     /* 1. 同步转向环（基于电感）参数 */
-    PID.steer.Kp = g_app_config.speed.kp_Err;
-    PID.steer.Kd = g_app_config.speed.kd_Err;
-    PID.steer.Kp2 = g_app_config.speed.kp2_Err;
-    PID.steer.max_output = g_app_config.speed.limiting_Err;
-    PID.steer.min_output = g_app_config.speed.limiting_Err;
+    PID.steer.Kp = app.speed.kp_Err;
+    PID.steer.Kd = app.speed.kd_Err;
+    PID.steer.Kp2 = app.speed.kp2_Err;
+    PID.steer.max_output = app.speed.limiting_Err;
+    PID.steer.min_output = app.speed.limiting_Err;
     clamp_steer_output(&PID.steer);
 
     /* 2. 同步角度环（基于陀螺仪）参数 */
-    PID.angle.Kp = g_app_config.angle.kp_Angle;
-    PID.angle.Kd = g_app_config.angle.kd_Angle;
+    PID.angle.Kp = app.angle.kp_Angle;
+    PID.angle.Kd = app.angle.kd_Angle;
     PID.angle.Kp2 = 0.0f;
-    PID.angle.max_output = g_app_config.angle.limiting_Angle;
-    PID.angle.min_output = g_app_config.angle.limiting_Angle;
+    PID.angle.max_output = app.angle.limiting_Angle;
+    PID.angle.min_output = app.angle.limiting_Angle;
     clamp_steer_output(&PID.angle);
 }
 

@@ -110,8 +110,8 @@ void Prepare_Data(void)
         Gyr_filt.Y = (imu660ra_gyro_transition(imu660ra_gyro_y) - Gyro_offset_y) * DegtoRad;
         Gyr_filt.Z = (imu660ra_gyro_transition(imu660ra_gyro_z) - Gyro_offset_z) * DegtoRad;
 
-        /* 获取 Z 轴角速度（度/s），用于差速控制，附加低通滤波 */
-        gyro_z = imu660ra_gyro_transition(imu660ra_gyro_z) - Gyro_offset_z;
+        /* Calibrated Z-axis control feedback with low-pass filtering */
+        gyro_z = (imu660ra_gyro_transition(imu660ra_gyro_z) - Gyro_offset_z) * 0.082f;
         low_pass_filter_mt(&Gyr_filt_lowpass, &gyro_z, 0.6f);
 
         /* 加速度预处理 */
@@ -131,6 +131,7 @@ void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
     float gx = Gyr_rad->X, gy = Gyr_rad->Y, gz = Gyr_rad->Z;
     static float exInt = 0.0f, eyInt = 0.0f, ezInt = 0.0f;
     float q0_o, q1_o, q2_o, q3_o;
+    float temp_vx;
 
     /* 1. 加速度向量归一化（提取重力方向） */
     norm = invSqrt(ax * ax + ay * ay + az * az);
@@ -173,7 +174,14 @@ void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
     q2 *= norm;
     q3 *= norm;
 
-    /* 7. 计算欧拉角（偏航角采用积分方式，防止万向节死锁下的跳变） */
+    /* 7. 计算欧拉角（俯仰角、横滚角，以及偏航角） */
+    temp_vx = vx;
+    if (temp_vx > 1.0f) temp_vx = 1.0f;
+    if (temp_vx < -1.0f) temp_vx = -1.0f;
+    Angle->pit = (float)asin(-temp_vx) * RadtoDeg;          /* 俯仰角 (Pitch) */
+    Angle->rol = (float)my_atan2(vy, vz) * RadtoDeg;        /* 横滚角 (Roll) */
+
+    /* 偏航角采用积分方式，防止万向节死锁下的跳变 */
     if ((Gyr_rad->Z * RadtoDeg > 1.0f) || (Gyr_rad->Z * RadtoDeg < -1.0f))
     {
         /* 这里的 0.01f 为实际调用 IMUupdate 的采样周期 (10ms) */

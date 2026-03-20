@@ -41,8 +41,8 @@ void printf_date(void)
 
     /* 第三列：显示 PID 转向输出及左右目标速度 */
     ips114_show_float(3 * 24, 18 * 0, PID.steer.output, 3, 1);
-    ips114_show_float(3 * 24, 18 * 1, g_app_config.speed.speed_run + PID.steer.output, 3, 1);
-    ips114_show_float(3 * 24, 18 * 2, g_app_config.speed.speed_run - PID.steer.output, 3, 1);
+    ips114_show_float(3 * 24, 18 * 1, app.speed.speed_run + PID.steer.output, 3, 1);
+    ips114_show_float(3 * 24, 18 * 2, app.speed.speed_run - PID.steer.output, 3, 1);
 
     /* 第六列：显示实时电池电压 */
     ips114_show_int32(6 * 24, 18 * 1, (int32)dianya, 5);
@@ -107,10 +107,10 @@ void printf_speed_test(void)
     ips114_show_float(0, 35, speed_l, 6, 1);
     ips114_show_float(0, 55, speed_r, 6, 1);
     ips114_show_float(0, 75, gyro_z, 6, 2);
-    ips114_show_float(0, 95, gyro_z * 0.1f, 6, 2);
+    ips114_show_float(0, 95, PID.angle.error, 6, 2);
 
     /* 串口同步上报测试数据 */
-    printf("%f,%f,%f,%f\n", test_angle_value, gyro_z, gyro_z * 0.082f, PID.angle.output);
+    printf("%f,%f,%f,%f\n", test_angle_value, gyro_z, PID.angle.error, PID.angle.output);
 }
 
 /**

@@ -8,13 +8,15 @@
     },
     // 固定文件编码为 GBK（GB2312 的超集），避免中文注释乱码
     "files.encoding": "gbk",
-    // 关闭自动猜测编码，统一按 GBK 打开；如需兼容少量 UTF-8 文件可改为 true
-    "files.autoGuessEncoding": false,
     "files.exclude": {
         "**/seekfree.uvproj": true,
         "**/seekfree.uvopt": true,
         "**/seekfree.uvgui.TWO": true,
         "**/seekfree.uvgui.ye": true,
         "**/MDK删除临时文件.bat": true
+    },
+    "editor.formatOnSave": true,
+    "[c]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools"
     }
 }

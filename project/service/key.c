@@ -2,10 +2,10 @@
 #include "key.h"
 
 /* 硬件引脚定义 */
-#define KEY1_PIN P33 /* 上/增加 */
-#define KEY2_PIN P34 /* 下/减少 */
-#define KEY3_PIN P36 /* 确定/切换 */
-#define KEY4_PIN P37 /* 返回/取消 */
+#define KEY1_PIN P37 /* 上/增加 */
+#define KEY2_PIN P35 /* 下/减少 */
+#define KEY3_PIN P34 /* 确定/切换 */
+#define KEY4_PIN P33 /* 返回/取消 */
 
 #define KEY_NUM 4
 

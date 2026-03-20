@@ -16,7 +16,7 @@
 
 依赖：
 
-- `g_app_config`
+- `app`
 - `FUYA`
 - 外部状态 `flat_statr`
 

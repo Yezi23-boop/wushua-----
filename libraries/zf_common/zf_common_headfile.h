@@ -95,4 +95,5 @@
 #include "key.h"
 #include "vofa.h"
 #include "a_run.h"
+#include "soft_timer.h"
 #endif

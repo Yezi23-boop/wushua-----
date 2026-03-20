@@ -22,7 +22,7 @@
 - 编码器
 - 电感误差 `Err`
 - IMU 角速度
-- `g_app_config`
+- `app`
 
 被依赖：
 

@@ -1,10 +1,12 @@
 #include "zf_common_headfile.h"
 #include "eeprom.h"
 
-/* 数据缓冲区，用于与 IAP 接口交换数据 */
+/* 数据缓冲区，用于与 IAP 接口交换数据，大小为 200 字节 */
 uint8 date_buff[200];
+/* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
-AppConfig g_app_config;
+/* 全局配置结构体实例，运行时所有的参数都从这里读取 */
+AppConfig app;
 
 /* 内部私有函数声明 */
 static void eeprom_load_defaults(AppConfig *config);
@@ -17,20 +19,25 @@ static float read_float(uint8 value_bit);
 
 /**
  * @brief 加载系统默认参数
- * @details 当 EEPROM 中无有效数据时，使用此组硬编码参数
+ * @details 当检测到 EEPROM 中无有效数据（首次运行）时，使用此函数将硬编码的默认参数填充到 config 结构体中。
+ * 这些参数经过预先调试，能保证小车基本的稳定运行。
+ * @param config 指向需要填充默认值的配置结构体指针
  */
 static void eeprom_load_defaults(AppConfig *config)
 {
-    config->start.start_flag = 1;
-    config->start.circle_flags = 0;
-    config->start.fuya_xili = 2000.00f;
+    /* 启动与基础配置默认值 */
+    config->start.start_flag = 1;       /* 默认启动 */
+    config->start.circle_flags = 0;     /* 默认自动识别圆环方向 */
+    config->start.fuya_xili = 2000.00f; /* 默认负压吸力 */
 
+    /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 0.70f;
     config->speed.kd_Err = 0.70f;
-    config->speed.speed_run = 30.00f;
-    config->speed.limiting_Err = 600.00f;
+    config->speed.speed_run = 30.00f;     /* 默认基础速度 30 */
+    config->speed.limiting_Err = 600.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.01f;
 
+    /* 角度环 PID 默认参数 */
     config->angle.kp_Angle = 0.60f;
     config->angle.kd_Angle = 0.20f;
     config->angle.limiting_Angle = 30.00f;
@@ -38,22 +45,26 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.B_1 = 1.00f;
     config->angle.C_l = 0.60f;
 
-    config->ring.ring_encoder = 15.00f;
-    config->ring.pre_ring_Gyro_set = 210.00f;
-    config->ring.in_ring_Gyroz = 220.00f;
-    config->ring.pre_out_ring_Gyro_set = 170.00f;
-    config->ring.pre_out_ring_Gyroz = 350.00f;
-    config->ring.pre_out_ring_encoder = 30.00f;
+    /* 圆环策略默认参数 */
+    config->ring.ring_encoder = 15.00f;           /* 入环积分阈值 */
+    config->ring.pre_ring_Gyro_set = 210.00f;     /* 入环打角力度 */
+    config->ring.in_ring_Gyroz = 220.00f;         /* 环内角速度 */
+    config->ring.pre_out_ring_Gyro_set = 170.00f; /* 出环打角力度 */
+    config->ring.pre_out_ring_Gyroz = 350.00f;    /* 出环角速度阈值 */
+    config->ring.pre_out_ring_encoder = 30.00f;   /* 出环积分阈值 */
 
-    config->fly.count_fly_speed = 15;
-    config->fly.count_fly_time_1 = 3;
-    config->fly.count_fly_time_2 = 50;
-    config->fly.count_fly_angle = 0;
-    config->fly.fly_ramp_enable = 0; /* 默认关闭飞坡检测 */
+    /* 飞坡策略默认参数 */
+    config->fly.count_fly_speed = 15;  /* 飞坡慢速值 */
+    config->fly.count_fly_time_1 = 3;  /* 触发检测次数 */
+    config->fly.count_fly_time_2 = 50; /* 状态保持时间 (50 * 10ms = 500ms) */
+    config->fly.count_fly_angle = 0;   /* 舵机锁死角度 */
+    config->fly.fly_ramp_enable = 0;   /* 默认关闭飞坡检测，防止误触发 */
 }
 
 /**
- * @brief 从缓冲区解析配置到结构体
+ * @brief 从 EEPROM 缓冲区解析配置数据到结构体
+ * @details 按照固定的索引顺序（value_bit），将 date_buff 中的二进制数据还原为结构体成员变量。
+ * @param config 指向接收数据的配置结构体指针
  */
 static void eeprom_read_config(AppConfig *config)
 {
@@ -89,7 +100,10 @@ static void eeprom_read_config(AppConfig *config)
 }
 
 /**
- * @brief 将配置结构体序列化到缓冲区
+ * @brief 将配置结构体序列化并写入 Flash
+ * @details 按照固定的索引顺序（value_bit），将结构体成员变量转换为二进制并写入 Flash。
+ * 注意：每次调用 save_xxx 函数都会触发一次 Flash 写入操作。
+ * @param config 指向源数据的配置结构体指针
  */
 static void eeprom_write_config(const AppConfig *config)
 {
@@ -125,8 +139,13 @@ static void eeprom_write_config(const AppConfig *config)
 }
 
 /**
- * @brief EEPROM 初始化
- * @details 初始化 IAP 模块并读取历史配置，若首次运行则格式化
+ * @brief EEPROM 初始化主函数
+ * @details
+ * 1. 初始化 IAP 模块。
+ * 2. 读取 Flash 扇区 0 的全部数据到内存缓冲区。
+ * 3. 检查索引 0 处的标志位 `eeprom_init_time`。
+ *    - 若不为 1，说明是首次上电或 Flash 被擦除，此时加载默认参数并写入 Flash。
+ *    - 若为 1，说明 Flash 中有有效配置，直接从 Flash 读取参数到 `app`。
  */
 void eeprom_init(void)
 {
@@ -135,8 +154,8 @@ void eeprom_init(void)
     /* 从扇区 0 读取 200 字节到缓冲区 */
     iap_read_buff(0x00, date_buff, sizeof(date_buff));
 
-    /* 预加载默认值 */
-    eeprom_load_defaults(&g_app_config);
+    /* 预加载默认值到内存结构体（防止读取失败时无初值） */
+    eeprom_load_defaults(&app);
 
     /* 检查索引 0 的标志位，判断是否为有效配置 */
     eeprom_init_time = (uint8)read_int(0);
@@ -150,25 +169,27 @@ void eeprom_init(void)
     }
     else
     {
-        /* 若已初始化，则加载 EEPROM 中的真实数据 */
-        eeprom_read_config(&g_app_config);
+        /* 若已初始化，则加载 EEPROM 中的真实数据覆盖内存结构体 */
+        eeprom_read_config(&app);
     }
 }
 
 /**
  * @brief 执行 Flash 刷写操作
+ * @details 将当前 `app` 全局变量中的所有参数保存到 Flash 中。
+ * 通常在菜单中修改参数并确认保存后调用此函数。
  */
 void eeprom_flash(void)
 {
-    eeprom_write_config(&g_app_config);
+    eeprom_write_config(&app);
 }
 
 /* --- 底层读写辅助函数 --- */
 
 /**
  * @brief 将 int32 类型数据保存到缓冲区指定位置并同步到 Flash
- * @param input 数据
- * @param value_bit 逻辑索引（每个索引对应 4 字节）
+ * @param input 要保存的 32 位整型数据
+ * @param value_bit 数据存储的逻辑索引（每个索引占用 4 字节空间）
  */
 static void save_int(int32 input, uint8 value_bit)
 {
@@ -180,12 +201,14 @@ static void save_int(int32 input, uint8 value_bit)
     {
         date_buff[begin++] = *(p + i);
     }
-    /* 立即刷写到 Flash 扇区 */
+    /* 立即刷写到 Flash 扇区 0 */
     extern_iap_write_buff(0x00, date_buff, sizeof(date_buff));
 }
 
 /**
  * @brief 从缓冲区读取 int32 类型数据
+ * @param value_bit 数据存储的逻辑索引
+ * @return 读取到的 32 位整型数据
  */
 static int32 read_int(uint8 value_bit)
 {
@@ -203,6 +226,8 @@ static int32 read_int(uint8 value_bit)
 
 /**
  * @brief 将 float 类型数据保存到缓冲区并同步到 Flash
+ * @param input 要保存的 32 位浮点型数据
+ * @param value_bit 数据存储的逻辑索引
  */
 static void save_float(float input, uint8 value_bit)
 {
@@ -219,6 +244,8 @@ static void save_float(float input, uint8 value_bit)
 
 /**
  * @brief 从缓冲区读取 float 类型数据
+ * @param value_bit 数据存储的逻辑索引
+ * @return 读取到的 32 位浮点型数据
  */
 static float read_float(uint8 value_bit)
 {

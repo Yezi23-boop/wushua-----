@@ -784,6 +784,16 @@
               <FileType>5</FileType>
               <FilePath>..\service\vofa.h</FilePath>
             </File>
+            <File>
+              <FileName>soft_timer.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\soft_timer.c</FilePath>
+            </File>
+            <File>
+              <FileName>soft_timer.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\soft_timer.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

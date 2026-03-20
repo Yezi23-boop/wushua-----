@@ -38,7 +38,7 @@ typedef struct
 } FLOAT_ANGLE;
 
 /* --- 全局导出变量 --- */
-extern volatile float gyro_z;        /**< Z 轴实时角速度（度/s） */
+extern volatile float gyro_z;        /**< Calibrated Z-axis control feedback */
 extern float q0, q1, q2, q3;         /**< 姿态四元数 */
 extern FLOAT_ANGLE Att_Angle;        /**< 全局欧拉角输出 */
 extern FLOAT_XYZ Acc_filt, Gyr_filt; /**< 滤波后的加速度与角速度数据 */

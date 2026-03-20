@@ -30,5 +30,7 @@ void run_time_3(void);
 /* --- ²âÊÔ½Ó¿Ú --- */
 void run_test_speed(void);
 void run_test_angle(void);
+void run_test_motor(int speed_l, int speed_r);
+void a_run_apply_iap_guard(void);
 
 #endif /* __A_RUN_H__ */

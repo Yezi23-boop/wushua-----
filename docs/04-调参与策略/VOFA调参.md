@@ -22,7 +22,7 @@ VOFA 更适合这些情况：
 
 这类命令的行为是：
 
-1. 改 `g_app_config`
+1. 改 `gapp_config
 2. 调 `control_apply_config()`
 3. `SAVE` 后写入 EEPROM
 

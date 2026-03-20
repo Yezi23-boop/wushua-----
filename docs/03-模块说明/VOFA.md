@@ -17,7 +17,7 @@
 依赖：
 
 - 无线串口 FIFO
-- `g_app_config`
+- `app`
 - `control_apply_config()`
 - `config_save()`
 - `config_load()`
@@ -74,7 +74,7 @@
 
 ### 会进入配置并可保存的参数
 
-- 改 `g_app_config`
+- 改 `gapp_config
 - 调 `control_apply_config()`
 - `SAVE` 后进入 EEPROM
 
