@@ -797,6 +797,41 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>speed_loop_autotune</GroupName>
+          <Files>
+            <File>
+              <FileName>host_autotune_command.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\host_autotune_command.c</FilePath>
+            </File>
+            <File>
+              <FileName>host_autotune_command.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\host_autotune_command.h</FilePath>
+            </File>
+            <File>
+              <FileName>speed_loop_trial.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\speed_loop_trial.c</FilePath>
+            </File>
+            <File>
+              <FileName>speed_loop_trial.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\speed_loop_trial.h</FilePath>
+            </File>
+            <File>
+              <FileName>host_service.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\host_service.c</FilePath>
+            </File>
+            <File>
+              <FileName>host_service.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\host_service.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>code</GroupName>
         </Group>
         <Group>

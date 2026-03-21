@@ -1,4 +1,5 @@
 #include "zf_common_headfile.h"
+#include "../speed_loop_autotune/firmware/speed_loop_trial.h"
 
 /**
  * @brief UART1 DMA 接收中断

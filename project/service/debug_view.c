@@ -1,4 +1,5 @@
 #include "debug_view.h"
+#include "../speed_loop_autotune/firmware/host_service.h"
 #include "zf_common_headfile.h"
 
 /**
@@ -7,26 +8,7 @@
  */
 void debug_vofa_service(void)
 {
-    static char vofa_cmd[64];
-
-    /* 从 FIFO 缓冲区解析 VOFA 协议帧 */
-    vofa_parse_from_fifo();
-
-    /* 尝试获取一条完整的指令 */
-    if (vofa_get_command(vofa_cmd, 64))
-    {
-        /* 处理指令（如修改参数、切换状态等） */
-        handle_vofa_command(vofa_cmd);
-    }
-
-    /*
-     * 向串口打印波形数据，VOFA+ 上位机可通过此格式显示实时曲线
-     * 格式：数据1,数据2,数据3... \n
-     */
-    printf("%f,%f,%f,%ld,%ld,%d,%d\n", test_speed_value, PID.left_speed.speed, PID.right_speed.speed, (long)test_left_pwm_output, (long)test_right_pwm_output, (int)test_trial_active, (int)stop);
-
-    /* 限制遥测发送频率，避免持续发包挤占无线串口接收命令的时机 */
-    system_delay_ms(10);
+    speed_loop_autotune_service();
 }
 
 /**
