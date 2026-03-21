@@ -1,6 +1,7 @@
-# Speed Loop Autotune Debug Memory
+# Air Dual Speed Loop Autotune Debug Memory
 
-这份文档用于沉淀架空调试和实车调试里已经验证过的经验，避免后续会话重复踩坑。
+这份文档用于沉淀架空双轮 `air-dual` 调试里已经验证过的经验，避免后续会话重复踩坑。
+带负载双轮请改写 `ground_dual_debug_memory.md`。
 
 使用规则：
 - 每次实测后先写“已验证事实”，再写“推断”

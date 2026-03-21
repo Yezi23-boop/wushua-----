@@ -1,4 +1,7 @@
+import contextlib
+import importlib
 import importlib.util
+import io
 import pathlib
 import unittest
 
@@ -13,6 +16,10 @@ def load_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def load_host_package_module(module_name):
+    return importlib.import_module("project.speed_loop_autotune.host.{0}".format(module_name))
 
 
 class ParseTelemetryTests(unittest.TestCase):
@@ -126,12 +133,21 @@ class ScoreConfigTests(unittest.TestCase):
 
         args = parser.parse_args([])
 
+        self.assertEqual(args.mode, "air-dual")
         self.assertEqual(args.delta_kp, 10.0)
         self.assertEqual(args.delta_ki, 5.0)
         self.assertEqual(args.delta_kd, 0.5)
         self.assertEqual(args.search_tolerance, 1.0)
         self.assertEqual(args.autotune_sequence, module.DEFAULT_AUTOTUNE_SEQUENCE)
         self.assertEqual(args.autotune_verify_sequence, module.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE)
+
+    def test_normalize_mode_name_supports_explicit_and_legacy_labels(self):
+        module = load_module()
+
+        self.assertEqual(module.normalize_mode_name("air-dual"), "air-dual")
+        self.assertEqual(module.normalize_mode_name("autotune"), "air-dual")
+        self.assertEqual(module.normalize_mode_name("ground-dual"), "ground-dual")
+        self.assertEqual(module.normalize_mode_name("ground-load"), "ground-dual")
 
     def test_build_score_config_uses_cli_weights(self):
         module = load_module()
@@ -194,6 +210,27 @@ class ScoreConfigTests(unittest.TestCase):
             module.score_trial(calm, score_config=config),
             module.score_trial(aggressive, score_config=config),
         )
+
+
+class ModuleSplitTests(unittest.TestCase):
+    def test_split_host_modules_can_be_imported_individually(self):
+        common = load_host_package_module("common")
+        air_dual = load_host_package_module("air_dual")
+        ground_dual = load_host_package_module("ground_dual")
+
+        self.assertEqual(common.MODE_AIR_DUAL, "air-dual")
+        self.assertEqual(air_dual.DEFAULT_AUTOTUNE_SEQUENCE.count(","), 6)
+        self.assertTrue(hasattr(ground_dual, "run_ground_dual_autotune"))
+
+    def test_top_level_module_reexports_split_host_entries(self):
+        module = load_module()
+        common = load_host_package_module("common")
+        air_dual = load_host_package_module("air_dual")
+        ground_dual = load_host_package_module("ground_dual")
+
+        self.assertIs(module.normalize_mode_name, common.normalize_mode_name)
+        self.assertIs(module.run_air_dual_autotune, air_dual.run_air_dual_autotune)
+        self.assertIs(module.run_ground_dual_autotune, ground_dual.run_ground_dual_autotune)
 
 
 class GroundLoadTests(unittest.TestCase):
@@ -325,6 +362,21 @@ class GroundLoadTests(unittest.TestCase):
         self.assertLess(
             module.score_ground_load_group(healthy),
             module.score_ground_load_group(unsafe),
+        )
+
+    def test_score_ground_load_group_rejects_missing_trial_groups(self):
+        module = load_module()
+        trials = [
+            module.GroundLoadTrial("t1", ((25.0, 200),), 200),
+            module.GroundLoadTrial("t2", ((35.0, 200),), 200),
+        ]
+        groups = [
+            [module.TelemetrySample(25.0, 24.5, 24.2, 2200.0, 2210.0, 0.0, 1.0)],
+        ]
+
+        self.assertEqual(
+            module.score_ground_load_group(groups, trials=trials),
+            float("inf"),
         )
 
     def test_run_ground_load_group_sends_expected_commands(self):
@@ -615,6 +667,100 @@ class AutotuneModeTests(unittest.TestCase):
 
 
 class SearchTests(unittest.TestCase):
+    def test_run_autotune_reports_worst_right_verification_score(self):
+        module = load_module()
+        air_dual = load_host_package_module("air_dual")
+
+        original_run_autotune_trial = air_dual.run_autotune_trial
+        original_optimize_single_wheel = air_dual._optimize_single_wheel
+        original_optimize_dual_pair = air_dual._optimize_dual_pair
+        original_score_wheel_multi_speed_trial = air_dual.score_wheel_multi_speed_trial
+        original_apply_speed_gains = air_dual.apply_speed_gains
+
+        main_samples = [module.TelemetrySample(15.0, 15.0, 15.0, 0.0, 0.0, 0.0, 1.0)]
+        verify_samples = [module.TelemetrySample(15.0, 14.0, 12.0, 0.0, 0.0, 0.0, 1.0)]
+        call_state = {"count": 0}
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            autotune_sequence = module.DEFAULT_AUTOTUNE_SEQUENCE
+            autotune_verify_sequence = module.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            initial_kp = 100.0
+            initial_ki = 20.0
+            initial_kd = 0.0
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = module.DEFAULT_MIN_SCORE_TARGET_SPEED
+            score_rise_weight = module.DEFAULT_SCORE_CONFIG.rise_weight
+            score_overshoot_weight = module.DEFAULT_SCORE_CONFIG.overshoot_weight
+            score_settle_weight = module.DEFAULT_SCORE_CONFIG.settle_weight
+            score_steady_weight = module.DEFAULT_SCORE_CONFIG.steady_weight
+            score_overshoot_gate = module.DEFAULT_SCORE_CONFIG.overshoot_gate
+            score_overshoot_gate_penalty = module.DEFAULT_SCORE_CONFIG.overshoot_gate_penalty
+            save_best = False
+
+        best_pair = module.WheelPidGains(
+            module.PidGains(101.0, 21.0, 0.0),
+            module.PidGains(106.0, 18.0, 0.0),
+        )
+
+        def fake_run_autotune_trial(client, gains, trial, rest_seconds, tail_zero_ms=0, sleep_fn=None):
+            del client, gains, trial, rest_seconds, tail_zero_ms, sleep_fn
+            call_state["count"] += 1
+            if call_state["count"] == 1:
+                return main_samples
+            return verify_samples
+
+        def fake_optimize_single_wheel(client, args, trial, score_config, wheel_name, fixed_pair):
+            del client, args, trial, score_config, fixed_pair
+            if wheel_name == "left":
+                return best_pair.left, 2.0
+            return best_pair.right, 3.0
+
+        def fake_optimize_dual_pair(client, args, trial, score_config, base_pair):
+            del client, args, trial, score_config
+            return base_pair, 1.0
+
+        def fake_score_wheel_multi_speed_trial(samples, trial, wheel_name, score_config=None, min_target_speed=None):
+            del trial, score_config, min_target_speed
+            if samples is verify_samples and wheel_name == "right":
+                return 9.0
+            if samples is main_samples and wheel_name == "right":
+                return 3.0
+            if samples is verify_samples and wheel_name == "left":
+                return 4.0
+            return 2.0
+
+        def fake_apply_speed_gains(client, gains):
+            del gains
+            client.send_command("APPLY")
+
+        air_dual.run_autotune_trial = fake_run_autotune_trial
+        air_dual._optimize_single_wheel = fake_optimize_single_wheel
+        air_dual._optimize_dual_pair = fake_optimize_dual_pair
+        air_dual.score_wheel_multi_speed_trial = fake_score_wheel_multi_speed_trial
+        air_dual.apply_speed_gains = fake_apply_speed_gains
+
+        try:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = module.run_autotune(FakeClient(), Args())
+        finally:
+            air_dual.run_autotune_trial = original_run_autotune_trial
+            air_dual._optimize_single_wheel = original_optimize_single_wheel
+            air_dual._optimize_dual_pair = original_optimize_dual_pair
+            air_dual.score_wheel_multi_speed_trial = original_score_wheel_multi_speed_trial
+            air_dual.apply_speed_gains = original_apply_speed_gains
+
+        self.assertEqual(result, 0)
+        self.assertIn("best right kp=106.0000 ki=18.0000 kd=0.0000 score=9.0000", output.getvalue())
+
     def test_twiddle_optimize_dual_pair_moves_toward_joint_minimum(self):
         module = load_module()
 
