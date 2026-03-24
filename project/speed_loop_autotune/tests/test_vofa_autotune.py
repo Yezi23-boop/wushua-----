@@ -29,10 +29,12 @@ class ParseTelemetryTests(unittest.TestCase):
         three = module.parse_telemetry_line("12.5,10.0,11.0")
         four = module.parse_telemetry_line("12.5,10.0,11.0,0.0")
         seven = module.parse_telemetry_line("30.0,29.5,29.0,3200,3180,1,0")
+        ten = module.parse_telemetry_line("30.0,29.5,29.0,3200,3180,1,0,2,3000,0")
 
         self.assertIsNotNone(three)
         self.assertIsNotNone(four)
         self.assertIsNotNone(seven)
+        self.assertIsNotNone(ten)
         self.assertEqual(three.target, 12.5)
         self.assertEqual(three.left_speed, 10.0)
         self.assertEqual(three.right_speed, 11.0)
@@ -41,6 +43,12 @@ class ParseTelemetryTests(unittest.TestCase):
         self.assertEqual(seven.right_pwm, 3180.0)
         self.assertEqual(seven.trial_active, 1.0)
         self.assertEqual(seven.stop_flag, 0.0)
+        self.assertEqual(seven.mode_id, 0.0)
+        self.assertEqual(seven.left_cmd_pwm, 0.0)
+        self.assertEqual(seven.right_cmd_pwm, 0.0)
+        self.assertEqual(ten.mode_id, 2.0)
+        self.assertEqual(ten.left_cmd_pwm, 3000.0)
+        self.assertEqual(ten.right_cmd_pwm, 0.0)
 
     def test_rejects_invalid_rows(self):
         module = load_module()
@@ -140,6 +148,12 @@ class ScoreConfigTests(unittest.TestCase):
         self.assertEqual(args.search_tolerance, 1.0)
         self.assertEqual(args.autotune_sequence, module.DEFAULT_AUTOTUNE_SEQUENCE)
         self.assertEqual(args.autotune_verify_sequence, module.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE)
+        self.assertEqual(args.identify_pwm_step, 200)
+        self.assertEqual(args.identify_pwm_max, 3200)
+        self.assertEqual(args.identify_repeat, 2)
+        self.assertEqual(args.identify_hold_ms, 250)
+        self.assertEqual(args.identify_tail_zero_ms, 200)
+        self.assertFalse(args.apply_identify_seed)
 
     def test_normalize_mode_name_supports_explicit_and_legacy_labels(self):
         module = load_module()
@@ -148,6 +162,7 @@ class ScoreConfigTests(unittest.TestCase):
         self.assertEqual(module.normalize_mode_name("autotune"), "air-dual")
         self.assertEqual(module.normalize_mode_name("ground-dual"), "ground-dual")
         self.assertEqual(module.normalize_mode_name("ground-load"), "ground-dual")
+        self.assertEqual(module.normalize_mode_name("pwm-identify"), "pwm-identify")
 
     def test_build_score_config_uses_cli_weights(self):
         module = load_module()
@@ -217,20 +232,256 @@ class ModuleSplitTests(unittest.TestCase):
         common = load_host_package_module("common")
         air_dual = load_host_package_module("air_dual")
         ground_dual = load_host_package_module("ground_dual")
+        pwm_identify = load_host_package_module("pwm_identify")
 
         self.assertEqual(common.MODE_AIR_DUAL, "air-dual")
+        self.assertEqual(common.MODE_PWM_IDENTIFY, "pwm-identify")
         self.assertEqual(air_dual.DEFAULT_AUTOTUNE_SEQUENCE.count(","), 6)
         self.assertTrue(hasattr(ground_dual, "run_ground_dual_autotune"))
+        self.assertTrue(hasattr(pwm_identify, "run_pwm_identify"))
 
     def test_top_level_module_reexports_split_host_entries(self):
         module = load_module()
         common = load_host_package_module("common")
         air_dual = load_host_package_module("air_dual")
         ground_dual = load_host_package_module("ground_dual")
+        pwm_identify = load_host_package_module("pwm_identify")
 
         self.assertIs(module.normalize_mode_name, common.normalize_mode_name)
         self.assertIs(module.run_air_dual_autotune, air_dual.run_air_dual_autotune)
         self.assertIs(module.run_ground_dual_autotune, ground_dual.run_ground_dual_autotune)
+        self.assertIs(module.run_pwm_identify, pwm_identify.run_pwm_identify)
+
+
+class FirmwareRegistryTests(unittest.TestCase):
+    def test_host_autotune_command_routes_through_registry_dispatch(self):
+        source = (
+            MODULE_PATH.parents[1] / "firmware" / "host_autotune_command.c"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("speed_loop_autotune_dispatch_param", source)
+        self.assertIn("speed_loop_autotune_dispatch_command", source)
+
+    def test_firmware_registry_lists_all_supported_autotune_tokens(self):
+        source = (
+            MODULE_PATH.parents[1] / "firmware" / "autotune_token_registry.c"
+        ).read_text(encoding="utf-8")
+
+        for token in (
+            "AT_KP",
+            "AT_KI",
+            "AT_KD",
+            "TEST_speed",
+            "AT_SPEED",
+            "AT_FUYA",
+            "AT_TRIAL_MS",
+            "AT_COOLDOWN_MS",
+            "AT_TEST_MODE",
+            "L_TEST_PWM",
+            "R_TEST_PWM",
+            "TEST_pwm",
+            "START",
+            "STOP",
+            "AT_RESET",
+            "AT_ARM",
+            "AT_FIRE",
+            "INFO",
+        ):
+            self.assertIn('"{0}"'.format(token), source)
+
+
+class FirmwareComponentBoundaryTests(unittest.TestCase):
+    def test_component_layers_exist_with_expected_entry_points(self):
+        firmware_dir = MODULE_PATH.parents[1] / "firmware"
+
+        component_source = (firmware_dir / "autotune_component.c").read_text(encoding="utf-8")
+        binding_source = (firmware_dir / "autotune_binding.c").read_text(encoding="utf-8")
+        port_source = (firmware_dir / "autotune_port.c").read_text(encoding="utf-8")
+        pid_core_source = (firmware_dir / "autotune_pid_core.c").read_text(encoding="utf-8")
+        public_header_source = (firmware_dir / "speed_loop_autotune.h").read_text(encoding="utf-8")
+        private_header_source = (firmware_dir / "speed_loop_autotune_private.h").read_text(encoding="utf-8")
+
+        self.assertIn("speed_loop_autotune_component_init", component_source)
+        self.assertIn("speed_loop_autotune_component_run_closed_loop", component_source)
+        self.assertIn("speed_loop_autotune_binding_bind", binding_source)
+        self.assertIn("speed_loop_autotune_port_check", port_source)
+        self.assertIn("speed_loop_autotune_pid_step", pid_core_source)
+        self.assertNotIn("speed_loop_autotune_component_init_default", component_source)
+        self.assertNotIn('#include "autotune_binding.h"', public_header_source)
+        self.assertNotIn('#include "autotune_port.h"', public_header_source)
+        self.assertNotIn('#include "autotune_component.h"', public_header_source)
+        self.assertIn('#include "speed_loop_autotune.h"', private_header_source)
+
+    def test_only_project_adapter_files_touch_external_pid_and_motor_symbols(self):
+        firmware_dir = MODULE_PATH.parents[1] / "firmware"
+        forbidden_patterns = (
+            "PID.left_speed",
+            "PID.right_speed",
+            "Encoder_get(",
+            "pid_speed_reset(",
+            "pid_speed_update(",
+            "test_speed_func(",
+            "motor_output(",
+            "fuya_motor_output(",
+        )
+
+        for path in firmware_dir.glob("*.c"):
+            source = path.read_text(encoding="utf-8")
+            for pattern in forbidden_patterns:
+                self.assertNotIn(pattern, source, msg="{0} leaked into {1}".format(pattern, path.name))
+
+    def test_host_service_and_info_read_from_component_layer(self):
+        firmware_dir = MODULE_PATH.parents[1] / "firmware"
+        host_service_source = (firmware_dir / "host_service.c").read_text(encoding="utf-8")
+        host_command_source = (firmware_dir / "host_autotune_command.c").read_text(encoding="utf-8")
+
+        self.assertIn("speed_loop_autotune_component_get_left_speed", host_service_source)
+        self.assertIn("speed_loop_autotune_component_get_right_speed", host_service_source)
+        self.assertIn("speed_loop_autotune_component_get_target_speed", host_command_source)
+        self.assertIn("speed_loop_autotune_component_get_gain", host_command_source)
+
+    def test_external_service_adapter_owns_project_binding_and_port(self):
+        service_dir = MODULE_PATH.parents[2] / "service"
+        adapter_source = (service_dir / "speed_loop_autotune_adapter.c").read_text(encoding="utf-8")
+        int_user_source = (MODULE_PATH.parents[2] / "user" / "int_user.c").read_text(encoding="utf-8")
+        firmware_dir = MODULE_PATH.parents[1] / "firmware"
+        private_users = (
+            (firmware_dir / "air_dual_mode.c").read_text(encoding="utf-8"),
+            (firmware_dir / "ground_dual_mode.c").read_text(encoding="utf-8"),
+            (firmware_dir / "pwm_identify_mode.c").read_text(encoding="utf-8"),
+            (firmware_dir / "autotune_runtime.c").read_text(encoding="utf-8"),
+            (firmware_dir / "host_autotune_command.c").read_text(encoding="utf-8"),
+            (firmware_dir / "host_service.c").read_text(encoding="utf-8"),
+            (firmware_dir / "speed_loop_trial.c").read_text(encoding="utf-8"),
+        )
+
+        self.assertIn("PID.left_speed.Kp", adapter_source)
+        self.assertIn("motor_output(", adapter_source)
+        self.assertIn("speed_loop_autotune_component_init(", adapter_source)
+        self.assertIn("speed_loop_autotune_project_init();", int_user_source)
+        self.assertIn('../speed_loop_autotune/firmware/speed_loop_autotune.h', adapter_source)
+        self.assertNotIn("autotune_binding.h", adapter_source)
+        self.assertNotIn("autotune_port.h", adapter_source)
+        self.assertNotIn("autotune_component.h", adapter_source)
+        for source in private_users:
+            self.assertIn('#include "speed_loop_autotune_private.h"', source)
+
+
+class FirmwareHostTransportBoundaryTests(unittest.TestCase):
+    def test_host_transport_bridges_text_commands_without_vofa_header(self):
+        firmware_dir = MODULE_PATH.parents[1] / "firmware"
+        host_transport_source = (firmware_dir / "host_transport.c").read_text(encoding="utf-8")
+        host_transport_header = (firmware_dir / "host_transport.h").read_text(encoding="utf-8")
+        host_service_source = (firmware_dir / "host_service.c").read_text(encoding="utf-8")
+        host_command_source = (firmware_dir / "host_autotune_command.c").read_text(encoding="utf-8")
+
+        self.assertIn("uint8 speed_loop_autotune_handle_text_command", host_transport_header)
+        self.assertIn("return speed_loop_autotune_handle_command_text(cmd);", host_transport_source)
+        self.assertNotIn("vofa.h", host_service_source)
+        self.assertNotIn("vofa.h", host_command_source)
+
+    def test_service_layer_owns_vofa_polling_and_legacy_fallback(self):
+        service_dir = MODULE_PATH.parents[2] / "service"
+        vofa_source = (service_dir / "vofa.c").read_text(encoding="utf-8")
+        vofa_header = (service_dir / "vofa.h").read_text(encoding="utf-8")
+        debug_view_source = (service_dir / "debug_view.c").read_text(encoding="utf-8")
+
+        self.assertIn('#include "../speed_loop_autotune/firmware/host_transport.h"', vofa_source)
+        self.assertIn("void vofa_service(void)", vofa_source)
+        self.assertIn("void vofa_service_legacy(void)", vofa_source)
+        self.assertIn("speed_loop_autotune_set_parser_stats(", vofa_source)
+        self.assertIn("speed_loop_autotune_emit_telemetry();", vofa_source)
+        self.assertIn("if (speed_loop_autotune_handle_text_command(cmd))", vofa_source)
+        self.assertIn("vofa_handle_legacy_command(vofa_cmd);", vofa_source)
+        for token in ("L_KP", "R_KP", "A_KP", "MOTOR", "ERR", "SAVE", "LOAD", "FUYA"):
+            self.assertIn(token, vofa_source)
+        self.assertIn("void vofa_service(void);", vofa_header)
+        self.assertIn("void vofa_service_legacy(void);", vofa_header)
+        self.assertNotIn("vofa_parse_command", vofa_source)
+        self.assertNotIn("vofa_parse_command", vofa_header)
+        self.assertIn('#include "vofa.h"', debug_view_source)
+        self.assertIn("#define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 1", debug_view_source)
+        self.assertIn("vofa_service();", debug_view_source)
+        self.assertIn("vofa_service_legacy();", debug_view_source)
+        self.assertIn("#if DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE", debug_view_source)
+        self.assertNotIn("host_service.h", debug_view_source)
+
+    def test_keil_project_includes_host_transport_sources(self):
+        uvproj_source = (MODULE_PATH.parents[2] / "mdk" / "seekfree.uvproj").read_text(encoding="utf-8")
+
+        self.assertIn("host_transport.c", uvproj_source)
+        self.assertIn("host_transport.h", uvproj_source)
+
+
+class UserIsrSwitchTests(unittest.TestCase):
+    def test_main_and_isr_share_per_function_switch_macros(self):
+        user_dir = MODULE_PATH.parents[2] / "user"
+        main_source = (user_dir / "main.c").read_text(encoding="utf-8")
+        isr_source = (user_dir / "isr.c").read_text(encoding="utf-8")
+        isr_header_source = (user_dir / "isr.h").read_text(encoding="utf-8")
+
+        self.assertNotIn('#include "isr.h"', main_source)
+        self.assertNotIn('#include "isr.h"', isr_source)
+        self.assertIn("#define MAIN_ENABLE_ISR_RUN_TEST_SPEED", isr_header_source)
+        self.assertIn("#define MAIN_ENABLE_ISR_TEST_ANGLE_FUNC", isr_header_source)
+        self.assertIn("#define MAIN_ENABLE_ISR_TEST_SPEED_FUNC", isr_header_source)
+        self.assertIn("#define MAIN_ENABLE_ISR_RUN_TIME_1", isr_header_source)
+        self.assertIn("#define MAIN_ENABLE_ISR_RUN_TIME_2", isr_header_source)
+        self.assertIn("#if MAIN_ENABLE_ISR_RUN_TEST_SPEED", isr_source)
+        self.assertIn("#if MAIN_ENABLE_ISR_TEST_ANGLE_FUNC", isr_source)
+        self.assertIn("#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC", isr_source)
+        self.assertIn("#if MAIN_ENABLE_ISR_RUN_TIME_1", isr_source)
+        self.assertIn("#if MAIN_ENABLE_ISR_RUN_TIME_2", isr_source)
+        self.assertIn("run_test_speed();", isr_source)
+        self.assertIn("test_angle_func();", isr_source)
+        self.assertIn("test_speed_func();", isr_source)
+        self.assertIn("run_time_1();", isr_source)
+        self.assertIn("run_time_2();", isr_source)
+
+
+class MainSpeedDeadzoneCompTests(unittest.TestCase):
+    def test_deadzone_comp_macros_and_helper_live_in_motor_layer(self):
+        service_dir = MODULE_PATH.parents[2] / "service"
+        motor_header = (service_dir / "motor.h").read_text(encoding="utf-8")
+        motor_source = (service_dir / "motor.c").read_text(encoding="utf-8")
+
+        self.assertIn("#define MAIN_ENABLE_SPEED_DEADZONE_COMP 1", motor_header)
+        self.assertIn("#define MAIN_LEFT_DEADZONE_PWM 1900", motor_header)
+        self.assertIn("#define MAIN_RIGHT_DEADZONE_PWM 2000", motor_header)
+        self.assertIn("#define MAIN_DEADZONE_BAND_PWM 300", motor_header)
+        self.assertIn("#define MAIN_DEADZONE_EXIT_SPEED 8.0f", motor_header)
+        self.assertIn("#define MAIN_DEADZONE_TARGET_SPEED_MIN", motor_header)
+        self.assertIn(
+            "int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm);",
+            motor_header,
+        )
+        self.assertIn(
+            "int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm)",
+            motor_source,
+        )
+        self.assertIn("abs_target_speed", motor_source)
+        self.assertIn("if (abs_target_speed < MAIN_DEADZONE_TARGET_SPEED_MIN)", motor_source)
+        self.assertIn("if (target_speed > 0.0f && raw_pwm < 0)", motor_source)
+        self.assertIn("if (target_speed < 0.0f && raw_pwm > 0)", motor_source)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", motor_source.split("void motor_output", 1)[1])
+
+    def test_deadzone_comp_only_hooks_into_main_control_paths(self):
+        service_dir = MODULE_PATH.parents[2] / "service"
+        user_dir = MODULE_PATH.parents[2] / "user"
+        autotune_dir = MODULE_PATH.parents[1]
+        a_run_source = (user_dir / "a_run.c").read_text(encoding="utf-8")
+        test_source = (service_dir / "test.c").read_text(encoding="utf-8")
+        vofa_source = (service_dir / "vofa.c").read_text(encoding="utf-8")
+        adapter_source = (service_dir / "speed_loop_autotune_adapter.c").read_text(encoding="utf-8")
+
+        self.assertEqual(a_run_source.count("motor_apply_speed_deadzone_comp("), 4)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", test_source)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", vofa_source)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", adapter_source)
+
+        for source_path in autotune_dir.rglob("*.c"):
+            source_text = source_path.read_text(encoding="utf-8")
+            self.assertNotIn("motor_apply_speed_deadzone_comp", source_text)
 
 
 class GroundLoadTests(unittest.TestCase):
@@ -667,6 +918,269 @@ class AutotuneModeTests(unittest.TestCase):
 
 
 class SearchTests(unittest.TestCase):
+    def test_extract_identify_level_metrics_estimates_step_response(self):
+        module = load_module()
+
+        samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 2.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 6.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 10.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 13.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 15.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 15.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 15.0, 0.0, 600.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0),
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0),
+        ]
+
+        metrics = module.extract_identify_level_metrics(samples, "left", 600)
+
+        self.assertTrue(metrics.valid)
+        self.assertAlmostEqual(metrics.steady_speed, 15.0, places=3)
+        self.assertAlmostEqual(metrics.theta_s, 0.02, places=3)
+        self.assertAlmostEqual(metrics.tau_s, 0.04, places=3)
+
+    def test_build_identify_seed_from_levels_uses_simc_and_5ms_discretization(self):
+        module = load_module()
+
+        levels = [
+            module.IdentifyLevelMetrics(400.0, 10.0, 0.04, 0.08, True),
+            module.IdentifyLevelMetrics(800.0, 20.0, 0.04, 0.08, True),
+        ]
+
+        seed = module.build_identify_seed_from_levels(levels)
+
+        self.assertAlmostEqual(seed.kp, 40.0, places=3)
+        self.assertAlmostEqual(seed.ki, 2.5, places=3)
+        self.assertEqual(seed.kd, 0.0)
+
+    def test_run_pwm_identify_trial_issues_mode_and_pwm_commands(self):
+        module = load_module()
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_identify_trial(
+            client,
+            "left",
+            600,
+            hold_ms=80,
+            tail_zero_ms=40,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(
+            client.commands[:5],
+            [
+                "AT_RESET",
+                "AT_TEST_MODE=1",
+                "L_TEST_PWM=600",
+                "R_TEST_PWM=0",
+                "START",
+            ],
+        )
+        self.assertEqual(
+            client.capture_calls,
+            [
+                (
+                    0.12,
+                    [
+                        (0.08, "L_TEST_PWM=0"),
+                        (0.08, "R_TEST_PWM=0"),
+                    ],
+                )
+            ],
+        )
+        self.assertEqual(client.commands[-2:], ["AT_TEST_MODE=0", "AT_RESET"])
+
+    def test_run_pwm_identify_applies_seed_when_requested(self):
+        module = load_module()
+        pwm_identify = load_host_package_module("pwm_identify")
+
+        original_run_pwm_identify_trial = pwm_identify.run_pwm_identify_trial
+        original_apply_speed_gains = pwm_identify.apply_speed_gains
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            target_speed = 35.0
+            rest_seconds = 0.0
+            identify_pwm_step = 200
+            identify_pwm_max = 800
+            identify_repeat = 2
+            identify_hold_ms = 160
+            identify_tail_zero_ms = 40
+            apply_identify_seed = True
+            save_best = False
+
+        applied = {"gains": None}
+
+        def build_samples(wheel_name, pwm_value):
+            if pwm_value < 400:
+                peak_values = [0.0, 2.0, 3.0, 4.0, 4.5, 4.0, 3.0, 2.0]
+            else:
+                peak_values = [
+                    0.0,
+                    pwm_value / 120.0,
+                    pwm_value / 80.0,
+                    pwm_value / 60.0,
+                    pwm_value / 50.0,
+                    pwm_value / 45.0,
+                    pwm_value / 45.0,
+                    pwm_value / 45.0,
+                ]
+
+            samples = []
+            for speed in peak_values:
+                if wheel_name == "left":
+                    samples.append(
+                        module.TelemetrySample(0.0, speed, 0.0, pwm_value, 0.0, 1.0, 0.0, 2.0, pwm_value, 0.0)
+                    )
+                else:
+                    samples.append(
+                        module.TelemetrySample(0.0, 0.0, speed, 0.0, pwm_value, 1.0, 0.0, 2.0, 0.0, pwm_value)
+                    )
+            return samples
+
+        def fake_run_pwm_identify_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            return build_samples(wheel_name, pwm_value)
+
+        def fake_apply_speed_gains(client, gains):
+            del client
+            applied["gains"] = gains
+
+        pwm_identify.run_pwm_identify_trial = fake_run_pwm_identify_trial
+        pwm_identify.apply_speed_gains = fake_apply_speed_gains
+
+        try:
+            result = module.run_pwm_identify(FakeClient(), Args())
+        finally:
+            pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
+            pwm_identify.apply_speed_gains = original_apply_speed_gains
+
+        self.assertEqual(result, 0)
+        self.assertIsNotNone(applied["gains"])
+        self.assertGreater(applied["gains"].left.kp, 0.0)
+        self.assertGreater(applied["gains"].left.ki, 0.0)
+        self.assertGreater(applied["gains"].right.kp, 0.0)
+        self.assertGreater(applied["gains"].right.ki, 0.0)
+
+    def test_run_pwm_identify_requires_two_valid_levels_per_wheel(self):
+        module = load_module()
+        pwm_identify = load_host_package_module("pwm_identify")
+
+        original_run_pwm_identify_trial = pwm_identify.run_pwm_identify_trial
+
+        class FakeClient(object):
+            pass
+
+        class Args(object):
+            target_speed = 35.0
+            rest_seconds = 0.0
+            identify_pwm_step = 200
+            identify_pwm_max = 400
+            identify_repeat = 1
+            identify_hold_ms = 160
+            identify_tail_zero_ms = 40
+            apply_identify_seed = False
+            save_best = False
+
+        invalid_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 200.0, 0.0),
+            module.TelemetrySample(0.0, 2.0, 0.0, 200.0, 0.0, 1.0, 0.0, 2.0, 200.0, 0.0),
+            module.TelemetrySample(0.0, 4.0, 0.0, 200.0, 0.0, 1.0, 0.0, 2.0, 200.0, 0.0),
+        ]
+        valid_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 400.0, 0.0),
+            module.TelemetrySample(0.0, 6.0, 0.0, 400.0, 0.0, 1.0, 0.0, 2.0, 400.0, 0.0),
+            module.TelemetrySample(0.0, 9.0, 0.0, 400.0, 0.0, 1.0, 0.0, 2.0, 400.0, 0.0),
+            module.TelemetrySample(0.0, 10.0, 0.0, 400.0, 0.0, 1.0, 0.0, 2.0, 400.0, 0.0),
+            module.TelemetrySample(0.0, 10.0, 0.0, 400.0, 0.0, 1.0, 0.0, 2.0, 400.0, 0.0),
+        ]
+
+        def fake_run_pwm_identify_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            if wheel_name == "left" and pwm_value == 400:
+                return list(valid_samples)
+            return list(invalid_samples)
+
+        pwm_identify.run_pwm_identify_trial = fake_run_pwm_identify_trial
+
+        try:
+            with self.assertRaises(RuntimeError):
+                module.run_pwm_identify(FakeClient(), Args())
+        finally:
+            pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
+
+    def test_main_routes_pwm_identify_mode(self):
+        module = load_module()
+
+        original_detect_port = module.detect_port
+        original_serial_client = module.VofaSerialClient
+        original_run_pwm_identify = module.run_pwm_identify
+
+        call_state = {"called": 0}
+
+        class FakeClient(object):
+            def __init__(self, port, baudrate, timeout):
+                self.port = port
+                self.baudrate = baudrate
+                self.timeout = timeout
+
+            def close(self):
+                pass
+
+        def fake_detect_port(preferred=None):
+            del preferred
+            return "COM8"
+
+        def fake_run_pwm_identify(client, args):
+            del args
+            self.assertEqual(client.port, "COM8")
+            call_state["called"] += 1
+            return 0
+
+        module.detect_port = fake_detect_port
+        module.VofaSerialClient = FakeClient
+        module.run_pwm_identify = fake_run_pwm_identify
+
+        try:
+            result = module.main(["--mode", "pwm-identify"])
+        finally:
+            module.detect_port = original_detect_port
+            module.VofaSerialClient = original_serial_client
+            module.run_pwm_identify = original_run_pwm_identify
+
+        self.assertEqual(result, 0)
+        self.assertEqual(call_state["called"], 1)
+
+    def test_main_rejects_save_best_for_pwm_identify(self):
+        module = load_module()
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            result = module.main(["--mode", "pwm-identify", "--save-best"])
+
+        self.assertEqual(result, 2)
+        self.assertIn("pwm-identify does not support --save-best", stderr.getvalue())
+
     def test_run_autotune_reports_worst_right_verification_score(self):
         module = load_module()
         air_dual = load_host_package_module("air_dual")

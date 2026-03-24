@@ -17,6 +17,11 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
  */
 void run_time_1(void)
 {
+    float left_target;
+    float right_target;
+    int32 left_pwm;
+    int32 right_pwm;
+
     /* 1. 执行 IAP 保护，避免复位脚异常时进入错误状态 */
     a_run_apply_iap_guard();
 
@@ -41,13 +46,25 @@ void run_time_1(void)
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
     run_mode_update_angle_output(&PID.angle.output); /* 环岛阶段可覆盖角度环输出 */
     /* 左右轮速度环目标 = 基础速度 ± 姿态补偿 */
-    pid_speed_update(&PID.left_speed, (float)speed_active - PID.angle.output, PID.left_speed.speed);
-    pid_speed_update(&PID.right_speed, (float)speed_active + PID.angle.output, PID.right_speed.speed);
+    left_target = (float)speed_active - PID.angle.output;
+    right_target = (float)speed_active + PID.angle.output;
+    pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
+    pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
 
     /* 6. 仅在运行态时允许电机输出 */
     if (a_run_mode_get_start_state() == 2)
     {
-        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
+        left_pwm = motor_apply_speed_deadzone_comp(
+            (int32)PID.left_speed.output,
+            left_target,
+            PID.left_speed.speed,
+            MAIN_LEFT_DEADZONE_PWM);
+        right_pwm = motor_apply_speed_deadzone_comp(
+            (int32)PID.right_speed.output,
+            right_target,
+            PID.right_speed.speed,
+            MAIN_RIGHT_DEADZONE_PWM);
+        motor_output(left_pwm, right_pwm);
     }
 }
 
@@ -85,6 +102,8 @@ void run_time_3(void)
 {
     float left_target = 0.0f;
     float right_target = 0.0f;
+    int32 left_pwm;
+    int32 right_pwm;
 
     a_run_apply_iap_guard();
     read_AD();
@@ -107,7 +126,17 @@ void run_time_3(void)
 
     if (a_run_mode_get_start_state() == 2)
     {
-        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
+        left_pwm = motor_apply_speed_deadzone_comp(
+            (int32)PID.left_speed.output,
+            left_target,
+            PID.left_speed.speed,
+            MAIN_LEFT_DEADZONE_PWM);
+        right_pwm = motor_apply_speed_deadzone_comp(
+            (int32)PID.right_speed.output,
+            right_target,
+            PID.right_speed.speed,
+            MAIN_RIGHT_DEADZONE_PWM);
+        motor_output(left_pwm, right_pwm);
     }
 }
 

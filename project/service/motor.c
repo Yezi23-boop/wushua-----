@@ -28,6 +28,86 @@ void motor_Init(void)
 }
 
 /**
+ * @brief 主链低输出区死区补偿
+ * @details 仅在目标非零、轮速未起来且输出落在死区附近时抬到最小有效 PWM
+ */
+int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm)
+{
+    int32 abs_pwm;
+    int32 upper_limit;
+    float abs_speed;
+    float abs_target_speed;
+
+    if (!MAIN_ENABLE_SPEED_DEADZONE_COMP)
+    {
+        return raw_pwm;
+    }
+
+    abs_target_speed = target_speed;
+    if (abs_target_speed < 0.0f)
+    {
+        abs_target_speed = -abs_target_speed;
+    }
+
+    if (abs_target_speed < MAIN_DEADZONE_TARGET_SPEED_MIN)
+    {
+        return raw_pwm;
+    }
+
+    if (raw_pwm == 0 || deadzone_pwm <= 0)
+    {
+        return raw_pwm;
+    }
+
+    abs_speed = actual_speed;
+    if (abs_speed < 0.0f)
+    {
+        abs_speed = -abs_speed;
+    }
+
+    if (abs_speed >= MAIN_DEADZONE_EXIT_SPEED)
+    {
+        return raw_pwm;
+    }
+
+    if (target_speed > 0.0f && raw_pwm < 0)
+    {
+        return raw_pwm;
+    }
+
+    if (target_speed < 0.0f && raw_pwm > 0)
+    {
+        return raw_pwm;
+    }
+
+    if (raw_pwm > 0)
+    {
+        abs_pwm = raw_pwm;
+    }
+    else
+    {
+        abs_pwm = -raw_pwm;
+    }
+
+    upper_limit = deadzone_pwm + MAIN_DEADZONE_BAND_PWM;
+    if (abs_pwm >= upper_limit)
+    {
+        return raw_pwm;
+    }
+
+    if (abs_pwm < deadzone_pwm)
+    {
+        if (raw_pwm > 0)
+        {
+            return deadzone_pwm;
+        }
+        return -deadzone_pwm;
+    }
+
+    return raw_pwm;
+}
+
+/**
  * @brief 电机 PWM 占空比输出控制
  * @details 根据 lpwm 和 rpwm 的正负号控制电机正反转
  * @param lpwm 左轮目标占空比（-PWM_DUTY_MAX ~ PWM_DUTY_MAX）

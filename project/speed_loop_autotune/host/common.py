@@ -26,8 +26,12 @@ TelemetrySample = collections.namedtuple(
         "right_pwm",
         "trial_active",
         "stop_flag",
+        "mode_id",
+        "left_cmd_pwm",
+        "right_cmd_pwm",
     ],
 )
+TelemetrySample.__new__.__defaults__ = (0.0, 0.0, 0.0)
 TrialMetrics = collections.namedtuple(
     "TrialMetrics",
     [
@@ -61,6 +65,7 @@ DEFAULT_KD_OVERSHOOT_RUNS = 3
 DEFAULT_AUTOTUNE_SEARCH_TOLERANCE = 1.0
 MODE_AIR_DUAL = "air-dual"
 MODE_GROUND_DUAL = "ground-dual"
+MODE_PWM_IDENTIFY = "pwm-identify"
 
 
 def parse_telemetry_line(raw_line):
@@ -80,6 +85,9 @@ def parse_telemetry_line(raw_line):
         right_pwm = float(parts[4]) if len(parts) >= 5 else 0.0
         trial_active = float(parts[5]) if len(parts) >= 6 else 0.0
         stop_flag = float(parts[6]) if len(parts) >= 7 else 0.0
+        mode_id = float(parts[7]) if len(parts) >= 8 else 0.0
+        left_cmd_pwm = float(parts[8]) if len(parts) >= 9 else 0.0
+        right_cmd_pwm = float(parts[9]) if len(parts) >= 10 else 0.0
     except ValueError:
         return None
 
@@ -91,6 +99,9 @@ def parse_telemetry_line(raw_line):
         right_pwm,
         trial_active,
         stop_flag,
+        mode_id,
+        left_cmd_pwm,
+        right_cmd_pwm,
     )
 
 
@@ -316,6 +327,8 @@ def normalize_mode_name(mode_name):
         return MODE_AIR_DUAL
     if mode_name in (MODE_GROUND_DUAL, "ground-load"):
         return MODE_GROUND_DUAL
+    if mode_name == MODE_PWM_IDENTIFY:
+        return MODE_PWM_IDENTIFY
     raise ValueError("Unsupported mode: {0}".format(mode_name))
 
 
@@ -698,6 +711,9 @@ def _project_samples_to_wheel(samples, wheel_name):
                 wheel_pwm,
                 sample.trial_active,
                 sample.stop_flag,
+                sample.mode_id,
+                sample.left_cmd_pwm,
+                sample.right_cmd_pwm,
             )
         )
 

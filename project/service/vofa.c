@@ -1,12 +1,13 @@
 #include "zf_common_headfile.h"
 #include "vofa.h"
-#include "../speed_loop_autotune/firmware/host_autotune_command.h"
+#include "../speed_loop_autotune/firmware/host_transport.h"
 #include <stdlib.h>
 
 static vofa_data_struct vofa_data;
 
 static void vofa_parse_byte(uint8 dat);
 static void vofa_enqueue_command(const uint8 *cmd, uint8 len);
+static void vofa_handle_legacy_command(char *cmd);
 
 void vofa_init(void)
 {
@@ -170,73 +171,36 @@ uint32 vofa_get_queue_overflow_count(void)
     return vofa_data.queue_overflow_count;
 }
 
-void vofa_parse_command(char *cmd)
+void vofa_service(void)
 {
-    char *eq_pos;
-    char param_name[16];
-    float param_value;
-    uint8 name_len;
-    uint8 i;
+    static char vofa_cmd[64];
 
-    for (i = 0; i < 16; i++)
+    vofa_parse_from_fifo();
+    speed_loop_autotune_set_parser_stats(
+        vofa_get_frame_overflow_count(),
+        vofa_get_queue_overflow_count());
+
+    while (vofa_get_command(vofa_cmd, 64))
     {
-        param_name[i] = 0;
+        handle_vofa_command(vofa_cmd);
     }
-    param_value = 0.0f;
 
-    eq_pos = strchr(cmd, '=');
+    speed_loop_autotune_emit_telemetry();
+}
 
-    if (eq_pos != NULL)
+void vofa_service_legacy(void)
+{
+    static char vofa_cmd[64];
+
+    vofa_parse_from_fifo();
+
+    while (vofa_get_command(vofa_cmd, 64))
     {
-        name_len = (uint8)(eq_pos - cmd);
-
-        if (name_len < 16)
-        {
-            memcpy(param_name, cmd, name_len);
-            param_name[name_len] = '\0';
-
-            param_value = atof(eq_pos + 1);
-
-            if (strcmp(param_name, "PR") == 0)
-            {
-                printf("Received PR = %.2f\n", param_value);
-            }
-            else if (strcmp(param_name, "SPEED") == 0)
-            {
-                printf("Received SPEED = %.2f\n", param_value);
-            }
-            else if (strcmp(param_name, "KP") == 0)
-            {
-                printf("Received KP = %.2f\n", param_value);
-            }
-            else if (strcmp(param_name, "KI") == 0)
-            {
-                printf("Received KI = %.2f\n", param_value);
-            }
-            else if (strcmp(param_name, "KD") == 0)
-            {
-                printf("Received KD = %.2f\n", param_value);
-            }
-        }
-    }
-    else
-    {
-        if (strcmp(cmd, "START") == 0)
-        {
-            printf("Received START command\n");
-        }
-        else if (strcmp(cmd, "STOP") == 0)
-        {
-            printf("Received STOP command\n");
-        }
-        else if (strcmp(cmd, "RESET") == 0)
-        {
-            printf("Received RESET command\n");
-        }
+        vofa_handle_legacy_command(vofa_cmd);
     }
 }
 
-void handle_vofa_command(char *cmd)
+static void vofa_handle_legacy_command(char *cmd)
 {
     char *eq_pos;
     char param_name[16];
@@ -261,10 +225,7 @@ void handle_vofa_command(char *cmd)
             param_name[name_len] = '\0';
             value = atof(eq_pos + 1);
 
-            if (speed_loop_autotune_handle_param(param_name, value))
-            {
-            }
-            else if (strcmp(param_name, "L_KP") == 0)
+            if (strcmp(param_name, "L_KP") == 0)
             {
                 PID.left_speed.Kp = value;
             }
@@ -311,8 +272,8 @@ void handle_vofa_command(char *cmd)
             else if (strcmp(param_name, "MOTOR") == 0)
             {
                 PID.left_speed.output = value;
-                PID.left_speed.output = value;
-                printf("Motor = %.2f,speed=%.2f\n", PID.left_speed.output, PID.left_speed.speed);
+                PID.right_speed.output = value;
+                printf("Motor = %.2f,speed=%.2f\n", PID.right_speed.output, PID.right_speed.speed);
             }
             else if (strcmp(param_name, "SPEED_RUN") == 0)
             {
@@ -331,10 +292,7 @@ void handle_vofa_command(char *cmd)
     }
     else
     {
-        if (speed_loop_autotune_handle_command(cmd))
-        {
-        }
-        else if (strcmp(cmd, "FUYA") == 0)
+        if (strcmp(cmd, "FUYA") == 0)
         {
         }
         else if (strcmp(cmd, "SAVE") == 0)
@@ -352,4 +310,14 @@ void handle_vofa_command(char *cmd)
             printf("Unknown command: %s\n", cmd);
         }
     }
+}
+
+void handle_vofa_command(char *cmd)
+{
+    if (speed_loop_autotune_handle_text_command(cmd))
+    {
+        return;
+    }
+
+    vofa_handle_legacy_command(cmd);
 }

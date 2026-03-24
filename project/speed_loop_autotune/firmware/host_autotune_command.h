@@ -5,6 +5,7 @@
 
 uint8 speed_loop_autotune_handle_param(const char *param_name, float value);
 uint8 speed_loop_autotune_handle_command(const char *cmd);
+uint8 speed_loop_autotune_handle_command_text(char *cmd);
 void speed_loop_autotune_print_info(void);
 
 #endif /* _HOST_AUTOTUNE_COMMAND_H_ */

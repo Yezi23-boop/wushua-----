@@ -794,6 +794,16 @@
               <FileType>5</FileType>
               <FilePath>..\service\soft_timer.h</FilePath>
             </File>
+            <File>
+              <FileName>speed_loop_autotune_adapter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\speed_loop_autotune_adapter.c</FilePath>
+            </File>
+            <File>
+              <FileName>speed_loop_autotune_adapter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\speed_loop_autotune_adapter.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -829,18 +839,105 @@
               <FileType>5</FileType>
               <FilePath>..\speed_loop_autotune\firmware\host_service.h</FilePath>
             </File>
-          </Files>
-        </Group>
-        <Group>
-          <GroupName>code</GroupName>
-        </Group>
-        <Group>
-          <GroupName>doc</GroupName>
-          <Files>
             <File>
-              <FileName>version.txt</FileName>
+              <FileName>host_transport.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\host_transport.c</FilePath>
+            </File>
+            <File>
+              <FileName>host_transport.h</FileName>
               <FileType>5</FileType>
-              <FilePath>..\..\libraries\doc\version.txt</FilePath>
+              <FilePath>..\speed_loop_autotune\firmware\host_transport.h</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_runtime.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_runtime.c</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_runtime.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_runtime.h</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_token_registry.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_token_registry.c</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_token_registry.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_token_registry.h</FilePath>
+            </File>
+            <File>
+              <FileName>air_dual_mode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\air_dual_mode.c</FilePath>
+            </File>
+            <File>
+              <FileName>air_dual_mode.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\air_dual_mode.h</FilePath>
+            </File>
+            <File>
+              <FileName>ground_dual_mode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\ground_dual_mode.c</FilePath>
+            </File>
+            <File>
+              <FileName>ground_dual_mode.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\ground_dual_mode.h</FilePath>
+            </File>
+            <File>
+              <FileName>pwm_identify_mode.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\pwm_identify_mode.c</FilePath>
+            </File>
+            <File>
+              <FileName>pwm_identify_mode.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\pwm_identify_mode.h</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_binding.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_binding.c</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_binding.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_binding.h</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_port.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_port.c</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_port.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_port.h</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_pid_core.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_pid_core.c</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_pid_core.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_pid_core.h</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_component.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_component.c</FilePath>
+            </File>
+            <File>
+              <FileName>autotune_component.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\speed_loop_autotune\firmware\autotune_component.h</FilePath>
             </File>
           </Files>
         </Group>

@@ -11,6 +11,7 @@ if PROJECT_ROOT_TEXT not in sys.path:
 from project.speed_loop_autotune.host import air_dual as _air_dual
 from project.speed_loop_autotune.host import common as _common
 from project.speed_loop_autotune.host import ground_dual as _ground_dual
+from project.speed_loop_autotune.host import pwm_identify as _pwm_identify
 
 
 def _reexport_module(module):
@@ -22,6 +23,7 @@ def _reexport_module(module):
 _reexport_module(_common)
 _reexport_module(_air_dual)
 _reexport_module(_ground_dual)
+_reexport_module(_pwm_identify)
 
 
 def build_argument_parser():
@@ -31,9 +33,9 @@ def build_argument_parser():
     parser.add_argument("--timeout", type=float, default=0.2, help="Read timeout in seconds.")
     parser.add_argument(
         "--mode",
-        choices=[MODE_AIR_DUAL, MODE_GROUND_DUAL, "autotune", "ground-load"],
+        choices=[MODE_AIR_DUAL, MODE_GROUND_DUAL, MODE_PWM_IDENTIFY, "autotune", "ground-load"],
         default=MODE_AIR_DUAL,
-        help="Tuning mode. Prefer 'air-dual' or 'ground-dual'; old labels stay available for compatibility.",
+        help="Tuning mode. Prefer 'air-dual', 'ground-dual', or 'pwm-identify'; old labels stay available for compatibility.",
     )
     parser.add_argument(
         "--autotune-sequence",
@@ -55,6 +57,41 @@ def build_argument_parser():
     parser.add_argument("--delta-kp", type=float, default=10.0, help="Initial Kp search step.")
     parser.add_argument("--delta-ki", type=float, default=5.0, help="Initial Ki search step.")
     parser.add_argument("--delta-kd", type=float, default=0.5, help="Initial Kd search step.")
+    parser.add_argument(
+        "--identify-pwm-step",
+        type=int,
+        default=DEFAULT_IDENTIFY_PWM_STEP,
+        help="PWM sweep step used by pwm-identify.",
+    )
+    parser.add_argument(
+        "--identify-pwm-max",
+        type=int,
+        default=DEFAULT_IDENTIFY_PWM_MAX,
+        help="Maximum PWM sweep value used by pwm-identify.",
+    )
+    parser.add_argument(
+        "--identify-repeat",
+        type=int,
+        default=DEFAULT_IDENTIFY_REPEAT,
+        help="How many times to repeat each open-loop PWM level.",
+    )
+    parser.add_argument(
+        "--identify-hold-ms",
+        type=int,
+        default=DEFAULT_IDENTIFY_HOLD_MS,
+        help="How long to hold each PWM step before tail-zero.",
+    )
+    parser.add_argument(
+        "--identify-tail-zero-ms",
+        type=int,
+        default=DEFAULT_IDENTIFY_TAIL_ZERO_MS,
+        help="Extra capture time after PWM identify returns to zero.",
+    )
+    parser.add_argument(
+        "--apply-identify-seed",
+        action="store_true",
+        help="Apply pwm-identify seed gains to RAM after identify completes.",
+    )
     parser.add_argument(
         "--autotune-tail-zero-ms",
         type=int,
@@ -139,10 +176,29 @@ def build_argument_parser():
     return parser
 
 
+def validate_args(args):
+    if args.mode == MODE_PWM_IDENTIFY and args.save_best:
+        raise RuntimeError("pwm-identify does not support --save-best")
+    if args.mode == MODE_PWM_IDENTIFY and args.identify_pwm_step <= 0:
+        raise RuntimeError("pwm-identify requires --identify-pwm-step > 0")
+    if args.mode == MODE_PWM_IDENTIFY and args.identify_pwm_max < args.identify_pwm_step:
+        raise RuntimeError("pwm-identify requires --identify-pwm-max >= --identify-pwm-step")
+    if args.mode == MODE_PWM_IDENTIFY and args.identify_repeat < 1:
+        raise RuntimeError("pwm-identify requires --identify-repeat >= 1")
+    if args.mode == MODE_PWM_IDENTIFY and args.identify_hold_ms < 20:
+        raise RuntimeError("pwm-identify requires --identify-hold-ms >= 20")
+
+
 def main(argv=None):
     parser = build_argument_parser()
     args = parser.parse_args(argv)
     args.mode = normalize_mode_name(args.mode)
+
+    try:
+        validate_args(args)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
     try:
         port = detect_port(args.port)
@@ -156,6 +212,8 @@ def main(argv=None):
         print("connected port={0} baudrate={1}".format(port, args.baudrate))
         if args.capture_only:
             return run_capture(client, args.measure_seconds)
+        if args.mode == MODE_PWM_IDENTIFY:
+            return run_pwm_identify(client, args)
         if args.mode == MODE_GROUND_DUAL:
             return run_ground_dual_autotune(client, args)
         return run_air_dual_autotune(client, args)

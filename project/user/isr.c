@@ -98,8 +98,18 @@ void DMA_UART4_IRQHandler(void) interrupt 18
 void TM0_IRQHandler() interrupt 1
 {
     TIM0_CLEAR_FLAG;
-	run_test_speed();
-//    run_time_1(); /* 执行核心控制逻辑 */
+#if MAIN_ENABLE_ISR_RUN_TEST_SPEED
+    run_test_speed();
+#endif
+#if MAIN_ENABLE_ISR_TEST_ANGLE_FUNC
+    test_angle_func();
+#endif
+#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
+    test_speed_func();
+#endif
+#if MAIN_ENABLE_ISR_RUN_TIME_1
+    run_time_1(); /* 执行核心控制逻辑 */
+#endif
     if (tim0_irq_handler != NULL)
         tim0_irq_handler();
 }
@@ -111,7 +121,9 @@ void TM0_IRQHandler() interrupt 1
 void TM1_IRQHandler() interrupt 3
 {
     TIM1_CLEAR_FLAG;
-//    run_time_2(); /* 执行系统状态管理逻辑 */
+#if MAIN_ENABLE_ISR_RUN_TIME_2
+    run_time_2(); /* 执行系统状态管理逻辑 */
+#endif
     if (tim1_irq_handler != NULL)
         tim1_irq_handler();
 }

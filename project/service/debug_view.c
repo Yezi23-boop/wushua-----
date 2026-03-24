@@ -1,6 +1,8 @@
 #include "debug_view.h"
-#include "../speed_loop_autotune/firmware/host_service.h"
+#include "vofa.h"
 #include "zf_common_headfile.h"
+
+#define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 1
 
 /**
  * @brief VOFA+ 上位机交互服务
@@ -8,7 +10,11 @@
  */
 void debug_vofa_service(void)
 {
-    speed_loop_autotune_service();
+#if DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE
+    vofa_service();
+#else
+    vofa_service_legacy();
+#endif
 }
 
 /**
