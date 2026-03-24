@@ -22,9 +22,9 @@ static int16 speed_loop_autotune_clamp_pwm(float value)
     {
         value = 0.0f;
     }
-    if (value > 4000.0f)
+    if (value > (float)PWM_DUTY_MAX)
     {
-        value = 4000.0f;
+        value = (float)PWM_DUTY_MAX;
     }
     return (int16)value;
 }

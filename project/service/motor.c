@@ -17,7 +17,6 @@ void motor_Init(void)
     pwm_init(PWMB_CH2_P13, 24000, 0);
     /* 左电机方向控制引脚 P14，设置为推挽输出 */
     gpio_init(IO_P14, GPO, 1, GPO_PUSH_PULL);
-
     /*
      * 右电机 PWM 初始化
      * 使用 PWMB 通道 3，引脚 P52，频率 24kHz

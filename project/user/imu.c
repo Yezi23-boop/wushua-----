@@ -176,10 +176,12 @@ void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
 
     /* 7. 计算欧拉角（俯仰角、横滚角，以及偏航角） */
     temp_vx = vx;
-    if (temp_vx > 1.0f) temp_vx = 1.0f;
-    if (temp_vx < -1.0f) temp_vx = -1.0f;
-    Angle->pit = (float)asin(-temp_vx) * RadtoDeg;          /* 俯仰角 (Pitch) */
-    Angle->rol = (float)my_atan2(vy, vz) * RadtoDeg;        /* 横滚角 (Roll) */
+    if (temp_vx > 1.0f)
+        temp_vx = 1.0f;
+    if (temp_vx < -1.0f)
+        temp_vx = -1.0f;
+    Angle->pit = (float)asin(-temp_vx) * RadtoDeg;   /* 俯仰角 (Pitch) */
+    Angle->rol = (float)my_atan2(vy, vz) * RadtoDeg; /* 横滚角 (Roll) */
 
     /* 偏航角采用积分方式，防止万向节死锁下的跳变 */
     if ((Gyr_rad->Z * RadtoDeg > 1.0f) || (Gyr_rad->Z * RadtoDeg < -1.0f))

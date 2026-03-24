@@ -66,6 +66,7 @@ DEFAULT_AUTOTUNE_SEARCH_TOLERANCE = 1.0
 MODE_AIR_DUAL = "air-dual"
 MODE_GROUND_DUAL = "ground-dual"
 MODE_PWM_IDENTIFY = "pwm-identify"
+MODE_PWM_MAP = "pwm-map"
 
 
 def parse_telemetry_line(raw_line):
@@ -329,6 +330,8 @@ def normalize_mode_name(mode_name):
         return MODE_GROUND_DUAL
     if mode_name == MODE_PWM_IDENTIFY:
         return MODE_PWM_IDENTIFY
+    if mode_name == MODE_PWM_MAP:
+        return MODE_PWM_MAP
     raise ValueError("Unsupported mode: {0}".format(mode_name))
 
 

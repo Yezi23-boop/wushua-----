@@ -15,7 +15,7 @@ IdentifyLevelMetrics = collections.namedtuple(
 )
 
 DEFAULT_IDENTIFY_PWM_STEP = 200
-DEFAULT_IDENTIFY_PWM_MAX = 3200
+DEFAULT_IDENTIFY_PWM_MAX = 10000
 DEFAULT_IDENTIFY_REPEAT = 2
 DEFAULT_IDENTIFY_HOLD_MS = 250
 DEFAULT_IDENTIFY_TAIL_ZERO_MS = 200
@@ -31,8 +31,8 @@ def _clamp_identify_pwm(value):
     pwm_value = int(round(float(value)))
     if pwm_value < 0:
         return 0
-    if pwm_value > 4000:
-        return 4000
+    if pwm_value > DEFAULT_IDENTIFY_PWM_MAX:
+        return DEFAULT_IDENTIFY_PWM_MAX
     return pwm_value
 
 

@@ -1,5 +1,21 @@
 # Air Dual Speed Loop Autotune Debug Memory
 
+## 2026-03-24 confirmed PWM range memory
+
+Goal:
+- lock in the real command ranges so future conversations do not fall back to the old `4000` wheel assumption
+
+Verified facts:
+- wheel motor PWM is real `0~10000`
+- `AT_FUYA` vacuum command remains `0~4000`
+- fresh hardware verification on `COM8` confirmed wheel open-loop commands at `5000`, `7000`, and `9000`
+- a full `pwm-map` run then completed to `10000`
+
+Default rule update:
+- treat wheel PWM as `0~10000` in `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`
+- treat `AT_FUYA` as `0~4000`
+- do not reintroduce the old `4000` wheel limit unless a future board image proves otherwise
+
 这份文档用于沉淀架空双轮 `air-dual` 调试里已经验证过的经验，避免后续会话重复踩坑。
 带负载双轮请改写 `ground_dual_debug_memory.md`。
 
@@ -232,3 +248,37 @@
   - 左轮：`100 / 20 / 0`
   - 右轮：`105 / 20 / 0`
 - `L = 100 / 19.5 / 0` 记录为“低速段有潜力，但整车复验未坐实”的候选值。
+
+### 2026-03-24 `15` 速段高分根因排查
+
+目标：
+- 判断当前偶发的高分到底来自真实控制变差，还是来自低速段评分过于敏感
+- 避免继续围绕假信号盲改 PID
+
+测试条件：
+- 串口：`COM8`
+- 模式：架空 `autotune`
+- 当前整车基线：
+  - 左轮：`100 / 20 / 0`
+  - 右轮：`105 / 20 / 0`
+- 第一组：`15:500,25:500,35:500,45:500,35:500,25:500,25:500`
+- 第二组：`15:300,25:300,35:300,45:300,35:300,25:300,25:300`
+- `miss` 默认忽略
+- 编码器速度绝对值大于 `200` 的样本直接过滤
+
+已验证事实：
+- 在基线下连续重复跑第一组和第二组时，`25/35/45` 这些速度段的均速和分数都非常稳定。
+- 偶发的高分几乎都集中在 `15` 速段，而不是整条多段序列一起变坏。
+- 即使 `15` 速段被打出高分，实际均速仍然大多稳定在 `14.0` 到 `14.5` 左右，并没有出现明显失控。
+- 把 `15` 速段的细项指标拆开后，高分主要来自 `settle_ratio` 偶发跳高；`rise_ratio`、`steady_error` 和均速并没有同步恶化到同等程度。
+
+推断：
+- 当前架空调试里，`15` 速段的评分对 `settle` 判定过于敏感，容易把轻微边界波动放大成高分。
+- 继续围绕这类单段高分去盲改 PID，收益很低，反而更容易把原本稳定的参数带偏。
+
+默认策略更新：
+- 当前继续保留整车默认基线：
+  - 左轮：`100 / 20 / 0`
+  - 右轮：`105 / 20 / 0`
+- 后续人工判断时，若只有 `15` 速段高分、但均速仍接近目标，则默认先视为“评分敏感段”，不直接据此改 PID。
+- 后续优先观察 `25/35/45` 这些更稳定、区分度更高的速度段。

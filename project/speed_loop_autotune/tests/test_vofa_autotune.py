@@ -3,6 +3,7 @@ import importlib
 import importlib.util
 import io
 import pathlib
+import tempfile
 import unittest
 
 
@@ -149,10 +150,16 @@ class ScoreConfigTests(unittest.TestCase):
         self.assertEqual(args.autotune_sequence, module.DEFAULT_AUTOTUNE_SEQUENCE)
         self.assertEqual(args.autotune_verify_sequence, module.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE)
         self.assertEqual(args.identify_pwm_step, 200)
-        self.assertEqual(args.identify_pwm_max, 3200)
+        self.assertEqual(args.identify_pwm_max, 10000)
         self.assertEqual(args.identify_repeat, 2)
         self.assertEqual(args.identify_hold_ms, 250)
         self.assertEqual(args.identify_tail_zero_ms, 200)
+        self.assertEqual(args.map_pwm_step, 500)
+        self.assertEqual(args.map_pwm_max, 10000)
+        self.assertEqual(args.map_repeat, 2)
+        self.assertEqual(args.map_hold_ms, 250)
+        self.assertEqual(args.map_tail_zero_ms, 200)
+        self.assertEqual(args.map_output, "")
         self.assertFalse(args.apply_identify_seed)
 
     def test_normalize_mode_name_supports_explicit_and_legacy_labels(self):
@@ -163,6 +170,7 @@ class ScoreConfigTests(unittest.TestCase):
         self.assertEqual(module.normalize_mode_name("ground-dual"), "ground-dual")
         self.assertEqual(module.normalize_mode_name("ground-load"), "ground-dual")
         self.assertEqual(module.normalize_mode_name("pwm-identify"), "pwm-identify")
+        self.assertEqual(module.normalize_mode_name("pwm-map"), "pwm-map")
 
     def test_build_score_config_uses_cli_weights(self):
         module = load_module()
@@ -227,18 +235,168 @@ class ScoreConfigTests(unittest.TestCase):
         )
 
 
+class AirDualSummaryTests(unittest.TestCase):
+    def _make_display(self, module, low_score, primary_score):
+        return {
+            "wheels": {
+                "left": {
+                    "segments": [
+                        {
+                            "target_speed": 15.0,
+                            "sample_count": 18,
+                            "mean_speed": 14.2,
+                            "score": low_score,
+                            "rise_ratio": 0.12,
+                            "settle_ratio": 0.88,
+                            "overshoot": 1.1,
+                            "steady_error": 0.4,
+                        },
+                        {
+                            "target_speed": 25.0,
+                            "sample_count": 15,
+                            "mean_speed": 24.4,
+                            "score": primary_score,
+                            "rise_ratio": 0.15,
+                            "settle_ratio": 0.22,
+                            "overshoot": 0.7,
+                            "steady_error": 0.3,
+                        },
+                    ]
+                }
+            }
+        }
+
+    def test_decide_candidate_status_marks_keep_when_better_than_baseline(self):
+        module = load_host_package_module("air_dual")
+        baseline_display = self._make_display(module, 2.0, 2.5)
+        candidate_display = self._make_display(module, 1.6, 1.8)
+        baseline = module.build_stage_baseline_reference(10.0, 12.0, 11.0, baseline_display, baseline_display)
+
+        status = module.decide_candidate_status(8.0, 9.0, 8.5, candidate_display, candidate_display, baseline_reference=baseline)
+
+        self.assertEqual(status, "保留")
+
+    def test_decide_candidate_status_marks_recheck_when_near_baseline(self):
+        module = load_host_package_module("air_dual")
+        baseline_display = self._make_display(module, 2.0, 2.5)
+        candidate_display = self._make_display(module, 2.4, 2.8)
+        baseline = module.build_stage_baseline_reference(10.0, 12.0, 11.0, baseline_display, baseline_display)
+
+        status = module.decide_candidate_status(10.6, 12.2, 11.4, candidate_display, candidate_display, baseline_reference=baseline)
+
+        self.assertEqual(status, "复验")
+
+    def test_decide_candidate_status_marks_reject_for_primary_speed_issue(self):
+        module = load_host_package_module("air_dual")
+        baseline_display = self._make_display(module, 2.0, 2.5)
+        candidate_display = self._make_display(module, 1.7, 7.5)
+        baseline = module.build_stage_baseline_reference(10.0, 12.0, 11.0, baseline_display, baseline_display)
+
+        status = module.decide_candidate_status(9.0, 9.4, 9.2, candidate_display, candidate_display, baseline_reference=baseline)
+
+        self.assertEqual(status, "淘汰")
+
+    def test_decide_candidate_status_no_longer_special_cases_low_speed_segment(self):
+        module = load_host_package_module("air_dual")
+        baseline_display = self._make_display(module, 2.0, 2.5)
+        candidate_display = self._make_display(module, 7.2, 2.3)
+        baseline = module.build_stage_baseline_reference(10.0, 12.0, 11.0, baseline_display, baseline_display)
+
+        status = module.decide_candidate_status(9.0, 9.2, 9.1, candidate_display, candidate_display, baseline_reference=baseline)
+
+        self.assertEqual(status, "淘汰")
+
+    def test_decide_candidate_status_marks_baseline_row(self):
+        module = load_host_package_module("air_dual")
+        baseline_display = self._make_display(module, 2.0, 2.5)
+        baseline = module.build_stage_baseline_reference(10.0, 12.0, 11.0, baseline_display, baseline_display)
+
+        status = module.decide_candidate_status(10.0, 12.0, 11.0, baseline_display, baseline_display, baseline_reference=baseline)
+
+        self.assertEqual(status, "基线")
+
+    def test_format_candidate_summary_row_contains_compact_pid_and_scores(self):
+        module = load_host_package_module("air_dual")
+        gains = module.WheelPidGains(
+            module.PidGains(100.0, 19.5, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+
+        row = module.format_candidate_summary_row(gains, 3.81, 1.69, 2.86, "复验")
+
+        self.assertIn("L100/19.5/0 R105/20/0", row)
+        self.assertIn("3.81", row)
+        self.assertIn("1.69", row)
+        self.assertIn("2.86", row)
+        self.assertIn("复验", row)
+
+    def test_append_candidate_history_writes_headers_once(self):
+        module = load_host_package_module("air_dual")
+        gains = module.WheelPidGains(
+            module.PidGains(100.0, 20.0, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+        display = self._make_display(module, 1.8, 1.2)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            summary_path = pathlib.Path(temp_dir) / "summary.csv"
+            segments_path = pathlib.Path(temp_dir) / "segments.csv"
+            original_summary = module.SUMMARY_HISTORY_PATH
+            original_segments = module.SEGMENT_HISTORY_PATH
+            try:
+                module.SUMMARY_HISTORY_PATH = summary_path
+                module.SEGMENT_HISTORY_PATH = segments_path
+
+                module.append_candidate_history(
+                    "left-isolated",
+                    gains,
+                    2.4,
+                    2.2,
+                    2.3,
+                    "保留",
+                    display,
+                    display,
+                    timestamp_text="2026-03-24 12:00:00",
+                )
+                module.append_candidate_history(
+                    "left-isolated",
+                    gains,
+                    3.1,
+                    2.8,
+                    2.95,
+                    "复验",
+                    display,
+                    display,
+                    timestamp_text="2026-03-24 12:00:01",
+                )
+            finally:
+                module.SUMMARY_HISTORY_PATH = original_summary
+                module.SEGMENT_HISTORY_PATH = original_segments
+
+            summary_lines = summary_path.read_text(encoding="utf-8").strip().splitlines()
+            segment_lines = segments_path.read_text(encoding="utf-8").strip().splitlines()
+
+            self.assertEqual(len(summary_lines), 3)
+            self.assertEqual(len(segment_lines), 9)
+            self.assertIn("timestamp,stage,pid_label", summary_lines[0])
+            self.assertIn("trial_label,wheel,target_speed", segment_lines[0])
+
+
 class ModuleSplitTests(unittest.TestCase):
     def test_split_host_modules_can_be_imported_individually(self):
         common = load_host_package_module("common")
         air_dual = load_host_package_module("air_dual")
         ground_dual = load_host_package_module("ground_dual")
         pwm_identify = load_host_package_module("pwm_identify")
+        pwm_map = load_host_package_module("pwm_map")
 
         self.assertEqual(common.MODE_AIR_DUAL, "air-dual")
         self.assertEqual(common.MODE_PWM_IDENTIFY, "pwm-identify")
+        self.assertEqual(common.MODE_PWM_MAP, "pwm-map")
         self.assertEqual(air_dual.DEFAULT_AUTOTUNE_SEQUENCE.count(","), 6)
         self.assertTrue(hasattr(ground_dual, "run_ground_dual_autotune"))
         self.assertTrue(hasattr(pwm_identify, "run_pwm_identify"))
+        self.assertTrue(hasattr(pwm_map, "run_pwm_map"))
 
     def test_top_level_module_reexports_split_host_entries(self):
         module = load_module()
@@ -246,11 +404,13 @@ class ModuleSplitTests(unittest.TestCase):
         air_dual = load_host_package_module("air_dual")
         ground_dual = load_host_package_module("ground_dual")
         pwm_identify = load_host_package_module("pwm_identify")
+        pwm_map = load_host_package_module("pwm_map")
 
         self.assertIs(module.normalize_mode_name, common.normalize_mode_name)
         self.assertIs(module.run_air_dual_autotune, air_dual.run_air_dual_autotune)
         self.assertIs(module.run_ground_dual_autotune, ground_dual.run_ground_dual_autotune)
         self.assertIs(module.run_pwm_identify, pwm_identify.run_pwm_identify)
+        self.assertIs(module.run_pwm_map, pwm_map.run_pwm_map)
 
 
 class FirmwareRegistryTests(unittest.TestCase):
@@ -918,6 +1078,13 @@ class AutotuneModeTests(unittest.TestCase):
 
 
 class SearchTests(unittest.TestCase):
+    def test_build_pwm_map_levels_includes_zero_and_final_max(self):
+        module = load_host_package_module("pwm_map")
+
+        self.assertEqual(module.build_pwm_map_levels(500, 10000)[0], 0)
+        self.assertEqual(module.build_pwm_map_levels(500, 10000)[-1], 10000)
+        self.assertEqual(module.build_pwm_map_levels(3000, 9500), [0, 3000, 6000, 9000, 9500])
+
     def test_extract_identify_level_metrics_estimates_step_response(self):
         module = load_module()
 
@@ -961,9 +1128,13 @@ class SearchTests(unittest.TestCase):
             def __init__(self):
                 self.commands = []
                 self.capture_calls = []
+                self.drain_calls = 0
 
             def send_command(self, command):
                 self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
 
             def capture_trial(self, duration_seconds, events=None):
                 self.capture_calls.append((duration_seconds, list(events or [])))
@@ -1003,6 +1174,199 @@ class SearchTests(unittest.TestCase):
             ],
         )
         self.assertEqual(client.commands[-2:], ["AT_TEST_MODE=0", "AT_RESET"])
+
+    def test_run_pwm_map_trial_issues_mode_and_open_loop_commands(self):
+        module = load_host_package_module("pwm_map")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+                self.drain_calls = 0
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_map_trial(
+            client,
+            "right",
+            1000,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(
+            client.commands[:5],
+            [
+                "AT_RESET",
+                "AT_TEST_MODE=1",
+                "L_TEST_PWM=0",
+                "R_TEST_PWM=1000",
+                "START",
+            ],
+        )
+        self.assertEqual(
+            client.capture_calls,
+            [
+                (
+                    0.2,
+                    [
+                        (0.04, "START"),
+                        (0.08, "START"),
+                        (0.12, "L_TEST_PWM=0"),
+                        (0.12, "R_TEST_PWM=0"),
+                    ],
+                )
+            ],
+        )
+        self.assertEqual(client.drain_calls, 1)
+        self.assertEqual(client.commands[-2:], ["AT_TEST_MODE=0", "AT_RESET"])
+
+    def test_run_pwm_map_trial_waits_for_ready_sample_before_capture(self):
+        module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+                self.drain_calls = 0
+                self.read_calls = []
+                self._batches = [
+                    [common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 500.0, 0.0)],
+                    [common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0)],
+                ]
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                self.read_calls.append(duration_seconds)
+                if self._batches:
+                    return self._batches.pop(0)
+                return []
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_map_trial(
+            client,
+            "left",
+            500,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(len(client.read_calls), 2)
+        self.assertEqual(client.commands.count("START"), 2)
+        self.assertEqual(client.drain_calls, 2)
+        self.assertEqual(len(client.capture_calls), 1)
+
+    def test_run_pwm_identify_trial_keeps_pwm_above_4000(self):
+        module = load_host_package_module("pwm_identify")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_identify_trial(
+            client,
+            "left",
+            6000,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(
+            client.commands[:5],
+            [
+                "AT_RESET",
+                "AT_TEST_MODE=1",
+                "L_TEST_PWM=6000",
+                "R_TEST_PWM=0",
+                "START",
+            ],
+        )
+
+    def test_extract_pwm_map_level_metrics_marks_deadzone_after_three_fast_samples(self):
+        module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        samples = [
+            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 500.0, 0.0),
+            common.TelemetrySample(0.0, 4.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 500.0, 0.0),
+            common.TelemetrySample(0.0, 6.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 500.0, 0.0),
+            common.TelemetrySample(0.0, 7.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 500.0, 0.0),
+            common.TelemetrySample(0.0, 8.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 500.0, 0.0),
+            common.TelemetrySample(0.0, 9.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 500.0, 0.0),
+        ]
+
+        metrics = module.extract_pwm_map_level_metrics(samples, "left", 500)
+
+        self.assertTrue(metrics.deadzone_reached)
+        self.assertEqual(metrics.sample_count, 6)
+        self.assertAlmostEqual(metrics.peak_encoder, 9.0, places=3)
+        self.assertAlmostEqual(metrics.steady_encoder, 8.5, places=3)
+
+    def test_extract_pwm_map_level_metrics_rejects_stop_flag_and_empty_capture(self):
+        module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        with self.assertRaises(RuntimeError):
+            module.extract_pwm_map_level_metrics([], "left", 500)
+
+        with self.assertRaises(RuntimeError):
+            module.extract_pwm_map_level_metrics(
+                [common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 2.0, 500.0, 0.0)],
+                "left",
+                500,
+            )
+
+    def test_extract_pwm_map_level_metrics_ignores_zero_pwm_transition_samples_before_start(self):
+        module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        samples = [
+            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0),
+            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 0.0, 0.0),
+            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0),
+            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0),
+            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0),
+        ]
+
+        metrics = module.extract_pwm_map_level_metrics(samples, "left", 0)
+
+        self.assertEqual(metrics.sample_count, 3)
+        self.assertAlmostEqual(metrics.steady_encoder, 0.0, places=3)
+        self.assertFalse(metrics.deadzone_reached)
 
     def test_run_pwm_identify_applies_seed_when_requested(self):
         module = load_module()
@@ -1181,6 +1545,189 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertIn("pwm-identify does not support --save-best", stderr.getvalue())
 
+    def test_run_pwm_map_writes_low_pwm_rows_and_single_deadzone_break(self):
+        module = load_module()
+        pwm_map = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        original_run_pwm_map_trial = pwm_map.run_pwm_map_trial
+
+        class FakeClient(object):
+            pass
+
+        class Args(object):
+            rest_seconds = 0.0
+            map_pwm_step = 500
+            map_pwm_max = 1000
+            map_repeat = 2
+            map_hold_ms = 120
+            map_tail_zero_ms = 80
+            map_output = ""
+
+        def build_samples(wheel_name, pwm_value):
+            speeds = [0.0, 2.0, 3.0, 4.0]
+            if pwm_value >= 500:
+                speeds = [0.0, 6.0, 7.0, 8.0, 8.0]
+            samples = []
+            for speed in speeds:
+                if wheel_name == "left":
+                    samples.append(common.TelemetrySample(0.0, speed, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, pwm_value, 0.0))
+                else:
+                    samples.append(common.TelemetrySample(0.0, 0.0, speed, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, pwm_value))
+            return samples
+
+        def fake_run_pwm_map_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            return build_samples(wheel_name, pwm_value)
+
+        pwm_map.run_pwm_map_trial = fake_run_pwm_map_trial
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                args = Args()
+                args.map_output = str(pathlib.Path(temp_dir) / "pwm_map.csv")
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    result = module.run_pwm_map(FakeClient(), args)
+                csv_lines = pathlib.Path(args.map_output).read_text(encoding="utf-8").strip().splitlines()
+        finally:
+            pwm_map.run_pwm_map_trial = original_run_pwm_map_trial
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(csv_lines), 7)
+        self.assertIn("deadzone_break_pwm", csv_lines[0])
+        self.assertIn(",left,0,", csv_lines[1])
+        self.assertIn(",left,500,", csv_lines[2])
+        self.assertTrue(any("left deadzone_break_pwm=500" in line for line in stdout.getvalue().splitlines()))
+        self.assertEqual(sum([1 for line in csv_lines[1:] if ",left," in line and line.endswith(",500")]), 1)
+
+    def test_run_pwm_map_stops_at_effective_pwm_limit_without_duplicate_rows(self):
+        module = load_module()
+        pwm_map = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        original_run_pwm_map_trial = pwm_map.run_pwm_map_trial
+        class FakeClient(object):
+            pass
+
+        class TrialResult(object):
+            def __init__(self, samples, effective_pwm):
+                self.samples = samples
+                self.effective_pwm = effective_pwm
+
+        class Args(object):
+            rest_seconds = 0.0
+            map_pwm_step = 500
+            map_pwm_max = 1500
+            map_repeat = 1
+            map_hold_ms = 120
+            map_tail_zero_ms = 80
+            map_output = ""
+
+        def build_samples(wheel_name, effective_pwm):
+            speeds = [0.0, 0.0, 0.0]
+            if effective_pwm >= 500:
+                speeds = [0.0, 6.0, 7.0, 8.0, 8.0]
+            samples = []
+            for speed in speeds:
+                if wheel_name == "left":
+                    samples.append(
+                        common.TelemetrySample(0.0, speed, 0.0, effective_pwm, 0.0, 1.0, 0.0, 2.0, effective_pwm, 0.0)
+                    )
+                else:
+                    samples.append(
+                        common.TelemetrySample(0.0, 0.0, speed, 0.0, effective_pwm, 1.0, 0.0, 2.0, 0.0, effective_pwm)
+                    )
+            return samples
+
+        def fake_run_pwm_map_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            effective_pwm = pwm_value
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            if pwm_value >= 1500:
+                effective_pwm = 1000
+            return TrialResult(build_samples(wheel_name, effective_pwm), effective_pwm)
+
+        pwm_map.run_pwm_map_trial = fake_run_pwm_map_trial
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                args = Args()
+                args.map_output = str(pathlib.Path(temp_dir) / "pwm_map_limit.csv")
+                stdout = io.StringIO()
+                with contextlib.redirect_stdout(stdout):
+                    result = module.run_pwm_map(FakeClient(), args)
+                csv_lines = pathlib.Path(args.map_output).read_text(encoding="utf-8").strip().splitlines()
+        finally:
+            pwm_map.run_pwm_map_trial = original_run_pwm_map_trial
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(csv_lines), 7)
+        self.assertFalse(any(",1500," in line for line in csv_lines[1:]))
+        self.assertEqual(sum([1 for line in csv_lines[1:] if ",left,1000," in line]), 1)
+        self.assertEqual(sum([1 for line in csv_lines[1:] if ",right,1000," in line]), 1)
+        self.assertIn("left pwm clamp requested=1500 effective=1000", stdout.getvalue())
+        self.assertIn("right pwm clamp requested=1500 effective=1000", stdout.getvalue())
+
+    def test_main_routes_pwm_map_mode(self):
+        module = load_module()
+
+        original_detect_port = module.detect_port
+        original_serial_client = module.VofaSerialClient
+        original_run_pwm_map = module.run_pwm_map
+
+        call_state = {"called": 0}
+
+        class FakeClient(object):
+            def __init__(self, port, baudrate, timeout):
+                self.port = port
+                self.baudrate = baudrate
+                self.timeout = timeout
+
+            def close(self):
+                pass
+
+        def fake_detect_port(preferred=None):
+            del preferred
+            return "COM8"
+
+        def fake_run_pwm_map(client, args):
+            del args
+            self.assertEqual(client.port, "COM8")
+            call_state["called"] += 1
+            return 0
+
+        module.detect_port = fake_detect_port
+        module.VofaSerialClient = FakeClient
+        module.run_pwm_map = fake_run_pwm_map
+
+        try:
+            result = module.main(["--mode", "pwm-map"])
+        finally:
+            module.detect_port = original_detect_port
+            module.VofaSerialClient = original_serial_client
+            module.run_pwm_map = original_run_pwm_map
+
+        self.assertEqual(result, 0)
+        self.assertEqual(call_state["called"], 1)
+
+    def test_main_rejects_invalid_pwm_map_arguments(self):
+        module = load_module()
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            result = module.main(["--mode", "pwm-map", "--map-pwm-step", "0"])
+
+        self.assertEqual(result, 2)
+        self.assertIn("pwm-map requires --map-pwm-step > 0", stderr.getvalue())
+
+    def test_firmware_open_loop_pwm_clamp_uses_pwm_duty_max(self):
+        source = (
+            MODULE_PATH.parents[1] / "firmware" / "autotune_runtime.c"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("PWM_DUTY_MAX", source)
+        self.assertNotIn("value > 4000.0f", source)
+
     def test_run_autotune_reports_worst_right_verification_score(self):
         module = load_module()
         air_dual = load_host_package_module("air_dual")
@@ -1231,8 +1778,8 @@ class SearchTests(unittest.TestCase):
                 return main_samples
             return verify_samples
 
-        def fake_optimize_single_wheel(client, args, trial, score_config, wheel_name, fixed_pair):
-            del client, args, trial, score_config, fixed_pair
+        def fake_optimize_single_wheel(client, args, trial, verify_trial, score_config, wheel_name, fixed_pair):
+            del client, args, trial, verify_trial, score_config, fixed_pair
             if wheel_name == "left":
                 return best_pair.left, 2.0
             return best_pair.right, 3.0

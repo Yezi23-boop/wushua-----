@@ -60,8 +60,8 @@ static void hardware_init(void)
 static void control_init(void)
 {
     /* 速度环初始化：默认给定一组安全的基础参数 */
-    pid_speed_init(&PID.left_speed, 105.0f, 20.0f, 0.0f, 9000.0f, 9000.0f);
-    pid_speed_init(&PID.right_speed, 105.0f, 20.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.left_speed, 105.0f, 20.0f, 0.0f, 10000.0f, 10000.0f);
+    pid_speed_init(&PID.right_speed, 105.0f, 20.0f, 0.0f, 10000.0f, 10000.0f);
 
     /* 转向环与角度环先清零，随后由 apply_config 从 EEPROM 加载 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);

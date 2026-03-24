@@ -99,3 +99,22 @@
 - `air-dual`：先看 `docs/tuning_rules.md` 和 `docs/debug_memory.md`
 - `ground-dual`：先看 `docs/ground_dual_tuning_rules.md` 和 `docs/ground_dual_debug_memory.md`
 - `pwm-identify`：先看 `docs/pwm_identify_rules.md` 和 `docs/pwm_identify_debug_memory.md`
+## pwm-map
+
+- `pwm-map` is the open-loop PWM-to-encoder calibration mode.
+- It always starts from `0 PWM` so the first useful breakpoint is the motor deadzone.
+- It reuses the existing firmware open-loop commands:
+  - `AT_TEST_MODE=1`
+  - `L_TEST_PWM=<value>`
+  - `R_TEST_PWM=<value>`
+  - `START`
+- `AT_RESET`
+- Default CSV output goes to `project/speed_loop_autotune/logs/`.
+- Rules and field meanings are documented in `docs/pwm_map_rules.md`.
+
+## Confirmed PWM Ranges
+
+- Wheel motor PWM commands use the real `0~10000` range.
+- This wheel PWM range is the default assumption for `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`.
+- `AT_FUYA` is a separate vacuum command and remains limited to `0~4000`.
+- Real hardware verification on `2026-03-24` over `COM8` confirmed that wheel open-loop commands at `5000`, `7000`, and `9000` were applied as real PWM after flashing the fresh firmware.

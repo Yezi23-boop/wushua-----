@@ -96,3 +96,26 @@
   - 承载三种模式共用的组件核心，对内管理内部 PID 核和 telemetry 缓存
 - `service/speed_loop_autotune_adapter.*`
   - 是当前项目的组件外接入点，负责把外部 PID 成员和板级端口注册进 `speed_loop_autotune`
+## pwm-map
+
+`pwm-map` does not add new firmware tokens. It reuses the existing open-loop PWM path:
+
+- `AT_RESET`
+- `AT_TEST_MODE=1`
+- `L_TEST_PWM=<value>` / `R_TEST_PWM=<value>`
+- `START`
+- tail-zero by sending the tested wheel back to `0`
+- `AT_TEST_MODE=0`
+- `AT_RESET`
+
+CSV columns:
+
+- `timestamp`
+- `wheel`
+- `pwm_command`
+- `steady_encoder`
+- `peak_encoder`
+- `sample_count`
+- `repeat_count`
+- `stop_flag_seen`
+- `deadzone_break_pwm`
