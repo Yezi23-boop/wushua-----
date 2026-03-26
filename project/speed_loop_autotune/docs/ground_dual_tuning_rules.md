@@ -1,42 +1,42 @@
 # Ground Dual Speed Loop Tuning Rules
 
-这份文档只记录 `ground-dual` 的带负载双轮回归规则，不复用 `air-dual` 或 `pwm-identify` 的结论。
+This file covers the current `ground_dual` batch workflow and the final save gate.
 
-## 目标
+## Goal
 
-- 验证带负载双轮在真实阻力、供电压降和停车条件下是否仍稳定
-- 重点看整组试验可重复性，而不是单段最低分
+- Validate the dual-wheel controller under load, supply sag, and stop conditions.
+- Prefer repeatable batch quality over a single best round.
 
-## 默认环境
+## Batch Flow
 
-- 串口：`COM8`
-- 模式：`ground-dual`
-- 负压：按实车需要设置，不默认沿用 `AT_FUYA=0`
-- 默认不发送 `SAVE`
+- `ground_dual` runs as 10-round batches.
+- The current profile should be read before the batch starts.
+- The batch should start from the best candidate already stored in the profile.
+- The batch boundary actions are limited to `continue_ground`, `save`, and `stop_without_save`.
+- `save` is only valid after a completed `ground_dual` batch.
 
-## 默认序列
+## Sequence Selection
 
-- `25:200,35:200,45:200,35:200,25:200`
+- Prefer `shared_targets.custom_sequences.ground_forward` when present.
+- If custom ground sequences are missing, prefer the profile's low/mid template `ground_forward = [low, mid, low]`.
+- If worker code still carries older hard-coded defaults, call them worker fallback defaults explicitly.
+- Do not describe worker fallback defaults as the preferred source.
 
-## 默认命令链
+## Evaluation
 
-1. `AT_FUYA=<value>`
-2. `AT_COOLDOWN_MS=<value>`
-3. `AT_ARM`
-4. `AT_TRIAL_MS=<value>`
-5. `AT_SPEED=<first_target>`
-6. `AT_FIRE`
+- Check the combined batch score.
+- Check `stop_flag` and `trial_active`.
+- Check residual speed and residual PWM after the cooldown phase.
+- Use waveform data only to confirm a structured result, not to replace it.
 
-## 评分关注点
+## Save Rule
 
-- 各段综合得分
-- `stop_flag`
-- `trial_active`
-- 冷却段残余速度
-- 冷却段残余 PWM
+- `save` means the current ground batch is accepted into the profile.
+- If the batch is not stable enough, choose `continue_ground` or `stop_without_save` instead.
+- Do not expose save as an air-stage action.
 
-## 使用边界
+## Boundary Reminder
 
-- `ground-dual` 只做带载回归和保守筛选
-- 不在本模式里做开环 PWM 辨识
-- 如果 `air-dual` 单轮更优、但 `ground-dual` 明显更差，优先保守回退
+- `continue_ground` keeps tuning within the ground stage.
+- `save` closes the ground stage with persistence.
+- `stop_without_save` exits without changing the saved profile.

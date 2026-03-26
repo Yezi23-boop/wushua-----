@@ -1,72 +1,45 @@
 # Air Dual Speed Loop Tuning Rules
 
-## Confirmed PWM Limits
+This file covers the current `air_dual` batch workflow. The retired single-wheel-then-coupling model is no longer the primary description here.
+
+## Goal
+
+- Tune the left and right wheels as a coordinated dual-wheel batch.
+- Prefer stable, repeatable batch results over a one-shot minimum score.
+- Keep the workflow structured first and waveform second.
+
+## PWM Limits
 
 - Wheel motor PWM should be treated as `0~10000`.
-- This wheel PWM range is the default assumption for `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`.
 - `AT_FUYA` is a separate vacuum command and should be treated as `0~4000`.
-- Real hardware verification on `2026-03-24` over `COM8` confirmed that wheel commands at `5000`, `7000`, and `9000` were applied as real PWM.
-- `air-dual` default targets should now come from the shared tuning profile, not from the old nominal `15/25/35/45` labels.
-- `air-dual` should prefer `pwm-identify.seed_pi` as the initial PID pair when the shared profile already contains it.
-- When `custom_sequences` is absent, `air-dual` and `ground-dual` should default to the profile's low-mid section, using `low/mid` targets instead of expanding to `high/top`.
 
-这份文档只记录 `air-dual` 的默认闭环调参规则。
-带负载双轮请看 `ground_dual_tuning_rules.md`，开环辨识请看 `pwm_identify_rules.md`。
+## Batch Flow
 
-## 目标
+- `air_dual` runs as 10-round batches.
+- The skill may auto-run `pwm_map` and `pwm_identify` before `air_dual` if the current profile is missing required fields.
+- The batch should start from the profile's current best candidate.
+- The batch boundary actions are limited to `continue_air`, `enter_ground`, and `stop_air`.
 
-- 给左右轮分别找一组可共用的闭环速度环 PID
-- 先单轮隔离，再双轮联合微调
-- 优先保证多速度段稳定可重复，而不是单段最低分
+## Sequence Selection
 
-## 默认环境
+- Prefer `shared_targets.custom_sequences.air_primary` and `shared_targets.custom_sequences.air_verify` when they exist.
+- If custom sequences are missing, prefer the profile's low/mid templates.
+- If worker code still contains older hard-coded defaults, name them explicitly as worker fallback defaults. Do not describe them as the preferred source.
+- Do not present `high/top` expansion as the default fallback path.
 
-- 串口：`COM8`
-- 模式：`air-dual`
-- 负压：关闭，固定 `AT_FUYA=0`
-- 默认不发送 `SAVE`
+## Tuning Order
 
-## 默认速度序列
+- Tune `Kp` first.
+- Tune `Ki` next.
+- Use `Kd` only when repeated overshoot or oscillation cannot be controlled by the first two terms.
 
-主序列：
-- `15:500,25:500,35:500,45:500,35:500,25:500,15:500`
+## Evaluation
 
-校验序列：
-- `15:300,25:300,35:300,45:300,35:300,25:300,15:300`
+- Compare structured metrics across the full 10-round batch.
+- Use waveform data only when the structured result is noisy or contradictory.
+- Favor the candidate that is stable across both the primary and verify sequences.
 
-两组序列尾部都补 `TEST_speed=0`，并把尾部回零纳入采样窗口。
+## Legacy Language
 
-## 调参顺序
-
-1. 先调 `Kp`
-2. 再调 `Ki`
-3. 只有连续多轮超调压不住时才尝试 `Kd`
-
-当前默认步长：
-- `Kp = 10`
-- `Ki = 5`
-- `Kd = 0.5`
-- 搜索步长收敛到 `1.0` 就停
-
-## 单轮隔离
-
-- 调左轮时：左轮使用待测 PID，右轮固定 `0/0/0`
-- 调右轮时：右轮使用待测 PID，左轮固定 `0/0/0`
-
-## 双轮联调
-
-- 单轮粗调后，允许在双轮一起跑的条件下做一轮小范围联合微调
-- 双轮评分会额外惩罚“高 PWM 但速度明显爬不上目标”的候选
-
-## 评分关注点
-
-- 起速
-- 超调
-- 稳定时间
-- 稳态误差
-- 双轮同时高 PWM 时的速度下坠
-
-## 更新规则
-
-- `air-dual` 的新经验先写入 `debug_memory.md`
-- 只有重复验证过的规则，才升级到这份文档
+- Do not describe the workflow as "single-wheel first, coupling later".
+- If a note still mentions that retired model, treat it as historical context only.

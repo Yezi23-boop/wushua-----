@@ -1,157 +1,50 @@
 # Speed Loop Autotune Protocol
 
-专题继续使用 VOFA FireWater ASCII 协议，命令以 `!` 结尾。
+This document describes the current skill-managed protocol for speed-loop autotuning.
 
-## 模式
+## Entry Point
 
-- `air-dual`
-  - 旧别名：`autotune`
-  - 用途：架空双轮闭环速度环调参与双轮联合微调
+- The autotune skill is the only user-facing entry point for this workflow.
+- The skill reads `project/speed_loop_autotune/logs/current_tuning_profile.json` first.
+- If required profile fields are missing, the skill may auto-run `pwm_map` and `pwm_identify` before tuning starts.
+- Public docs should describe the skill-managed workflow, not promise parser flags or shell commands that are not yet implemented.
 
-- `ground-dual`
-  - 旧别名：`ground-load`
-  - 用途：带负载双轮回归、停车质量和残余输出验证
+## Batch Model
 
-- `pwm-identify`
-  - 无旧别名
-  - 用途：架空单轮开环 PWM 阶跃辨识，只产出种子 PID
+- `air_dual` runs in 10-round batches.
+- `ground_dual` runs in 10-round batches.
+- Each round produces structured metrics first.
+- Waveform data is secondary evidence only.
 
-## 共享命令
+## Boundary Actions
 
-- `START`
-- `STOP`
-- `AT_RESET`
-- `INFO`
-- `L_KP=<value>`
-- `L_KI=<value>`
-- `L_KD=<value>`
-- `R_KP=<value>`
-- `R_KI=<value>`
-- `R_KD=<value>`
-- `AT_KP=<value>`
-- `AT_KI=<value>`
-- `AT_KD=<value>`
+Action words are only exposed at batch boundaries, never in the middle of a batch.
 
-## `air-dual` 命令
+### Air batch boundary
 
-- `TEST_speed=<value>`
-- `START`
-- `AT_RESET`
+- `continue_air`
+- `enter_ground`
+- `stop_air`
 
-## `ground-dual` 命令
+### Ground batch boundary
 
-- `AT_SPEED=<value>`
-- `AT_FUYA=<value>`
-- `AT_TRIAL_MS=<value>`
-- `AT_COOLDOWN_MS=<value>`
-- `AT_ARM`
-- `AT_FIRE`
+- `continue_ground`
+- `save`
+- `stop_without_save`
 
-## `pwm-identify` 命令
+## Save Gate
 
-- `AT_TEST_MODE=0|1`
-  - `0`：闭环 `TEST_speed`
-  - `1`：开环 PWM 辨识
-- `L_TEST_PWM=<value>`
-- `R_TEST_PWM=<value>`
-- `TEST_pwm=<value>`
+- `save` is explicit.
+- `save` is only valid at the end of a completed `ground_dual` batch.
+- No other stage should treat save as a normal action.
 
-## Telemetry
+## Decision Policy
 
-每帧输出 10 列，前 7 列兼容旧脚本：
-1. `target`
-2. `left_speed`
-3. `right_speed`
-4. `left_pwm`
-5. `right_pwm`
-6. `trial_active`
-7. `stop_flag`
-8. `mode_id`
-  - `0`：`air-dual`
-  - `1`：`ground-dual`
-  - `2`：`pwm-identify`
-9. `left_cmd_pwm`
-10. `right_cmd_pwm`
+- Use structured scores, round summaries, and profile state as the primary evidence.
+- Use waveforms only to confirm a conflict, explain noise, or inspect an ambiguous result.
+- Do not let a waveform impression override stable structured evidence by default.
 
-示例：
+## Implementation Note
 
-```text
-35.000000,34.200001,34.000000,3200,3180,1,0,0,0,0
-0.000000,12.000000,0.000000,600,0,0,0,2,600,0
-```
-
-## Firmware Portability Boundary
-
-- `firmware/speed_loop_autotune.h`
-  - 板层唯一 public 头，外部适配文件只通过它看到绑定类型、端口类型和初始化入口
-- `firmware/speed_loop_autotune_private.h`
-  - 组件内部 private 头，非 `speed_loop_autotune` 内部文件不应直接依赖
-- `firmware/autotune_token_registry.*`
-  - 只负责 VOFA token 到处理函数的静态注册
-- `firmware/autotune_binding.*`
-  - 只负责 6 个 PID 参数成员的注册、校验、读写和镜像
-- `firmware/autotune_port.*`
-  - 只负责板级速度采样、PWM 输出、负压输出和启停状态控制
-- `firmware/autotune_component.*`
-  - 承载三种模式共用的组件核心，对内管理内部 PID 核和 telemetry 缓存
-- `service/speed_loop_autotune_adapter.*`
-  - 是当前项目的组件外接入点，负责把外部 PID 成员和板级端口注册进 `speed_loop_autotune`
-## pwm-map
-
-`pwm-map` does not add new firmware tokens. It reuses the existing open-loop PWM path:
-
-- `AT_RESET`
-- `AT_TEST_MODE=1`
-- `L_TEST_PWM=<value>` / `R_TEST_PWM=<value>`
-- `START`
-- tail-zero by sending the tested wheel back to `0`
-- `AT_TEST_MODE=0`
-- `AT_RESET`
-
-CSV columns:
-
-- `timestamp`
-- `wheel`
-- `pwm_command`
-- `steady_encoder`
-- `peak_encoder`
-- `sample_count`
-- `repeat_count`
-- `stop_flag_seen`
-- `deadzone_break_pwm`
-
-## Shared Tuning Profile
-
-- shared profile path:
-  - `project/speed_loop_autotune/logs/current_tuning_profile.json`
-- `pwm-map` updates:
-  - `pwm_map`
-  - `shared_targets`
-  - `shared_targets.default_sequences.*`
-- `pwm-identify` updates:
-  - `pwm_identify.seed_pi`
-  - `pwm_identify.source_levels`
-- `air-dual` updates:
-  - `air_dual.baseline_pid`
-  - `air_dual.best_pid`
-  - `air_dual.last_summary`
-  - read priority:
-    - `shared_targets.custom_sequences.air_primary`
-    - `shared_targets.custom_sequences.air_verify`
-    - fallback to `shared_targets.default_sequences.*`
-  - when falling back to `default_sequences`, the default template uses only `bands.low/mid`:
-    - `air_primary = [low, mid, mid, low, low]`
-    - `air_verify = [low, mid, mid, low, low]`
-  - `custom_sequences` can be either:
-    - row arrays such as `[{"target_speed": 30.0, "hold_ms": 500}]`
-    - or editable text such as `"30:500,60:500,90:500"`
-- `ground-dual` updates:
-  - `ground_dual.baseline_pid`
-  - `ground_dual.best_pid`
-  - `ground_dual.last_summary`
-  - read priority:
-    - `shared_targets.custom_sequences.ground_forward`
-    - fallback to `shared_targets.default_sequences.ground_forward`
-  - when falling back to `default_sequences`, the default template is:
-    - `ground_forward = [low, mid, low]`
-  - `shared_targets.custom_sequences.ground_forward` also accepts the same editable text format
+- Worker-side CLI flags, if they are still evolving, should be treated as implementation details until parser support lands.
+- The stable contract for this doc is the batch flow, boundary actions, and save gate.
