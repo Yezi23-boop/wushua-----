@@ -70,6 +70,9 @@ MODE_AIR_DUAL = "air-dual"
 MODE_GROUND_DUAL = "ground-dual"
 MODE_PWM_IDENTIFY = "pwm-identify"
 MODE_PWM_MAP = "pwm-map"
+MODE_AIR_DUAL_STEP = "air-dual-step"
+MODE_GROUND_DUAL_STEP = "ground-dual-step"
+AGENT_SEARCH_PHASES = ("explore", "shrink", "confirm")
 PROFILE_VERSION = 1
 DEFAULT_TUNING_PROFILE_PATH = pathlib.Path(__file__).resolve().parents[1] / "logs" / "current_tuning_profile.json"
 PROFILE_TOP_REFERENCE_SPEED = 45.0
@@ -82,6 +85,26 @@ PROFILE_BAND_SPEEDS = {
 DEFAULT_AIR_PRIMARY_HOLD_MS = 500
 DEFAULT_AIR_VERIFY_HOLD_MS = 300
 DEFAULT_GROUND_FORWARD_HOLD_MS = 200
+
+
+def normalize_band_scores(data):
+    scores = {
+        "low": 0.0,
+        "mid": 0.0,
+        "high": 0.0,
+        "top": 0.0,
+    }
+
+    if not isinstance(data, dict):
+        return scores
+
+    for key in scores:
+        try:
+            scores[key] = float(data.get(key, 0.0))
+        except (TypeError, ValueError):
+            scores[key] = 0.0
+
+    return scores
 
 
 def _format_profile_float(value):
