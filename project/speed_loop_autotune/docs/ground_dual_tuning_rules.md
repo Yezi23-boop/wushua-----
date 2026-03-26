@@ -1,51 +1,47 @@
 # Ground Dual Speed Loop Tuning Rules
 
-This file stays aligned with the Codex skill entrypoint in `docs/agent_autotune.md`. The agent runs the batch flow, keeps `save` explicit at batch boundaries, and uses structured metrics first with waveform as secondary evidence.
+This file covers the current `ground_dual` batch workflow and the final save gate.
 
 ## Goal
 
-- Verify loaded dual-wheel recovery under real friction, supply sag, and stop conditions.
-- Keep the focus on whole-trial repeatability instead of a single low score.
+- Validate the dual-wheel controller under load, supply sag, and stop conditions.
+- Prefer repeatable batch quality over a single best round.
+ - Keep the focus on whole-trial repeatability instead of a single low score.
 
-## Default Environment
+## Batch Flow
 
-- Serial port: `COM8`
-- Mode: `ground-dual`
-- Vacuum: set as needed for the real car, not forced to `AT_FUYA=0`
-- Default save behavior: no automatic `SAVE`
+- `ground_dual` runs as 10-round batches.
+- The current profile should be read before the batch starts.
+- The batch should start from the current best candidate already stored in the profile.
+- The batch boundary actions are limited to `continue_ground`, `save`, and `stop_without_save`.
+- `save` is only valid after a completed `ground_dual` batch.
 
-## Default Sequence
+- Prefer `shared_targets.custom_sequences.ground_forward` when present.
+- If custom ground sequences are missing, prefer the profile's low/mid template `ground_forward = [low, mid, low]`.
+- If worker code still carries older hard-coded defaults, call them worker fallback defaults explicitly.
+- Do not describe worker fallback defaults as the preferred source.
 
-- `25:200,35:200,45:200,35:200,25:200`
+## Evaluation
 
-## Default Command Chain
+- Check the combined batch score.
+- Check `stop_flag` and `trial_active`.
+- Check residual speed and residual PWM after the cooldown phase.
+- Use waveform data only to confirm a structured result, not to replace it.
 
-1. `AT_FUYA=<value>`
-2. `AT_COOLDOWN_MS=<value>`
-3. `AT_ARM`
-4. `AT_TRIAL_MS=<value>`
-5. `AT_SPEED=<first_target>`
-6. `AT_FIRE`
+## Save Rule
 
-## Scoring Focus
+- `save` means the current ground batch is accepted into the profile.
+- If the batch is not stable enough, choose `continue_ground` or `stop_without_save` instead.
+- Do not expose save as an air-stage action.
 
-- Integrated score across all segments.
-- `stop_flag`
-- `trial_active`
-- Remaining speed during the cooldown segment.
-- Remaining PWM during the cooldown segment.
+## Boundary Reminder
+
+- `continue_ground` keeps tuning within the ground stage.
+- `save` closes the ground stage with persistence.
+- `stop_without_save` exits without changing the saved profile.
 
 ## Usage Boundary
 
-- `ground-dual` only performs loaded recovery and conservative screening.
+- `ground_dual` only performs loaded recovery and conservative screening.
 - Do not do open-loop PWM identification in this mode.
-- If `air-dual` is better in isolation but `ground-dual` is clearly worse, prefer the conservative fallback.
-
-## Agent Batch Policy
-
-- Use the skill entrypoint from `docs/agent_autotune.md`.
-- Run `ground_dual` as a 10-round batch.
-- Stop at the batch boundary for the user's action word.
-- Keep `save` explicit and do not auto-save after `ground_dual`.
-- Treat waveform as secondary evidence when structured metrics already explain the result.
-
+- If `air_dual` is better in isolation but `ground_dual` is clearly worse, prefer the conservative fallback.

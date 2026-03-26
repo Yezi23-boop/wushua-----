@@ -1,80 +1,54 @@
 # Air Dual Speed Loop Tuning Rules
 
-This file stays aligned with the Codex skill entrypoint in `docs/agent_autotune.md`. The agent runs the batch flow, keeps `save` explicit at batch boundaries, and uses structured metrics first with waveform as secondary evidence.
-
-## Confirmed PWM Limits
-
-- Wheel motor PWM should be treated as `0~10000`.
-- This wheel PWM range is the default assumption for `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`.
-- `AT_FUYA` is a separate vacuum command and should be treated as `0~4000`.
-- Real hardware verification on `2026-03-24` over `COM8` confirmed that wheel commands at `5000`, `7000`, and `9000` were applied as real PWM.
-- `air-dual` default targets should now come from the shared tuning profile, not from the old nominal `15/25/35/45` labels.
-- `air-dual` should prefer `pwm-identify.seed_pi` as the initial PID pair when the shared profile already contains it.
-- When `custom_sequences` is absent, `air-dual` and `ground_dual` should default to the profile's low-mid section, using `low/mid` targets instead of expanding to `high/top`.
+This file covers the current `air_dual` batch workflow. The retired single-wheel-then-coupling model is no longer the primary description here.
 
 ## Goal
 
-- Find one reusable closed-loop speed PID set for the left and right wheels.
-- Tune single-wheel isolation first, then dual-wheel coupling.
-- Prefer repeatable multi-speed stability over a single lowest score.
+- Tune the left and right wheels as a coordinated dual-wheel batch.
+- Prefer stable, repeatable batch results over a one-shot minimum score.
+- Keep the workflow structured first and waveform second.
 
-## Default Environment
+## PWM Limits
 
-- Serial port: `COM8`
-- Mode: `air-dual`
-- Vacuum: off, fixed `AT_FUYA=0`
-- Default save behavior: no automatic `SAVE`
+- Wheel motor PWM should be treated as `0~10000`.
+- `AT_FUYA` is a separate vacuum command and should be treated as `0~4000`.
+- Real hardware verification on `2026-03-24` over `COM8` confirmed that wheel commands at `5000`, `7000`, and `9000` were applied as real PWM.
 
-## Default Speed Sequences
+## Batch Flow
 
-Main sequence:
-- `15:500,25:500,35:500,45:500,35:500,25:500,15:500`
+- Use the skill entrypoint from `docs/agent_autotune.md`.
+- `air_dual` runs as 10-round batches.
+- The skill may auto-run `pwm_map` and `pwm_identify` before `air_dual` if the current profile is missing required fields.
+- The batch boundary actions are limited to `continue_air`, `enter_ground`, and `stop_air`.
+- `save` is not an air-stage action.
 
-Verification sequence:
-- `15:300,25:300,35:300,45:300,35:300,25:300,15:300`
+## Sequence Selection
 
-Both sequences append `TEST_speed=0` at the tail and keep the tail return-to-zero inside the sampling window.
+- Prefer `shared_targets.custom_sequences.air_primary` and `shared_targets.custom_sequences.air_verify` when they exist.
+- If custom sequences are missing, prefer the profile's low/mid templates.
+- If worker code still contains older hard-coded defaults, name them explicitly as worker fallback defaults instead of preferred defaults.
+- Do not describe `15/25/35/45` nominal labels as the preferred fallback source.
 
 ## Tuning Order
 
-1. Tune `Kp`.
-2. Tune `Ki`.
-3. Try `Kd` only when repeated multi-wheel overshoot still cannot be suppressed.
+- Tune `Kp` first.
+- Tune `Ki` next.
+- Use `Kd` only when repeated overshoot or oscillation cannot be controlled by the first two terms.
 
-Current default step:
+Current default search step guidance:
 - `Kp = 10`
 - `Ki = 5`
 - `Kd = 0.5`
-- Stop when search-step shrink reaches `1.0`.
+- Stop shrinking once the search step reaches `1.0`.
 
-## Single-Wheel Isolation
+## Evaluation
 
-- When tuning the left wheel, keep the right wheel fixed at `0/0/0`.
-- When tuning the right wheel, keep the left wheel fixed at `0/0/0`.
-
-## Dual-Wheel Coupling
-
-- After single-wheel coarse tuning, allow a small-range dual-wheel coupled fine tune.
-- Dual-wheel scoring should still prefer repeatable stability over the lowest single-stage number.
-
-## Scoring Focus
-
-- Start response.
-- Overshoot.
-- Settling time.
-- Steady-state error.
-- Speed drop when both wheels run at high PWM together.
+- Compare structured metrics across the full 10-round batch.
+- Focus on response, overshoot, settling, steady-state error, and speed drop under dual-wheel load.
+- Use waveform data only when the structured result is noisy or contradictory.
+- Favor the candidate that is stable across both the primary and verify sequences.
 
 ## Update Rules
 
-- New `air-dual` experience goes into `debug_memory.md` first.
-- Promote a rule into this file only after it has been verified repeatedly.
-
-## Agent Batch Policy
-
-- Use the skill entrypoint from `docs/agent_autotune.md`.
-- Run `air_dual` as a 10-round batch.
-- Stop at the batch boundary for the user's action word.
-- Keep `save` explicit and do not auto-save after `air_dual`.
-- Treat waveform as secondary evidence when structured metrics already explain the result.
-
+- New `air_dual` experience should land in `debug_memory.md` first.
+- Promote a rule into this file only after repeated verification.

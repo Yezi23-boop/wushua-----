@@ -1,107 +1,45 @@
 # Speed Loop Autotune
 
-This project centralizes the speed-loop autotune workflow, including the Codex skill entrypoint, worker command contract, tuning rules, and tuning logs.
+This directory contains the skill-managed speed-loop autotune workflow, shared profile, worker scripts, and tuning docs.
 
-## Entry Point
+## Current Workflow
 
-- Use the Codex skill described in `docs/agent_autotune.md` as the only user entrypoint.
-- The workflow auto-runs `pwm_map` and `pwm_identify` when required profile fields are missing.
-- Batch stages run in 10-round worker sequences for `air_dual` and `ground_dual`.
-- `save` is explicit and only available at the ground batch boundary.
+- The autotune skill is the only user-facing entry point.
+- The skill reads `project/speed_loop_autotune/logs/current_tuning_profile.json` first.
+- If required profile fields are missing, the skill may auto-run `pwm_map` and `pwm_identify`.
+- `air_dual` and `ground_dual` both run as 10-round batches.
+- Boundary actions are exposed only after a batch completes.
+- `save` is only a `ground_dual` batch-boundary action.
 - Structured metrics are the primary evidence; waveforms are secondary evidence.
 
-## Stages
+## Four-Stage Chain
 
-### `pwm_map`
-
-- Open-loop PWM dead-zone calibration.
-- Updates the shared profile with wheel dead zones and PWM-to-speed mapping.
-
-### `pwm_identify`
-
-- Open-loop PWM step-response identification.
-- Produces left/right seed `PI` values from the identified dead-zone region.
-
-### `air_dual`
-
-- Airborne dual-wheel closed-loop speed tuning.
-- Uses the shared profile and the `pwm_identify` seed values when available.
-
-### `ground_dual`
-
-- Loaded dual-wheel regression and final quality verification.
-- Reuses the best air-stage result as the starting point.
+- `pwm_map`
+  Open-loop PWM dead-zone calibration and shared target preparation.
+- `pwm_identify`
+  Open-loop step identification that produces the initial left/right `seed_pi`.
+- `air_dual`
+  Airborne dual-wheel batch tuning.
+- `ground_dual`
+  Loaded dual-wheel batch verification and final convergence.
 
 For the full batch flow, boundary actions, and log locations, see `docs/agent_autotune.md`.
 
-## Shared Profile
+## Profile And Sequence Fallbacks
 
-The current standard handoff file is `project/speed_loop_autotune/logs/current_tuning_profile.json`.
+- Prefer `shared_targets.custom_sequences.*` first.
+- If custom sequences are missing, prefer the profile's low/mid templates.
+- If worker code still contains older hard-coded sequences, treat them as worker fallback defaults only.
+- `air_dual` should start from `air_dual.active_batch.current_best_pid`, then `air_dual.last_batch_best.best_pid`, then `air_dual.best_pid`, then `pwm_identify.seed_pi`, then CLI defaults.
+- `ground_dual` should start from `ground_dual.active_batch.current_best_pid`, then `ground_dual.best_pid`, then `air_dual.best_pid`, then `pwm_identify.seed_pi`, then CLI defaults.
 
-It carries the four-stage chain:
+## Confirmed PWM Range
 
-- `pwm_map`
-- `pwm_identify`
-- `air_dual`
-- `ground_dual`
+- Wheel motor PWM commands use `0~10000`.
+- `air_dual`, `ground_dual`, `pwm_identify`, and `pwm_map` all use that wheel PWM range.
+- `AT_FUYA` is a separate vacuum command and stays limited to `0~4000`.
 
-## Standard Tuning Flow
-
-### Step 1: Run `pwm-map`
-
-- Output the raw CSV.
-- Update the shared profile.
-- Record wheel dead zones.
-
-### Step 2: Run `pwm-identify`
-
-- Read the shared profile.
-- Reuse the `pwm_map` dead-zone result.
-- Write left/right seed `PI` back to the shared profile.
-
-### Step 3: Run `air-dual`
-
-- Read the real encoder targets from the shared profile.
-- Prefer `pwm-identify.seed_pi` as the initial PID when present.
-- Write the best air-stage result back to the shared profile.
-- Use the low/mid default template when no custom sequence exists.
-
-### Step 4: Run `ground-dual`
-
-- Read the real ground targets from the shared profile.
-- Prefer the best `air_dual` result as the starting point.
-- Write the final loaded result back to the shared profile.
-- Use the low/mid default template when no custom sequence exists.
-
-## Host Boundary
-
-- `host/common.py`
-- `host/pwm_map.py`
-- `host/pwm_identify.py`
-- `host/air_dual.py`
-- `host/ground_dual.py`
-- `host/vofa_autotune.py`
-
-## Firmware Boundary
-
-- `firmware/autotune_component.*`
-- `firmware/speed_loop_autotune.h`
-- `firmware/speed_loop_autotune_private.h`
-- `firmware/autotune_binding.*`
-- `firmware/autotune_port.*`
-- `firmware/autotune_pid_core.*`
-- `firmware/autotune_token_registry.*`
-- `firmware/air_dual_mode.*`
-- `firmware/ground_dual_mode.*`
-- `firmware/pwm_identify_mode.*`
-- `firmware/autotune_runtime.*`
-- `firmware/host_autotune_command.*`
-- `firmware/speed_loop_trial.*`
-- `service/speed_loop_autotune_adapter.*`
-
-## Current Telemetry
-
-Keep the first 7 columns and append 3 more at the tail:
+## Telemetry Columns
 
 1. `target`
 2. `left_speed`
@@ -114,36 +52,15 @@ Keep the first 7 columns and append 3 more at the tail:
 9. `left_cmd_pwm`
 10. `right_cmd_pwm`
 
-## Confirmed PWM Range
-
-- Wheel motor PWM commands use the real `0~10000` range.
-- `air_dual`, `ground_dual`, `pwm_identify`, and `pwm_map` all use that wheel PWM range.
-- `AT_FUYA` is a separate vacuum command and stays limited to `0~4000`.
-
 ## Reading Guide
 
-- `pwm-map`
-  - `docs/pwm_map_rules.md`
-- `pwm-identify`
-  - `docs/pwm_identify_rules.md`
-  - `docs/pwm_identify_debug_memory.md`
-- `air-dual`
-  - `docs/tuning_rules.md`
-  - `docs/debug_memory.md`
-- `ground-dual`
-  - `docs/ground_dual_tuning_rules.md`
-  - `docs/ground_dual_debug_memory.md`
-
-## `custom_sequences` Manual Edit
-
-- path:
-  - `project/speed_loop_autotune/logs/current_tuning_profile.json`
-- keys:
-  - `shared_targets.custom_sequences.air_primary`
-  - `shared_targets.custom_sequences.air_verify`
-  - `shared_targets.custom_sequences.ground_forward`
-- priority:
-  - use `custom_sequences` first
-  - fallback to `default_sequences` when custom value is missing
-  - current default template uses `bands.low/mid` only
-
+- `docs/protocol.md`
+  Skill-managed batch protocol and boundary actions.
+- `docs/tuning_rules.md`
+  `air_dual` batch tuning rules.
+- `docs/ground_dual_tuning_rules.md`
+  `ground_dual` batch tuning rules and save gate.
+- `docs/pwm_map_rules.md`
+  `pwm_map` prerequisites and mapping notes.
+- `docs/pwm_identify_rules.md`
+  `pwm_identify` seed generation rules.
