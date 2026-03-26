@@ -6,6 +6,10 @@ from .common import (
     WheelPidGains,
     _median_value,
     apply_speed_gains,
+    load_tuning_profile,
+    pid_gains_to_dict,
+    resolve_profile_path,
+    save_tuning_profile,
 )
 
 
@@ -25,6 +29,9 @@ DEFAULT_IDENTIFY_MIN_MOTION_SPEED = 5.0
 DEFAULT_IDENTIFY_REQUIRED_CONSECUTIVE_SAMPLES = 3
 DEFAULT_IDENTIFY_MIN_VALID_LEVELS = 2
 DEFAULT_IDENTIFY_MAX_VALID_LEVELS = 3
+DEFAULT_IDENTIFY_READY_WAIT_SECONDS = 0.3
+DEFAULT_IDENTIFY_READY_POLL_SECONDS = 0.02
+DEFAULT_IDENTIFY_START_KEEPALIVE_MS = 40
 
 
 def _clamp_identify_pwm(value):
@@ -44,6 +51,88 @@ def _build_pwm_command(wheel_name, pwm_value):
     raise ValueError("wheel_name must be 'left' or 'right'")
 
 
+def _get_sample_command_pwm(sample, wheel_name):
+    if wheel_name == "left":
+        return sample.left_cmd_pwm
+    return sample.right_cmd_pwm
+
+
+def _build_identify_capture_events(wheel_name, hold_ms):
+    events = []
+    keepalive_ms = DEFAULT_IDENTIFY_START_KEEPALIVE_MS
+    zero_active_command, zero_idle_command = _build_pwm_command(wheel_name, 0)
+
+    if keepalive_ms > 0:
+        while keepalive_ms < hold_ms:
+            events.append((float(keepalive_ms) / 1000.0, "START"))
+            keepalive_ms += DEFAULT_IDENTIFY_START_KEEPALIVE_MS
+
+    events.append((float(hold_ms) / 1000.0, zero_active_command))
+    events.append((float(hold_ms) / 1000.0, zero_idle_command))
+    return events
+
+
+def _is_identify_ready_sample(sample, wheel_name, command_pwm):
+    current_command = 0.0
+
+    if abs(sample.mode_id - 2.0) > 0.5:
+        return None
+    if sample.stop_flag >= 0.5:
+        return None
+
+    current_command = _get_sample_command_pwm(sample, wheel_name)
+    if float(command_pwm) <= 0.5:
+        if abs(current_command) <= 0.5:
+            return 0.0
+        return None
+
+    if abs(current_command - float(command_pwm)) <= 0.5:
+        return current_command
+
+    return None
+
+
+def _wait_for_identify_ready(
+    client,
+    wheel_name,
+    command_pwm,
+    wait_seconds=DEFAULT_IDENTIFY_READY_WAIT_SECONDS,
+    poll_seconds=DEFAULT_IDENTIFY_READY_POLL_SECONDS,
+):
+    deadline = 0.0
+    samples = []
+    sample = None
+    prefetched_samples = []
+
+    if not hasattr(client, "read_samples"):
+        return prefetched_samples
+
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        samples = client.read_samples(poll_seconds)
+        prefetched_samples.extend(samples)
+        for sample in samples:
+            if _is_identify_ready_sample(sample, wheel_name, command_pwm) is not None:
+                return prefetched_samples
+        client.send_command("START")
+
+    raise RuntimeError("pwm-identify start did not become ready")
+
+
+def _resolve_identify_start_pwm(wheel_section, pwm_step):
+    deadzone_pwm = 0
+    step_value = int(pwm_step)
+
+    if step_value <= 0:
+        raise RuntimeError("identify_pwm_step must be positive")
+
+    deadzone_pwm = int(wheel_section.get("deadzone_break_pwm", 0))
+    if deadzone_pwm < 0:
+        deadzone_pwm = 0
+
+    return ((deadzone_pwm // step_value) + 1) * step_value
+
+
 def run_pwm_identify_trial(
     client,
     wheel_name,
@@ -55,7 +144,6 @@ def run_pwm_identify_trial(
 ):
     pwm_value = _clamp_identify_pwm(pwm_value)
     active_command, idle_command = _build_pwm_command(wheel_name, pwm_value)
-    zero_active_command, zero_idle_command = _build_pwm_command(wheel_name, 0)
 
     client.send_command("AT_RESET")
     sleep_fn(rest_seconds)
@@ -63,27 +151,32 @@ def run_pwm_identify_trial(
     client.send_command(active_command)
     client.send_command(idle_command)
     client.send_command("START")
+    if hasattr(client, "drain_input"):
+        client.drain_input()
+    prefetched_samples = _wait_for_identify_ready(client, wheel_name, pwm_value)
     samples = client.capture_trial(
         float(hold_ms + tail_zero_ms) / 1000.0,
-        events=[
-            (float(hold_ms) / 1000.0, zero_active_command),
-            (float(hold_ms) / 1000.0, zero_idle_command),
-        ],
+        events=_build_identify_capture_events(wheel_name, hold_ms),
     )
     client.send_command("AT_TEST_MODE=0")
     client.send_command("AT_RESET")
+    if prefetched_samples:
+        return list(prefetched_samples) + list(samples)
     return samples
 
 
 def _extract_active_identify_samples(samples, wheel_name, command_pwm):
     active = []
     target_value = float(command_pwm)
+    current_command = 0.0
 
     for sample in samples:
-        if wheel_name == "left":
-            current_command = sample.left_cmd_pwm
-        else:
-            current_command = sample.right_cmd_pwm
+        if abs(sample.mode_id - 2.0) > 0.5:
+            continue
+        if sample.stop_flag >= 0.5:
+            continue
+
+        current_command = _get_sample_command_pwm(sample, wheel_name)
 
         if abs(current_command - target_value) <= 0.5:
             active.append(sample)
@@ -219,7 +312,28 @@ def build_identify_seed_from_levels(levels, discrete_sample_s=DEFAULT_IDENTIFY_D
 
 def _collect_wheel_levels(client, args, wheel_name):
     valid_levels = []
-    pwm_value = int(args.identify_pwm_step)
+    profile = None
+    pwm_map_section = None
+    wheel_section = None
+    pwm_value = 0
+
+    profile = load_tuning_profile(args.profile_path, required=True)
+    pwm_map_section = profile.get("pwm_map")
+    if not isinstance(pwm_map_section, dict):
+        raise RuntimeError("Missing pwm_map data in tuning profile: {0}".format(resolve_profile_path(args.profile_path)))
+
+    wheel_section = pwm_map_section.get(wheel_name)
+    if not isinstance(wheel_section, dict) or wheel_section.get("deadzone_break_pwm") is None:
+        raise RuntimeError("Missing {0} deadzone in tuning profile: {1}".format(wheel_name, resolve_profile_path(args.profile_path)))
+
+    pwm_value = _resolve_identify_start_pwm(wheel_section, args.identify_pwm_step)
+    print(
+        "identify {0} start_pwm={1} deadzone_pwm={2}".format(
+            wheel_name,
+            pwm_value,
+            int(wheel_section.get("deadzone_break_pwm", 0)),
+        )
+    )
 
     while pwm_value <= int(args.identify_pwm_max):
         run_metrics = []
@@ -259,8 +373,16 @@ def _collect_wheel_levels(client, args, wheel_name):
 
 
 def run_pwm_identify(client, args):
+    profile = None
+    left_seed = None
+    right_seed = None
+
     if args.save_best:
         raise RuntimeError("pwm-identify does not support --save-best")
+
+    profile = load_tuning_profile(args.profile_path, required=True)
+    if not isinstance(profile.get("pwm_map"), dict):
+        raise RuntimeError("Missing pwm_map data in tuning profile: {0}".format(resolve_profile_path(args.profile_path)))
 
     left_levels = _collect_wheel_levels(client, args, "left")
     if len(left_levels) < DEFAULT_IDENTIFY_MIN_VALID_LEVELS:
@@ -274,6 +396,8 @@ def run_pwm_identify(client, args):
         build_identify_seed_from_levels(left_levels),
         build_identify_seed_from_levels(right_levels),
     )
+    left_seed = seed_pair.left
+    right_seed = seed_pair.right
 
     print(
         "identify seed left kp={0:.4f} ki={1:.4f} kd={2:.4f}".format(
@@ -289,6 +413,36 @@ def run_pwm_identify(client, args):
             seed_pair.right.kd,
         )
     )
+
+    profile["pwm_identify"] = {
+        "seed_pi": {
+            "left": pid_gains_to_dict(left_seed),
+            "right": pid_gains_to_dict(right_seed),
+        },
+        "source_levels": {
+            "left": [
+                {
+                    "pwm_command": float(level.pwm_command),
+                    "steady_speed": float(level.steady_speed),
+                    "theta_s": float(level.theta_s),
+                    "tau_s": float(level.tau_s),
+                    "valid": int(level.valid),
+                }
+                for level in left_levels
+            ],
+            "right": [
+                {
+                    "pwm_command": float(level.pwm_command),
+                    "steady_speed": float(level.steady_speed),
+                    "theta_s": float(level.theta_s),
+                    "tau_s": float(level.tau_s),
+                    "valid": int(level.valid),
+                }
+                for level in right_levels
+            ],
+        },
+    }
+    save_tuning_profile(profile, args.profile_path)
 
     if args.apply_identify_seed:
         apply_speed_gains(client, seed_pair)

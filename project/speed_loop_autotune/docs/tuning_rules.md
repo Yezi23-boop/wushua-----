@@ -6,6 +6,9 @@
 - This wheel PWM range is the default assumption for `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`.
 - `AT_FUYA` is a separate vacuum command and should be treated as `0~4000`.
 - Real hardware verification on `2026-03-24` over `COM8` confirmed that wheel commands at `5000`, `7000`, and `9000` were applied as real PWM.
+- `air-dual` default targets should now come from the shared tuning profile, not from the old nominal `15/25/35/45` labels.
+- `air-dual` should prefer `pwm-identify.seed_pi` as the initial PID pair when the shared profile already contains it.
+- When `custom_sequences` is absent, `air-dual` and `ground-dual` should default to the profile's low-mid section, using `low/mid` targets instead of expanding to `high/top`.
 
 这份文档只记录 `air-dual` 的默认闭环调参规则。
 带负载双轮请看 `ground_dual_tuning_rules.md`，开环辨识请看 `pwm_identify_rules.md`。

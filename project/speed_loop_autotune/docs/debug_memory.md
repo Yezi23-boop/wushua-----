@@ -15,6 +15,14 @@ Default rule update:
 - treat wheel PWM as `0~10000` in `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`
 - treat `AT_FUYA` as `0~4000`
 - do not reintroduce the old `4000` wheel limit unless a future board image proves otherwise
+- standard tuning order is now:
+  - `pwm-map`
+  - `pwm-identify`
+  - `air-dual`
+  - `ground-dual`
+- `pwm-identify` should consume the deadzone already measured by `pwm-map`, not re-test deadzone on its own
+- the shared runtime handoff file is:
+  - `project/speed_loop_autotune/logs/current_tuning_profile.json`
 
 这份文档用于沉淀架空双轮 `air-dual` 调试里已经验证过的经验，避免后续会话重复踩坑。
 带负载双轮请改写 `ground_dual_debug_memory.md`。

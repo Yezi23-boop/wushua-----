@@ -119,3 +119,39 @@ CSV columns:
 - `repeat_count`
 - `stop_flag_seen`
 - `deadzone_break_pwm`
+
+## Shared Tuning Profile
+
+- shared profile path:
+  - `project/speed_loop_autotune/logs/current_tuning_profile.json`
+- `pwm-map` updates:
+  - `pwm_map`
+  - `shared_targets`
+  - `shared_targets.default_sequences.*`
+- `pwm-identify` updates:
+  - `pwm_identify.seed_pi`
+  - `pwm_identify.source_levels`
+- `air-dual` updates:
+  - `air_dual.baseline_pid`
+  - `air_dual.best_pid`
+  - `air_dual.last_summary`
+  - read priority:
+    - `shared_targets.custom_sequences.air_primary`
+    - `shared_targets.custom_sequences.air_verify`
+    - fallback to `shared_targets.default_sequences.*`
+  - when falling back to `default_sequences`, the default template uses only `bands.low/mid`:
+    - `air_primary = [low, mid, mid, low, low]`
+    - `air_verify = [low, mid, mid, low, low]`
+  - `custom_sequences` can be either:
+    - row arrays such as `[{"target_speed": 30.0, "hold_ms": 500}]`
+    - or editable text such as `"30:500,60:500,90:500"`
+- `ground-dual` updates:
+  - `ground_dual.baseline_pid`
+  - `ground_dual.best_pid`
+  - `ground_dual.last_summary`
+  - read priority:
+    - `shared_targets.custom_sequences.ground_forward`
+    - fallback to `shared_targets.default_sequences.ground_forward`
+  - when falling back to `default_sequences`, the default template is:
+    - `ground_forward = [low, mid, low]`
+  - `shared_targets.custom_sequences.ground_forward` also accepts the same editable text format

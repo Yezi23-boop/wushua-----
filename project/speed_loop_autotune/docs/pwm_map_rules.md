@@ -46,3 +46,5 @@
 - `pwm-map` should therefore be read as a wheel PWM calibration table over `0~10000`, not `0~4000`.
 - `AT_FUYA` is not part of the wheel PWM map and still uses `0~4000`.
 - Real hardware verification on `2026-03-24` over `COM8` confirmed applied wheel PWM at `5000`, `7000`, and `9000`.
+- every successful `pwm-map` run now also updates:
+  - `project/speed_loop_autotune/logs/current_tuning_profile.json`

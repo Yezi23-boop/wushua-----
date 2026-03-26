@@ -47,7 +47,7 @@ def build_argument_parser():
     parser.add_argument(
         "--autotune-verify-sequence",
         default=DEFAULT_AUTOTUNE_VERIFY_SEQUENCE,
-        help="Verification multi-speed sequence used after the main autotune search.",
+        help="Compatibility-only secondary sequence. air-dual single-sequence tuning ignores this unless legacy code paths use it.",
     )
     parser.add_argument("--target-speed", type=float, default=35.0, help="Step target for TEST_speed.")
     parser.add_argument("--rest-seconds", type=float, default=0.35, help="Idle time before each trial.")
@@ -56,9 +56,9 @@ def build_argument_parser():
     parser.add_argument("--initial-kp", type=float, default=100.0, help="Initial Kp.")
     parser.add_argument("--initial-ki", type=float, default=20.0, help="Initial Ki.")
     parser.add_argument("--initial-kd", type=float, default=0.0, help="Initial Kd.")
-    parser.add_argument("--delta-kp", type=float, default=10.0, help="Initial Kp search step.")
-    parser.add_argument("--delta-ki", type=float, default=5.0, help="Initial Ki search step.")
-    parser.add_argument("--delta-kd", type=float, default=0.5, help="Initial Kd search step.")
+    parser.add_argument("--delta-kp", type=float, default=10.0, help="Legacy Kp search step. air-dual batch tuning now uses built-in coarse/fine/micro presets.")
+    parser.add_argument("--delta-ki", type=float, default=5.0, help="Legacy Ki search step. air-dual batch tuning now uses built-in coarse/fine/micro presets.")
+    parser.add_argument("--delta-kd", type=float, default=0.5, help="Legacy Kd search step kept for compatibility.")
     parser.add_argument(
         "--identify-pwm-step",
         type=int,
@@ -130,6 +130,11 @@ def build_argument_parser():
         help="Optional CSV path for pwm-map output. Defaults to the speed_loop_autotune logs directory.",
     )
     parser.add_argument(
+        "--profile-path",
+        default=str(DEFAULT_TUNING_PROFILE_PATH),
+        help="Shared tuning profile path used across pwm-map, pwm-identify, air-dual, and ground-dual.",
+    )
+    parser.add_argument(
         "--autotune-tail-zero-ms",
         type=int,
         default=DEFAULT_AUTOTUNE_TAIL_ZERO_MS,
@@ -139,7 +144,26 @@ def build_argument_parser():
         "--repeat-each",
         type=int,
         default=DEFAULT_AUTOTUNE_REPEAT_COUNT,
-        help="How many times to repeat each candidate and score by the median.",
+        help="Legacy repeat count option. air-dual batch tuning now uses built-in coarse/fine/micro repeat counts.",
+    )
+    parser.add_argument(
+        "--candidate-limit",
+        type=int,
+        default=10,
+        help="Maximum candidate PID groups to evaluate per air-dual batch. Defaults to 10.",
+    )
+    parser.set_defaults(interactive_batches=True)
+    parser.add_argument(
+        "--interactive-batches",
+        dest="interactive_batches",
+        action="store_true",
+        help="Prompt to continue or stop after each air-dual batch. Enabled by default.",
+    )
+    parser.add_argument(
+        "--no-interactive-batches",
+        dest="interactive_batches",
+        action="store_false",
+        help="Run a single air-dual batch and exit without finalizing best_pid.",
     )
     parser.add_argument(
         "--search-tolerance",
@@ -232,11 +256,21 @@ def validate_args(args):
         raise RuntimeError("pwm-map requires --map-repeat >= 1")
     if args.mode == MODE_PWM_MAP and args.map_hold_ms < 20:
         raise RuntimeError("pwm-map requires --map-hold-ms >= 20")
+    if args.mode == MODE_AIR_DUAL and args.candidate_limit < 0:
+        raise RuntimeError("air-dual requires --candidate-limit >= 0")
 
 
 def main(argv=None):
     parser = build_argument_parser()
-    args = parser.parse_args(argv)
+    argv_items = argv
+    if argv_items is None:
+        argv_items = sys.argv[1:]
+    else:
+        argv_items = list(argv_items)
+
+    args = parser.parse_args(argv_items)
+    args.autotune_sequence_explicit = "--autotune-sequence" in argv_items
+    args.autotune_verify_sequence_explicit = "--autotune-verify-sequence" in argv_items
     args.mode = normalize_mode_name(args.mode)
 
     try:

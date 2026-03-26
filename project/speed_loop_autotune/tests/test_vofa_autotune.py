@@ -2,6 +2,7 @@ import contextlib
 import importlib
 import importlib.util
 import io
+import json
 import pathlib
 import tempfile
 import unittest
@@ -160,6 +161,7 @@ class ScoreConfigTests(unittest.TestCase):
         self.assertEqual(args.map_hold_ms, 250)
         self.assertEqual(args.map_tail_zero_ms, 200)
         self.assertEqual(args.map_output, "")
+        self.assertEqual(args.profile_path, str(module.DEFAULT_TUNING_PROFILE_PATH))
         self.assertFalse(args.apply_identify_seed)
 
     def test_normalize_mode_name_supports_explicit_and_legacy_labels(self):
@@ -322,11 +324,9 @@ class AirDualSummaryTests(unittest.TestCase):
             module.PidGains(105.0, 20.0, 0.0),
         )
 
-        row = module.format_candidate_summary_row(gains, 3.81, 1.69, 2.86, "复验")
+        row = module.format_candidate_summary_row(gains, 2.86, "复验")
 
         self.assertIn("L100/19.5/0 R105/20/0", row)
-        self.assertIn("3.81", row)
-        self.assertIn("1.69", row)
         self.assertIn("2.86", row)
         self.assertIn("复验", row)
 
@@ -350,22 +350,16 @@ class AirDualSummaryTests(unittest.TestCase):
                 module.append_candidate_history(
                     "left-isolated",
                     gains,
-                    2.4,
-                    2.2,
                     2.3,
                     "保留",
-                    display,
                     display,
                     timestamp_text="2026-03-24 12:00:00",
                 )
                 module.append_candidate_history(
                     "left-isolated",
                     gains,
-                    3.1,
-                    2.8,
                     2.95,
                     "复验",
-                    display,
                     display,
                     timestamp_text="2026-03-24 12:00:01",
                 )
@@ -377,7 +371,7 @@ class AirDualSummaryTests(unittest.TestCase):
             segment_lines = segments_path.read_text(encoding="utf-8").strip().splitlines()
 
             self.assertEqual(len(summary_lines), 3)
-            self.assertEqual(len(segment_lines), 9)
+            self.assertEqual(len(segment_lines), 5)
             self.assertIn("timestamp,stage,pid_label", summary_lines[0])
             self.assertIn("trial_label,wheel,target_speed", segment_lines[0])
 
@@ -1167,6 +1161,7 @@ class SearchTests(unittest.TestCase):
                 (
                     0.12,
                     [
+                        (0.04, "START"),
                         (0.08, "L_TEST_PWM=0"),
                         (0.08, "R_TEST_PWM=0"),
                     ],
@@ -1316,6 +1311,141 @@ class SearchTests(unittest.TestCase):
             ],
         )
 
+    def test_run_pwm_identify_trial_waits_for_ready_and_keeps_start_alive(self):
+        module = load_host_package_module("pwm_identify")
+        common = load_host_package_module("common")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+                self.read_calls = []
+                self.drain_calls = 0
+                self._batches = [
+                    [],
+                    [
+                        common.TelemetrySample(
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            2.0,
+                            6000.0,
+                            0.0,
+                        )
+                    ],
+                ]
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                self.read_calls.append(duration_seconds)
+                if self._batches:
+                    return self._batches.pop(0)
+                return []
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_identify_trial(
+            client,
+            "left",
+            6000,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(len(client.read_calls), 2)
+        self.assertEqual(client.commands.count("START"), 2)
+        self.assertEqual(client.drain_calls, 1)
+        self.assertEqual(len(client.capture_calls), 1)
+        self.assertEqual(
+            client.capture_calls[0][1],
+            [
+                (0.04, "START"),
+                (0.08, "START"),
+                (0.12, "L_TEST_PWM=0"),
+                (0.12, "R_TEST_PWM=0"),
+            ],
+        )
+
+    def test_run_pwm_identify_trial_preserves_ready_samples_for_step_response(self):
+        module = load_host_package_module("pwm_identify")
+        common = load_host_package_module("common")
+
+        ready_sample = common.TelemetrySample(
+            0.0,
+            6.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            6000.0,
+            0.0,
+        )
+        captured_sample = common.TelemetrySample(
+            0.0,
+            12.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            6000.0,
+            0.0,
+        )
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.drain_calls = 0
+                self._batches = [[ready_sample]]
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                del duration_seconds
+                if self._batches:
+                    return self._batches.pop(0)
+                return []
+
+            def capture_trial(self, duration_seconds, events=None):
+                del duration_seconds, events
+                return [captured_sample]
+
+        client = FakeClient()
+        samples = module.run_pwm_identify_trial(
+            client,
+            "left",
+            6000,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(client.drain_calls, 1)
+        self.assertEqual(samples[0], ready_sample)
+        self.assertEqual(samples[1], captured_sample)
+
     def test_extract_pwm_map_level_metrics_marks_deadzone_after_three_fast_samples(self):
         module = load_host_package_module("pwm_map")
         common = load_host_package_module("common")
@@ -1368,6 +1498,89 @@ class SearchTests(unittest.TestCase):
         self.assertAlmostEqual(metrics.steady_encoder, 0.0, places=3)
         self.assertFalse(metrics.deadzone_reached)
 
+    def test_run_pwm_map_writes_profile_with_shared_targets(self):
+        module = load_module()
+        pwm_map = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        original_run_pwm_map_trial = pwm_map.run_pwm_map_trial
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            rest_seconds = 0.0
+            map_pwm_step = 500
+            map_pwm_max = 1000
+            map_repeat = 1
+            map_hold_ms = 120
+            map_tail_zero_ms = 80
+            map_output = ""
+            profile_path = ""
+
+        def build_samples(wheel_name, pwm_value):
+            if wheel_name == "left":
+                speed_map = {
+                    0: [0.0, 0.0, 0.0],
+                    500: [0.0, 8.0, 9.0, 10.0],
+                    1000: [0.0, 18.0, 20.0, 20.0],
+                }
+            else:
+                speed_map = {
+                    0: [0.0, 0.0, 0.0],
+                    500: [0.0, 7.0, 8.0, 9.0],
+                    1000: [0.0, 16.0, 18.0, 18.0],
+                }
+
+            samples = []
+            for speed in speed_map[pwm_value]:
+                if wheel_name == "left":
+                    samples.append(common.TelemetrySample(0.0, speed, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, pwm_value, 0.0))
+                else:
+                    samples.append(common.TelemetrySample(0.0, 0.0, speed, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, pwm_value))
+            return samples
+
+        def fake_run_pwm_map_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            return build_samples(wheel_name, pwm_value)
+
+        pwm_map.run_pwm_map_trial = fake_run_pwm_map_trial
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                args = Args()
+                args.map_output = str(pathlib.Path(temp_dir) / "pwm_map.csv")
+                args.profile_path = str(pathlib.Path(temp_dir) / "profile.json")
+                result = module.run_pwm_map(FakeClient(), args)
+                profile = json.loads(pathlib.Path(args.profile_path).read_text(encoding="utf-8"))
+        finally:
+            pwm_map.run_pwm_map_trial = original_run_pwm_map_trial
+
+        self.assertEqual(result, 0)
+        self.assertEqual(profile["pwm_map"]["left"]["deadzone_break_pwm"], 500)
+        self.assertEqual(profile["pwm_map"]["right"]["deadzone_break_pwm"], 500)
+        self.assertAlmostEqual(profile["pwm_map"]["left"]["max_steady_encoder"], 20.0, places=3)
+        self.assertAlmostEqual(profile["pwm_map"]["right"]["max_steady_encoder"], 18.0, places=3)
+        self.assertAlmostEqual(profile["shared_targets"]["shared_max_encoder"], 18.0, places=3)
+        self.assertEqual(profile["shared_targets"]["policy"], "min_wheel_max")
+        self.assertEqual(len(profile["shared_targets"]["default_sequences"]["air_primary"]), 5)
+        self.assertEqual(len(profile["shared_targets"]["default_sequences"]["air_verify"]), 5)
+        self.assertEqual(len(profile["shared_targets"]["default_sequences"]["ground_forward"]), 3)
+        self.assertEqual(
+            [row["target_speed"] for row in profile["shared_targets"]["default_sequences"]["air_primary"]],
+            [
+                profile["shared_targets"]["bands"]["low"],
+                profile["shared_targets"]["bands"]["mid"],
+                profile["shared_targets"]["bands"]["mid"],
+                profile["shared_targets"]["bands"]["low"],
+                profile["shared_targets"]["bands"]["low"],
+            ],
+        )
+
     def test_run_pwm_identify_applies_seed_when_requested(self):
         module = load_module()
         pwm_identify = load_host_package_module("pwm_identify")
@@ -1392,6 +1605,7 @@ class SearchTests(unittest.TestCase):
             identify_tail_zero_ms = 40
             apply_identify_seed = True
             save_best = False
+            profile_path = ""
 
         applied = {"gains": None}
 
@@ -1434,7 +1648,23 @@ class SearchTests(unittest.TestCase):
         pwm_identify.apply_speed_gains = fake_apply_speed_gains
 
         try:
-            result = module.run_pwm_identify(FakeClient(), Args())
+            with tempfile.TemporaryDirectory() as temp_dir:
+                profile_path = pathlib.Path(temp_dir) / "profile.json"
+                profile_path.write_text(
+                    json.dumps(
+                        {
+                            "meta": {"profile_version": 1},
+                            "pwm_map": {
+                                "left": {"deadzone_break_pwm": 200},
+                                "right": {"deadzone_break_pwm": 200},
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                args = Args()
+                args.profile_path = str(profile_path)
+                result = module.run_pwm_identify(FakeClient(), args)
         finally:
             pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
             pwm_identify.apply_speed_gains = original_apply_speed_gains
@@ -1445,6 +1675,623 @@ class SearchTests(unittest.TestCase):
         self.assertGreater(applied["gains"].left.ki, 0.0)
         self.assertGreater(applied["gains"].right.kp, 0.0)
         self.assertGreater(applied["gains"].right.ki, 0.0)
+
+    def test_run_pwm_identify_requires_pwm_map_profile(self):
+        module = load_module()
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            target_speed = 35.0
+            rest_seconds = 0.0
+            identify_pwm_step = 200
+            identify_pwm_max = 1000
+            identify_repeat = 1
+            identify_hold_ms = 160
+            identify_tail_zero_ms = 40
+            apply_identify_seed = False
+            save_best = False
+            profile_path = ""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = Args()
+            args.profile_path = str(pathlib.Path(temp_dir) / "missing_profile.json")
+            with self.assertRaises(RuntimeError):
+                module.run_pwm_identify(FakeClient(), args)
+
+    def test_run_pwm_identify_starts_above_profile_deadzone_and_persists_seed(self):
+        module = load_module()
+        pwm_identify = load_host_package_module("pwm_identify")
+
+        original_run_pwm_identify_trial = pwm_identify.run_pwm_identify_trial
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            target_speed = 35.0
+            rest_seconds = 0.0
+            identify_pwm_step = 200
+            identify_pwm_max = 1400
+            identify_repeat = 1
+            identify_hold_ms = 160
+            identify_tail_zero_ms = 40
+            apply_identify_seed = False
+            save_best = False
+            profile_path = ""
+
+        call_state = {"left": [], "right": []}
+
+        def build_samples(wheel_name, pwm_value):
+            speeds = [0.0, pwm_value / 120.0, pwm_value / 80.0, pwm_value / 60.0, pwm_value / 45.0, pwm_value / 45.0]
+            samples = []
+            for speed in speeds:
+                if wheel_name == "left":
+                    samples.append(
+                        module.TelemetrySample(0.0, speed, 0.0, pwm_value, 0.0, 1.0, 0.0, 2.0, pwm_value, 0.0)
+                    )
+                else:
+                    samples.append(
+                        module.TelemetrySample(0.0, 0.0, speed, 0.0, pwm_value, 1.0, 0.0, 2.0, 0.0, pwm_value)
+                    )
+            return samples
+
+        def fake_run_pwm_identify_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            call_state[wheel_name].append(pwm_value)
+            return build_samples(wheel_name, pwm_value)
+
+        pwm_identify.run_pwm_identify_trial = fake_run_pwm_identify_trial
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                profile_path = pathlib.Path(temp_dir) / "profile.json"
+                profile_path.write_text(
+                    json.dumps(
+                        {
+                            "meta": {"profile_version": 1},
+                            "pwm_map": {
+                                "left": {"deadzone_break_pwm": 600},
+                                "right": {"deadzone_break_pwm": 800},
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                args = Args()
+                args.profile_path = str(profile_path)
+                result = module.run_pwm_identify(FakeClient(), args)
+                profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        finally:
+            pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
+
+        self.assertEqual(result, 0)
+        self.assertEqual(call_state["left"][0], 800)
+        self.assertEqual(call_state["right"][0], 1000)
+        self.assertIn("seed_pi", profile["pwm_identify"])
+        self.assertGreater(profile["pwm_identify"]["seed_pi"]["left"]["kp"], 0.0)
+        self.assertGreater(profile["pwm_identify"]["seed_pi"]["right"]["ki"], 0.0)
+
+    def test_resolve_air_dual_profile_defaults_uses_sequences_and_seed(self):
+        air_dual = load_host_package_module("air_dual")
+        common = load_host_package_module("common")
+
+        class Args(object):
+            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
+            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            initial_kp = 100.0
+            initial_ki = 20.0
+            initial_kd = 0.0
+            profile_path = ""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = pathlib.Path(temp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "shared_targets": {
+                            "default_sequences": {
+                                "air_primary": [
+                                    {"target_speed": 10.0, "hold_ms": 500},
+                                    {"target_speed": 20.0, "hold_ms": 500},
+                                ],
+                                "air_verify": [
+                                    {"target_speed": 11.0, "hold_ms": 300},
+                                    {"target_speed": 21.0, "hold_ms": 300},
+                                ],
+                            }
+                        },
+                        "pwm_identify": {
+                            "seed_pi": {
+                                "left": {"kp": 1.1, "ki": 2.2, "kd": 0.0},
+                                "right": {"kp": 3.3, "ki": 4.4, "kd": 0.0},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Args()
+            args.profile_path = str(profile_path)
+            resolved = air_dual.resolve_air_dual_profile_defaults(args)
+
+        self.assertEqual(resolved["autotune_sequence"], "10:500,20:500")
+        self.assertEqual(resolved["verify_sequence"], "11:300,21:300")
+        self.assertEqual(
+            resolved["initial_pair"],
+            common.WheelPidGains(common.PidGains(1.1, 2.2, 0.0), common.PidGains(3.3, 4.4, 0.0)),
+        )
+
+    def test_resolve_air_dual_profile_defaults_prefers_custom_sequences(self):
+        air_dual = load_host_package_module("air_dual")
+
+        class Args(object):
+            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
+            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            initial_kp = 100.0
+            initial_ki = 20.0
+            initial_kd = 0.0
+            profile_path = ""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = pathlib.Path(temp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "shared_targets": {
+                            "default_sequences": {
+                                "air_primary": [
+                                    {"target_speed": 10.0, "hold_ms": 500},
+                                ],
+                                "air_verify": [
+                                    {"target_speed": 11.0, "hold_ms": 300},
+                                ],
+                            },
+                            "custom_sequences": {
+                                "air_primary": [
+                                    {"target_speed": 30.0, "hold_ms": 500},
+                                    {"target_speed": 60.0, "hold_ms": 500},
+                                ],
+                                "air_verify": [
+                                    {"target_speed": 31.0, "hold_ms": 300},
+                                    {"target_speed": 61.0, "hold_ms": 300},
+                                ],
+                            },
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Args()
+            args.profile_path = str(profile_path)
+            resolved = air_dual.resolve_air_dual_profile_defaults(args)
+
+        self.assertEqual(resolved["autotune_sequence"], "30:500,60:500")
+        self.assertEqual(resolved["verify_sequence"], "31:300,61:300")
+
+    def test_resolve_air_dual_profile_defaults_accepts_custom_sequence_text(self):
+        air_dual = load_host_package_module("air_dual")
+
+        class Args(object):
+            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
+            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            initial_kp = 100.0
+            initial_ki = 20.0
+            initial_kd = 0.0
+            profile_path = ""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = pathlib.Path(temp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "shared_targets": {
+                            "default_sequences": {
+                                "air_primary": [
+                                    {"target_speed": 10.0, "hold_ms": 500},
+                                ],
+                                "air_verify": [
+                                    {"target_speed": 11.0, "hold_ms": 300},
+                                ],
+                            },
+                            "custom_sequences": {
+                                "air_primary": "30:500,60:500,90:500",
+                                "air_verify": "31:300,61:300,91:300",
+                            },
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Args()
+            args.profile_path = str(profile_path)
+            resolved = air_dual.resolve_air_dual_profile_defaults(args)
+
+        self.assertEqual(resolved["autotune_sequence"], "30:500,60:500,90:500")
+        self.assertEqual(resolved["verify_sequence"], "31:300,61:300,91:300")
+
+    def test_resolve_air_dual_profile_defaults_prefers_air_best_over_seed_pi(self):
+        air_dual = load_host_package_module("air_dual")
+        common = load_host_package_module("common")
+
+        class Args(object):
+            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
+            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            initial_kp = 100.0
+            initial_ki = 20.0
+            initial_kd = 0.0
+            profile_path = ""
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = pathlib.Path(temp_dir) / "profile.json"
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "air_dual": {
+                            "best_pid": {
+                                "left": {"kp": 101.0, "ki": 19.0, "kd": 0.0},
+                                "right": {"kp": 106.0, "ki": 18.0, "kd": 0.0},
+                            }
+                        },
+                        "pwm_identify": {
+                            "seed_pi": {
+                                "left": {"kp": 143.0, "ki": 35.0, "kd": 0.0},
+                                "right": {"kp": 136.0, "ki": 34.0, "kd": 0.0},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = Args()
+            args.profile_path = str(profile_path)
+            resolved = air_dual.resolve_air_dual_profile_defaults(args)
+
+        self.assertEqual(
+            resolved["initial_pair"],
+            common.WheelPidGains(
+                common.PidGains(101.0, 19.0, 0.0),
+                common.PidGains(106.0, 18.0, 0.0),
+            ),
+        )
+
+    def test_build_air_dual_stage_plans_returns_three_stage_p_then_i_order(self):
+        air_dual = load_host_package_module("air_dual")
+
+        plans = air_dual.build_air_dual_stage_plans()
+
+        self.assertEqual(
+            [(item["preset_name"], item["field_name"], item["step"], item["repeat_each"]) for item in plans],
+            [
+                ("coarse", "kp", 10.0, 1),
+                ("coarse", "ki", 5.0, 1),
+                ("fine", "kp", 5.0, 2),
+                ("fine", "ki", 2.0, 2),
+                ("micro", "kp", 2.0, 3),
+                ("micro", "ki", 1.0, 3),
+            ],
+        )
+
+    def test_build_dual_family_batch_metadata_uses_shared_kp_steps_for_both_wheels(self):
+        air_dual = load_host_package_module("air_dual")
+        common = load_host_package_module("common")
+
+        base_pair = common.WheelPidGains(
+            common.PidGains(100.0, 20.0, 0.0),
+            common.PidGains(105.0, 18.0, 0.0),
+        )
+        candidates = air_dual.build_dual_family_batch_metadata(base_pair, "kp", 5.0)
+
+        self.assertEqual(len(candidates), 9)
+        self.assertEqual(candidates[0]["pair"], base_pair)
+        self.assertEqual(candidates[1]["pair"].left.kp, 80.0)
+        self.assertEqual(candidates[1]["pair"].right.kp, 85.0)
+        self.assertEqual(candidates[8]["pair"].left.kp, 120.0)
+        self.assertEqual(candidates[8]["pair"].right.kp, 125.0)
+        self.assertEqual(candidates[4]["step_multiplier"], -1)
+        self.assertEqual(candidates[5]["step_multiplier"], 1)
+
+    def test_build_dual_family_adaptive_candidate_extends_only_edge_direction(self):
+        air_dual = load_host_package_module("air_dual")
+        common = load_host_package_module("common")
+
+        base_pair = common.WheelPidGains(
+            common.PidGains(100.0, 20.0, 0.0),
+            common.PidGains(105.0, 18.0, 0.0),
+        )
+
+        higher = air_dual.build_dual_family_adaptive_candidate(base_pair, "ki", 2.0, 1)
+        lower = air_dual.build_dual_family_adaptive_candidate(base_pair, "ki", 2.0, -1)
+        repeat_row = air_dual.build_dual_family_adaptive_candidate(base_pair, "ki", 2.0, 0)
+
+        self.assertEqual(higher["pair"].left.ki, 30.0)
+        self.assertEqual(higher["pair"].right.ki, 28.0)
+        self.assertEqual(higher["step_multiplier"], 5)
+        self.assertEqual(lower["pair"].left.ki, 10.0)
+        self.assertEqual(lower["pair"].right.ki, 8.0)
+        self.assertEqual(lower["step_multiplier"], -5)
+        self.assertEqual(repeat_row["pair"], base_pair)
+        self.assertEqual(repeat_row["label"], "KI-repeat")
+
+    def test_select_batch_best_uses_lowest_combined_score(self):
+        air_dual = load_host_package_module("air_dual")
+        common = load_host_package_module("common")
+
+        baseline = {
+            "gains": common.WheelPidGains(
+                common.PidGains(100.0, 20.0, 0.0),
+                common.PidGains(105.0, 20.0, 0.0),
+            ),
+            "a_score": 8.0,
+            "b_score": 7.0,
+            "combined_score": 7.5,
+        }
+        better = {
+            "gains": common.WheelPidGains(
+                common.PidGains(101.0, 19.0, 0.0),
+                common.PidGains(106.0, 18.0, 0.0),
+            ),
+            "a_score": 6.0,
+            "b_score": 5.0,
+            "combined_score": 5.5,
+        }
+        worse = {
+            "gains": common.WheelPidGains(
+                common.PidGains(99.0, 20.0, 0.0),
+                common.PidGains(104.0, 21.0, 0.0),
+            ),
+            "a_score": 9.0,
+            "b_score": 8.5,
+            "combined_score": 8.75,
+        }
+
+        best = air_dual.select_batch_best([baseline, better, worse])
+
+        self.assertEqual(best, better)
+
+    def test_run_air_dual_batch_respects_candidate_limit(self):
+        air_dual = load_host_package_module("air_dual")
+        common = load_host_package_module("common")
+
+        original_evaluate_dual_candidate = air_dual.evaluate_dual_candidate
+
+        class FakeClient(object):
+            pass
+
+        class Args(object):
+            repeat_each = 99
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = common.DEFAULT_MIN_SCORE_TARGET_SPEED
+            kd_overshoot_runs = common.DEFAULT_KD_OVERSHOOT_RUNS
+            candidate_limit = 3
+
+        evaluated_pairs = []
+        repeat_counts = []
+        base_pair = common.WheelPidGains(
+            common.PidGains(100.0, 20.0, 0.0),
+            common.PidGains(105.0, 18.0, 0.0),
+        )
+        trial = common.GroundLoadTrial("trial", ((20.0, 500),), 500)
+        batch_plan = {"preset_name": "coarse", "field_name": "kp", "step": 10.0, "repeat_each": 1}
+
+        def fake_evaluate(client, args, trial, verify_trial, score_config, gains_pair, repeat_each=None):
+            del client, args, trial, verify_trial, score_config
+            evaluated_pairs.append(gains_pair)
+            repeat_counts.append(repeat_each)
+            return {
+                "gains": gains_pair,
+                "score": 4.5 + len(evaluated_pairs),
+                "a_score": 5.0 + len(evaluated_pairs),
+                "b_score": 4.0 + len(evaluated_pairs),
+                "combined_score": 4.5 + len(evaluated_pairs),
+                "left_score": 3.0 + len(evaluated_pairs),
+                "right_score": 2.0 + len(evaluated_pairs),
+                "a_result": common.WheelCandidateEvaluation(0.0, [], [], 0),
+                "b_result": common.WheelCandidateEvaluation(0.0, [], [], 0),
+                "display": {"wheels": {"left": {"total_score": 1.0, "segments": []}, "right": {"total_score": 1.0, "segments": []}}},
+                "a_display": {"wheels": {"left": {"total_score": 1.0, "segments": []}, "right": {"total_score": 1.0, "segments": []}}},
+                "b_display": {"wheels": {"left": {"total_score": 1.0, "segments": []}, "right": {"total_score": 1.0, "segments": []}}},
+                "persistent_overshoot": 0,
+            }
+
+        air_dual.evaluate_dual_candidate = fake_evaluate
+
+        try:
+            result = air_dual.run_air_dual_batch(
+                FakeClient(),
+                Args(),
+                trial,
+                trial,
+                common.DEFAULT_SCORE_CONFIG,
+                base_pair,
+                1,
+                batch_plan,
+            )
+        finally:
+            air_dual.evaluate_dual_candidate = original_evaluate_dual_candidate
+
+        self.assertEqual(result["candidate_count"], 3)
+        self.assertEqual(len(evaluated_pairs), 3)
+        self.assertEqual(result["preset_name"], "coarse")
+        self.assertEqual(result["field_name"], "kp")
+        self.assertEqual(repeat_counts, [1, 1, 1])
+
+    def test_advance_batch_stage_state_repeats_edge_and_confirms_center_before_advancing(self):
+        air_dual = load_host_package_module("air_dual")
+
+        plans = air_dual.build_air_dual_stage_plans()
+        state = {"plan_index": 0, "centered_runs": 0}
+
+        next_state = air_dual._advance_batch_stage_state(plans, state, {"best_is_edge": 1})
+        self.assertEqual(next_state, {"plan_index": 0, "centered_runs": 0})
+
+        next_state = air_dual._advance_batch_stage_state(plans, state, {"best_is_edge": 0})
+        self.assertEqual(next_state, {"plan_index": 0, "centered_runs": 1})
+
+        final_state = air_dual._advance_batch_stage_state(plans, next_state, {"best_is_edge": 0})
+        self.assertEqual(final_state, {"plan_index": 1, "centered_runs": 0})
+
+    def test_ground_dual_prefers_air_best_pid_and_profile_trials(self):
+        ground_dual = load_host_package_module("ground_dual")
+        common = load_host_package_module("common")
+
+        profile = {
+            "shared_targets": {
+                "default_sequences": {
+                    "ground_forward": [
+                        {"target_speed": 12.0, "hold_ms": 200},
+                        {"target_speed": 22.0, "hold_ms": 200},
+                        {"target_speed": 32.0, "hold_ms": 200},
+                    ]
+                }
+            },
+            "pwm_identify": {
+                "seed_pi": {
+                    "left": {"kp": 10.0, "ki": 20.0, "kd": 0.0},
+                    "right": {"kp": 12.0, "ki": 24.0, "kd": 0.0},
+                }
+            },
+            "air_dual": {
+                "best_pid": {
+                    "left": {"kp": 100.0, "ki": 20.0, "kd": 0.0},
+                    "right": {"kp": 106.0, "ki": 18.0, "kd": 0.0},
+                }
+            },
+        }
+
+        trials = ground_dual.build_ground_load_trials(profile)
+        initial = ground_dual.resolve_ground_dual_initial_gains(profile, common.PidGains(95.0, 20.0, 0.0))
+
+        self.assertEqual(trials[0].segments_ms, ((12.0, 200), (22.0, 200), (32.0, 200)))
+        self.assertEqual(
+            initial,
+            common.WheelPidGains(
+                common.PidGains(100.0, 20.0, 0.0),
+                common.PidGains(106.0, 18.0, 0.0),
+            ),
+        )
+
+    def test_ground_dual_upgrades_legacy_symmetric_best_pid_to_both_wheels(self):
+        ground_dual = load_host_package_module("ground_dual")
+        common = load_host_package_module("common")
+
+        profile = {
+            "ground_dual": {
+                "best_pid": {"kp": 98.0, "ki": 17.0, "kd": 0.2},
+            }
+        }
+
+        initial = ground_dual.resolve_ground_dual_initial_gains(
+            profile,
+            common.WheelPidGains(
+                common.PidGains(95.0, 20.0, 0.0),
+                common.PidGains(95.0, 20.0, 0.0),
+            ),
+        )
+
+        self.assertEqual(
+            initial,
+            common.WheelPidGains(
+                common.PidGains(98.0, 17.0, 0.2),
+                common.PidGains(98.0, 17.0, 0.2),
+            ),
+        )
+
+    def test_ground_dual_profile_trials_prefer_custom_sequences(self):
+        ground_dual = load_host_package_module("ground_dual")
+
+        profile = {
+            "shared_targets": {
+                "default_sequences": {
+                    "ground_forward": [
+                        {"target_speed": 12.0, "hold_ms": 200},
+                    ]
+                },
+                "custom_sequences": {
+                    "ground_forward": [
+                        {"target_speed": 42.0, "hold_ms": 250},
+                        {"target_speed": 84.0, "hold_ms": 250},
+                    ]
+                },
+            }
+        }
+
+        trials = ground_dual.build_ground_load_trials(profile)
+
+        self.assertEqual(trials[0].segments_ms, ((42.0, 250), (84.0, 250)))
+
+    def test_ground_dual_profile_trials_accept_custom_sequence_text(self):
+        ground_dual = load_host_package_module("ground_dual")
+
+        profile = {
+            "shared_targets": {
+                "default_sequences": {
+                    "ground_forward": [
+                        {"target_speed": 12.0, "hold_ms": 200},
+                    ]
+                },
+                "custom_sequences": {
+                    "ground_forward": "42:250,84:250,126:250",
+                },
+            }
+        }
+
+        trials = ground_dual.build_ground_load_trials(profile)
+
+        self.assertEqual(trials[0].segments_ms, ((42.0, 250), (84.0, 250), (126.0, 250)))
+
+    def test_save_tuning_profile_places_custom_sequences_first_in_shared_targets(self):
+        common = load_host_package_module("common")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = pathlib.Path(temp_dir) / "profile.json"
+            profile = {
+                "meta": {"profile_version": 1},
+                "shared_targets": {
+                    "bands": {"low": 1.0},
+                    "default_sequences": {"air_primary": [{"target_speed": 1.0, "hold_ms": 500}]},
+                    "custom_sequences": {"air_primary": [{"target_speed": 2.0, "hold_ms": 500}]},
+                    "policy": "min_wheel_max",
+                    "shared_max_encoder": 2.0,
+                },
+            }
+
+            common.save_tuning_profile(profile, str(profile_path))
+            text = profile_path.read_text(encoding="utf-8")
+
+        self.assertLess(text.index('"custom_sequences"'), text.index('"bands"'))
+        self.assertLess(text.index('"custom_sequences"'), text.index('"default_sequences"'))
+
+    def test_save_tuning_profile_places_shared_targets_near_file_top(self):
+        common = load_host_package_module("common")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            profile_path = pathlib.Path(temp_dir) / "profile.json"
+            profile = {
+                "meta": {"profile_version": 1},
+                "air_dual": {"best_pid": {"left": {"kp": 1.0, "ki": 2.0, "kd": 0.0}, "right": {"kp": 1.0, "ki": 2.0, "kd": 0.0}}},
+                "shared_targets": {
+                    "custom_sequences": {"air_primary": "30:500,60:500"},
+                    "bands": {"low": 1.0},
+                },
+                "pwm_map": {"left": {"deadzone_break_pwm": 1000}},
+            }
+
+            common.save_tuning_profile(profile, str(profile_path))
+            text = profile_path.read_text(encoding="utf-8")
+
+        self.assertLess(text.index('"shared_targets"'), text.index('"air_dual"'))
+        self.assertLess(text.index('"shared_targets"'), text.index('"pwm_map"'))
 
     def test_run_pwm_identify_requires_two_valid_levels_per_wheel(self):
         module = load_module()
@@ -1465,6 +2312,7 @@ class SearchTests(unittest.TestCase):
             identify_tail_zero_ms = 40
             apply_identify_seed = False
             save_best = False
+            profile_path = ""
 
         invalid_samples = [
             module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 200.0, 0.0),
@@ -1488,8 +2336,24 @@ class SearchTests(unittest.TestCase):
         pwm_identify.run_pwm_identify_trial = fake_run_pwm_identify_trial
 
         try:
-            with self.assertRaises(RuntimeError):
-                module.run_pwm_identify(FakeClient(), Args())
+            with tempfile.TemporaryDirectory() as temp_dir:
+                profile_path = pathlib.Path(temp_dir) / "profile.json"
+                profile_path.write_text(
+                    json.dumps(
+                        {
+                            "meta": {"profile_version": 1},
+                            "pwm_map": {
+                                "left": {"deadzone_break_pwm": 200},
+                                "right": {"deadzone_break_pwm": 200},
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                args = Args()
+                args.profile_path = str(profile_path)
+                with self.assertRaises(RuntimeError):
+                    module.run_pwm_identify(FakeClient(), args)
         finally:
             pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
 
@@ -1563,6 +2427,7 @@ class SearchTests(unittest.TestCase):
             map_hold_ms = 120
             map_tail_zero_ms = 80
             map_output = ""
+            profile_path = ""
 
         def build_samples(wheel_name, pwm_value):
             speeds = [0.0, 2.0, 3.0, 4.0]
@@ -1586,6 +2451,7 @@ class SearchTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temp_dir:
                 args = Args()
                 args.map_output = str(pathlib.Path(temp_dir) / "pwm_map.csv")
+                args.profile_path = str(pathlib.Path(temp_dir) / "profile.json")
                 stdout = io.StringIO()
                 with contextlib.redirect_stdout(stdout):
                     result = module.run_pwm_map(FakeClient(), args)
@@ -1623,6 +2489,7 @@ class SearchTests(unittest.TestCase):
             map_hold_ms = 120
             map_tail_zero_ms = 80
             map_output = ""
+            profile_path = ""
 
         def build_samples(wheel_name, effective_pwm):
             speeds = [0.0, 0.0, 0.0]
@@ -1653,6 +2520,7 @@ class SearchTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as temp_dir:
                 args = Args()
                 args.map_output = str(pathlib.Path(temp_dir) / "pwm_map_limit.csv")
+                args.profile_path = str(pathlib.Path(temp_dir) / "profile.json")
                 stdout = io.StringIO()
                 with contextlib.redirect_stdout(stdout):
                     result = module.run_pwm_map(FakeClient(), args)
@@ -1728,20 +2596,30 @@ class SearchTests(unittest.TestCase):
         self.assertIn("PWM_DUTY_MAX", source)
         self.assertNotIn("value > 4000.0f", source)
 
-    def test_run_autotune_reports_worst_right_verification_score(self):
+    def test_cli_candidate_limit_defaults_to_ten(self):
+        module = load_module()
+
+        parser = module.build_argument_parser()
+        args = parser.parse_args([])
+
+        self.assertEqual(args.candidate_limit, 10)
+        self.assertTrue(args.interactive_batches)
+
+    def test_run_autotune_reports_final_right_score_from_single_sequence(self):
         module = load_module()
         air_dual = load_host_package_module("air_dual")
 
         original_run_autotune_trial = air_dual.run_autotune_trial
-        original_optimize_single_wheel = air_dual._optimize_single_wheel
-        original_optimize_dual_pair = air_dual._optimize_dual_pair
+        original_resolve = air_dual.resolve_air_dual_profile_defaults
+        original_build_trial = air_dual.build_autotune_trial
+        original_build_verify_trial = air_dual.build_autotune_verify_trial
+        original_run_batch = air_dual.run_air_dual_batch
+        original_prompt_batch_action = air_dual.prompt_air_dual_batch_action
         original_score_wheel_multi_speed_trial = air_dual.score_wheel_multi_speed_trial
         original_apply_speed_gains = air_dual.apply_speed_gains
+        original_update_profile = air_dual._update_air_dual_profile
 
         main_samples = [module.TelemetrySample(15.0, 15.0, 15.0, 0.0, 0.0, 0.0, 1.0)]
-        verify_samples = [module.TelemetrySample(15.0, 14.0, 12.0, 0.0, 0.0, 0.0, 1.0)]
-        call_state = {"count": 0}
-
         class FakeClient(object):
             def __init__(self):
                 self.commands = []
@@ -1765,62 +2643,703 @@ class SearchTests(unittest.TestCase):
             score_overshoot_gate = module.DEFAULT_SCORE_CONFIG.overshoot_gate
             score_overshoot_gate_penalty = module.DEFAULT_SCORE_CONFIG.overshoot_gate_penalty
             save_best = False
+            candidate_limit = 10
+            interactive_batches = True
+            repeat_each = 1
+            delta_kp = 5.0
+            delta_ki = 2.0
+            delta_kd = 0.2
+            kd_overshoot_runs = module.DEFAULT_KD_OVERSHOOT_RUNS
 
         best_pair = module.WheelPidGains(
             module.PidGains(101.0, 21.0, 0.0),
             module.PidGains(106.0, 18.0, 0.0),
         )
 
+        def fake_resolve(args):
+            del args
+            return {
+                "profile": {},
+                "profile_path": pathlib.Path("dummy.json"),
+                "autotune_sequence": "20:500,40:500",
+                "verify_sequence": "20:300,40:300",
+                "initial_pair": best_pair,
+                "shared_targets": {},
+            }
+
+        def fake_build_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("trial", ((20.0, 500), (40.0, 500)), 1000)
+
         def fake_run_autotune_trial(client, gains, trial, rest_seconds, tail_zero_ms=0, sleep_fn=None):
             del client, gains, trial, rest_seconds, tail_zero_ms, sleep_fn
-            call_state["count"] += 1
-            if call_state["count"] == 1:
-                return main_samples
-            return verify_samples
+            return main_samples
 
-        def fake_optimize_single_wheel(client, args, trial, verify_trial, score_config, wheel_name, fixed_pair):
-            del client, args, trial, verify_trial, score_config, fixed_pair
-            if wheel_name == "left":
-                return best_pair.left, 2.0
-            return best_pair.right, 3.0
+        def fake_run_batch(client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan):
+            del client, args, trial, verify_trial, score_config, baseline_pair, batch_plan
+            return {
+                "batch_round": batch_round,
+                "candidate_count": 10,
+                "stage_stopped": "batch-stop",
+                "preset_name": "coarse",
+                "field_name": "kp",
+                "step": 10.0,
+                "repeat_each": 1,
+                "best_pair": best_pair,
+                "best_label": "KP-baseline",
+                "best_step_multiplier": 0,
+                "best_is_edge": 0,
+                "left_score": 2.0,
+                "right_score": 3.0,
+                "score": 2.5,
+                "combined_score": 2.5,
+                "history_rows": [],
+            }
 
-        def fake_optimize_dual_pair(client, args, trial, score_config, base_pair):
-            del client, args, trial, score_config
-            return base_pair, 1.0
+        def fake_prompt(batch_result):
+            del batch_result
+            return "stop"
 
         def fake_score_wheel_multi_speed_trial(samples, trial, wheel_name, score_config=None, min_target_speed=None):
             del trial, score_config, min_target_speed
-            if samples is verify_samples and wheel_name == "right":
-                return 9.0
             if samples is main_samples and wheel_name == "right":
                 return 3.0
-            if samples is verify_samples and wheel_name == "left":
-                return 4.0
             return 2.0
 
         def fake_apply_speed_gains(client, gains):
             del gains
             client.send_command("APPLY")
 
+        def fake_update_profile(resolved, initial_pair, best_pair, left_score, right_score, score=None, combined_score=None, last_batch_best=None, batch_round=None, batch_history=None):
+            del resolved, initial_pair, best_pair, left_score, right_score, score, combined_score, last_batch_best, batch_round, batch_history
+
+        air_dual.resolve_air_dual_profile_defaults = fake_resolve
+        air_dual.build_autotune_trial = fake_build_trial
         air_dual.run_autotune_trial = fake_run_autotune_trial
-        air_dual._optimize_single_wheel = fake_optimize_single_wheel
-        air_dual._optimize_dual_pair = fake_optimize_dual_pair
+        air_dual.run_air_dual_batch = fake_run_batch
+        air_dual.prompt_air_dual_batch_action = fake_prompt
         air_dual.score_wheel_multi_speed_trial = fake_score_wheel_multi_speed_trial
         air_dual.apply_speed_gains = fake_apply_speed_gains
+        air_dual._update_air_dual_profile = fake_update_profile
 
         try:
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
                 result = module.run_autotune(FakeClient(), Args())
         finally:
+            air_dual.resolve_air_dual_profile_defaults = original_resolve
+            air_dual.build_autotune_trial = original_build_trial
             air_dual.run_autotune_trial = original_run_autotune_trial
-            air_dual._optimize_single_wheel = original_optimize_single_wheel
-            air_dual._optimize_dual_pair = original_optimize_dual_pair
+            air_dual.run_air_dual_batch = original_run_batch
+            air_dual.prompt_air_dual_batch_action = original_prompt_batch_action
             air_dual.score_wheel_multi_speed_trial = original_score_wheel_multi_speed_trial
+            air_dual.apply_speed_gains = original_apply_speed_gains
+            air_dual._update_air_dual_profile = original_update_profile
+
+        self.assertEqual(result, 0)
+        self.assertIn("best right kp=106.0000 ki=18.0000 kd=0.0000 score=3.0000", output.getvalue())
+
+    def test_finalize_air_dual_best_uses_strong_stop_sequence(self):
+        module = load_module()
+        air_dual = load_host_package_module("air_dual")
+
+        original_run_autotune_trial = air_dual.run_autotune_trial
+        original_apply_speed_gains = air_dual.apply_speed_gains
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = module.DEFAULT_MIN_SCORE_TARGET_SPEED
+            save_best = False
+
+        best_pair = module.WheelPidGains(
+            module.PidGains(101.0, 21.0, 0.0),
+            module.PidGains(106.0, 18.0, 0.0),
+        )
+        samples = [module.TelemetrySample(20.0, 20.0, 20.0, 0.0, 0.0, 0.0, 1.0)]
+
+        def fake_run_autotune_trial(client, gains, trial, rest_seconds, tail_zero_ms=0, sleep_fn=None):
+            del client, gains, trial, rest_seconds, tail_zero_ms, sleep_fn
+            return samples
+
+        def fake_apply_speed_gains(client, gains):
+            del gains
+            client.send_command("APPLY")
+
+        air_dual.run_autotune_trial = fake_run_autotune_trial
+        air_dual.apply_speed_gains = fake_apply_speed_gains
+
+        try:
+            client = FakeClient()
+            result = air_dual.finalize_air_dual_best(
+                client,
+                Args(),
+                module.GroundLoadTrial("trial", ((20.0, 200),), 200),
+                None,
+                module.DEFAULT_SCORE_CONFIG,
+                best_pair,
+            )
+        finally:
+            air_dual.run_autotune_trial = original_run_autotune_trial
+            air_dual.apply_speed_gains = original_apply_speed_gains
+
+        self.assertGreaterEqual(result["score"], 0.0)
+        self.assertEqual(client.commands[-4:], ["APPLY", "TEST_speed=0", "STOP", "AT_RESET"])
+
+    def test_run_autotune_interactive_batches_continue_then_stop_updates_best_pid(self):
+        module = load_module()
+        air_dual = load_host_package_module("air_dual")
+
+        original_resolve = air_dual.resolve_air_dual_profile_defaults
+        original_build_trial = air_dual.build_autotune_trial
+        original_build_verify_trial = air_dual.build_autotune_verify_trial
+        original_run_batch = air_dual.run_air_dual_batch
+        original_prompt_batch_action = air_dual.prompt_air_dual_batch_action
+        original_finalize = air_dual.finalize_air_dual_best
+        original_update_profile = air_dual._update_air_dual_profile
+
+        class FakeClient(object):
+            pass
+
+        class Args(object):
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = module.DEFAULT_MIN_SCORE_TARGET_SPEED
+            score_rise_weight = module.DEFAULT_SCORE_CONFIG.rise_weight
+            score_overshoot_weight = module.DEFAULT_SCORE_CONFIG.overshoot_weight
+            score_settle_weight = module.DEFAULT_SCORE_CONFIG.settle_weight
+            score_steady_weight = module.DEFAULT_SCORE_CONFIG.steady_weight
+            score_overshoot_gate = module.DEFAULT_SCORE_CONFIG.overshoot_gate
+            score_overshoot_gate_penalty = module.DEFAULT_SCORE_CONFIG.overshoot_gate_penalty
+            save_best = False
+            candidate_limit = 10
+            interactive_batches = True
+            repeat_each = 1
+            iterations = 1
+            search_tolerance = module.DEFAULT_AUTOTUNE_SEARCH_TOLERANCE
+            delta_kp = 5.0
+            delta_ki = 2.0
+            delta_kd = 0.2
+            kd_overshoot_runs = module.DEFAULT_KD_OVERSHOOT_RUNS
+
+        initial_pair = module.WheelPidGains(
+            module.PidGains(100.0, 20.0, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+        batch_one_best = module.WheelPidGains(
+            module.PidGains(102.0, 18.0, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+        batch_two_best = module.WheelPidGains(
+            module.PidGains(101.0, 19.0, 0.0),
+            module.PidGains(106.0, 18.0, 0.0),
+        )
+        batch_inputs = []
+        update_calls = []
+        prompt_calls = []
+
+        def fake_resolve(args):
+            del args
+            return {
+                "profile": {},
+                "profile_path": pathlib.Path("dummy.json"),
+                "autotune_sequence": "20:500,40:500",
+                "verify_sequence": "20:300,40:300",
+                "initial_pair": initial_pair,
+                "shared_targets": {},
+            }
+
+        def fake_build_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("trial", ((20.0, 500), (40.0, 500)), 1000)
+
+        def fake_build_verify_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("verify", ((20.0, 300), (40.0, 300)), 600)
+
+        def fake_run_batch(client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan):
+            del client, args, trial, verify_trial, score_config, batch_plan
+            batch_inputs.append((batch_round, baseline_pair))
+            if batch_round == 1:
+                return {
+                    "batch_round": 1,
+                    "candidate_count": 10,
+                    "stage_stopped": "batch-stop",
+                    "preset_name": "coarse",
+                    "field_name": "kp",
+                    "step": 10.0,
+                    "repeat_each": 1,
+                    "best_pair": batch_one_best,
+                    "best_label": "KP+1",
+                    "best_step_multiplier": 1,
+                    "best_is_edge": 0,
+                    "left_score": 7.0,
+                    "right_score": 6.0,
+                    "score": 6.5,
+                    "combined_score": 6.5,
+                    "history_rows": [],
+                }
+            return {
+                "batch_round": 2,
+                "candidate_count": 10,
+                "stage_stopped": "batch-stop",
+                "preset_name": "coarse",
+                "field_name": "ki",
+                "step": 5.0,
+                "repeat_each": 1,
+                "best_pair": batch_two_best,
+                "best_label": "KI-1",
+                "best_step_multiplier": -1,
+                "best_is_edge": 0,
+                "left_score": 5.0,
+                "right_score": 4.0,
+                "score": 4.5,
+                "combined_score": 4.5,
+                "history_rows": [],
+            }
+
+        def fake_prompt(batch_result):
+            prompt_calls.append(batch_result["batch_round"])
+            if batch_result["batch_round"] == 1:
+                return "continue"
+            return "stop"
+
+        def fake_finalize(client, args, trial, verify_trial, score_config, best_pair):
+            del client, args, trial, verify_trial, score_config
+            self.assertEqual(best_pair, batch_two_best)
+            return {
+                "left_score": 4.0,
+                "right_score": 5.0,
+                "score": 4.0,
+                "combined_score": 4.0,
+            }
+
+        def fake_update_profile(resolved, initial_pair, best_pair, left_score, right_score, score=None, combined_score=None, last_batch_best=None, batch_round=None, batch_history=None):
+            update_calls.append(
+                {
+                    "initial_pair": initial_pair,
+                    "best_pair": best_pair,
+                    "left_score": left_score,
+                    "right_score": right_score,
+                    "score": score,
+                    "combined_score": combined_score,
+                    "last_batch_best": last_batch_best,
+                    "batch_round": batch_round,
+                    "batch_history": batch_history,
+                }
+            )
+
+        air_dual.resolve_air_dual_profile_defaults = fake_resolve
+        air_dual.build_autotune_trial = fake_build_trial
+        air_dual.build_autotune_verify_trial = fake_build_verify_trial
+        air_dual.run_air_dual_batch = fake_run_batch
+        air_dual.prompt_air_dual_batch_action = fake_prompt
+        air_dual.finalize_air_dual_best = fake_finalize
+        air_dual._update_air_dual_profile = fake_update_profile
+
+        try:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = module.run_autotune(FakeClient(), Args())
+        finally:
+            air_dual.resolve_air_dual_profile_defaults = original_resolve
+            air_dual.build_autotune_trial = original_build_trial
+            air_dual.build_autotune_verify_trial = original_build_verify_trial
+            air_dual.run_air_dual_batch = original_run_batch
+            air_dual.prompt_air_dual_batch_action = original_prompt_batch_action
+            air_dual.finalize_air_dual_best = original_finalize
+            air_dual._update_air_dual_profile = original_update_profile
+
+        text = output.getvalue()
+        self.assertEqual(result, 0)
+        self.assertEqual(batch_inputs[0], (1, initial_pair))
+        self.assertEqual(batch_inputs[1], (2, batch_one_best))
+        self.assertEqual(prompt_calls, [1, 2])
+        self.assertIn("batch 1 best", text)
+        self.assertIn("batch 2 best", text)
+        self.assertEqual(len(update_calls), 3)
+        self.assertEqual(update_calls[0]["initial_pair"], initial_pair)
+        self.assertEqual(update_calls[0]["best_pair"], batch_one_best)
+        self.assertEqual(update_calls[0]["score"], 6.5)
+        self.assertEqual(update_calls[0]["combined_score"], 6.5)
+        self.assertEqual(update_calls[0]["batch_round"], 1)
+        self.assertEqual(update_calls[1]["initial_pair"], batch_one_best)
+        self.assertEqual(update_calls[1]["best_pair"], batch_two_best)
+        self.assertEqual(update_calls[1]["score"], 4.5)
+        self.assertEqual(update_calls[1]["combined_score"], 4.5)
+        self.assertEqual(update_calls[1]["batch_round"], 2)
+        self.assertEqual(update_calls[2]["initial_pair"], batch_one_best)
+        self.assertEqual(update_calls[2]["best_pair"], batch_two_best)
+        self.assertEqual(update_calls[2]["score"], 4.0)
+        self.assertEqual(update_calls[2]["combined_score"], 4.0)
+        self.assertEqual(update_calls[2]["batch_round"], 2)
+
+    def test_run_autotune_noninteractive_batch_updates_profile_without_finalize(self):
+        module = load_module()
+        air_dual = load_host_package_module("air_dual")
+
+        original_resolve = air_dual.resolve_air_dual_profile_defaults
+        original_build_trial = air_dual.build_autotune_trial
+        original_build_verify_trial = air_dual.build_autotune_verify_trial
+        original_run_batch = air_dual.run_air_dual_batch
+        original_finalize = air_dual.finalize_air_dual_best
+        original_update_profile = air_dual._update_air_dual_profile
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = module.DEFAULT_MIN_SCORE_TARGET_SPEED
+            score_rise_weight = module.DEFAULT_SCORE_CONFIG.rise_weight
+            score_overshoot_weight = module.DEFAULT_SCORE_CONFIG.overshoot_weight
+            score_settle_weight = module.DEFAULT_SCORE_CONFIG.settle_weight
+            score_steady_weight = module.DEFAULT_SCORE_CONFIG.steady_weight
+            score_overshoot_gate = module.DEFAULT_SCORE_CONFIG.overshoot_gate
+            score_overshoot_gate_penalty = module.DEFAULT_SCORE_CONFIG.overshoot_gate_penalty
+            save_best = False
+            candidate_limit = 10
+            interactive_batches = False
+            repeat_each = 1
+            iterations = 1
+            search_tolerance = module.DEFAULT_AUTOTUNE_SEARCH_TOLERANCE
+            delta_kp = 5.0
+            delta_ki = 2.0
+            delta_kd = 0.2
+            kd_overshoot_runs = module.DEFAULT_KD_OVERSHOOT_RUNS
+
+        initial_pair = module.WheelPidGains(
+            module.PidGains(100.0, 20.0, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+
+        def fake_resolve(args):
+            del args
+            return {
+                "profile": {},
+                "profile_path": pathlib.Path("dummy.json"),
+                "autotune_sequence": "20:500,40:500",
+                "verify_sequence": "20:300,40:300",
+                "initial_pair": initial_pair,
+                "shared_targets": {},
+            }
+
+        def fake_build_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("trial", ((20.0, 500), (40.0, 500)), 1000)
+
+        def fake_build_verify_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("verify", ((20.0, 300), (40.0, 300)), 600)
+
+        def fake_run_batch(client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan):
+            del client, args, trial, verify_trial, score_config, baseline_pair, batch_plan
+            return {
+                "batch_round": batch_round,
+                "candidate_count": 10,
+                "stage_stopped": "batch-stop",
+                "preset_name": "coarse",
+                "field_name": "kp",
+                "step": 10.0,
+                "repeat_each": 1,
+                "best_pair": initial_pair,
+                "best_label": "KP-baseline",
+                "best_step_multiplier": 0,
+                "best_is_edge": 0,
+                "left_score": 7.0,
+                "right_score": 6.0,
+                "score": 6.5,
+                "combined_score": 6.5,
+                "history_rows": [],
+            }
+
+        def fail_finalize(*args, **kwargs):
+            del args, kwargs
+            self.fail("non-interactive batch should not finalize best pid")
+
+        update_calls = []
+
+        def fake_update(*args, **kwargs):
+            update_calls.append((args, kwargs))
+
+        air_dual.resolve_air_dual_profile_defaults = fake_resolve
+        air_dual.build_autotune_trial = fake_build_trial
+        air_dual.build_autotune_verify_trial = fake_build_verify_trial
+        air_dual.run_air_dual_batch = fake_run_batch
+        air_dual.finalize_air_dual_best = fail_finalize
+        air_dual._update_air_dual_profile = fake_update
+
+        try:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = module.run_autotune(FakeClient(), Args())
+        finally:
+            air_dual.resolve_air_dual_profile_defaults = original_resolve
+            air_dual.build_autotune_trial = original_build_trial
+            air_dual.build_autotune_verify_trial = original_build_verify_trial
+            air_dual.run_air_dual_batch = original_run_batch
+            air_dual.finalize_air_dual_best = original_finalize
+            air_dual._update_air_dual_profile = original_update_profile
+
+        self.assertEqual(result, 0)
+        self.assertIn("batch 1 best", output.getvalue())
+        self.assertIn("interactive batches disabled", output.getvalue())
+        self.assertEqual(len(update_calls), 1)
+        self.assertEqual(update_calls[0][0][1], initial_pair)
+        self.assertEqual(update_calls[0][0][2], initial_pair)
+
+    def test_run_autotune_noninteractive_batch_skips_profile_write_when_score_worsens(self):
+        module = load_module()
+        air_dual = load_host_package_module("air_dual")
+
+        original_resolve = air_dual.resolve_air_dual_profile_defaults
+        original_build_trial = air_dual.build_autotune_trial
+        original_build_verify_trial = air_dual.build_autotune_verify_trial
+        original_run_batch = air_dual.run_air_dual_batch
+        original_finalize = air_dual.finalize_air_dual_best
+        original_update_profile = air_dual._update_air_dual_profile
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = module.DEFAULT_MIN_SCORE_TARGET_SPEED
+            score_rise_weight = module.DEFAULT_SCORE_CONFIG.rise_weight
+            score_overshoot_weight = module.DEFAULT_SCORE_CONFIG.overshoot_weight
+            score_settle_weight = module.DEFAULT_SCORE_CONFIG.settle_weight
+            score_steady_weight = module.DEFAULT_SCORE_CONFIG.steady_weight
+            score_overshoot_gate = module.DEFAULT_SCORE_CONFIG.overshoot_gate
+            score_overshoot_gate_penalty = module.DEFAULT_SCORE_CONFIG.overshoot_gate_penalty
+            save_best = False
+            candidate_limit = 10
+            interactive_batches = False
+            repeat_each = 1
+            iterations = 1
+            search_tolerance = module.DEFAULT_AUTOTUNE_SEARCH_TOLERANCE
+            delta_kp = 5.0
+            delta_ki = 2.0
+            delta_kd = 0.2
+            kd_overshoot_runs = module.DEFAULT_KD_OVERSHOOT_RUNS
+
+        initial_pair = module.WheelPidGains(
+            module.PidGains(100.0, 20.0, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+
+        def fake_resolve(args):
+            del args
+            return {
+                "profile": {
+                    "air_dual": {
+                        "last_summary": {
+                            "score": 5.0,
+                        }
+                    }
+                },
+                "profile_path": pathlib.Path("dummy.json"),
+                "autotune_sequence": "20:500,40:500",
+                "verify_sequence": "20:300,40:300",
+                "initial_pair": initial_pair,
+                "shared_targets": {},
+            }
+
+        def fake_build_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("trial", ((20.0, 500), (40.0, 500)), 1000)
+
+        def fake_build_verify_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("verify", ((20.0, 300), (40.0, 300)), 600)
+
+        def fake_run_batch(client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan):
+            del client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan
+            return {
+                "batch_round": 1,
+                "candidate_count": 10,
+                "stage_stopped": "batch-stop",
+                "preset_name": "coarse",
+                "field_name": "kp",
+                "step": 10.0,
+                "repeat_each": 1,
+                "best_pair": initial_pair,
+                "best_label": "KP-baseline",
+                "best_step_multiplier": 0,
+                "best_is_edge": 0,
+                "left_score": 7.0,
+                "right_score": 6.0,
+                "score": 6.5,
+                "combined_score": 6.5,
+                "history_rows": [],
+            }
+
+        def fail_finalize(*args, **kwargs):
+            del args, kwargs
+            self.fail("non-interactive batch should not finalize best pid")
+
+        update_calls = []
+
+        def fake_update(*args, **kwargs):
+            update_calls.append((args, kwargs))
+
+        air_dual.resolve_air_dual_profile_defaults = fake_resolve
+        air_dual.build_autotune_trial = fake_build_trial
+        air_dual.build_autotune_verify_trial = fake_build_verify_trial
+        air_dual.run_air_dual_batch = fake_run_batch
+        air_dual.finalize_air_dual_best = fail_finalize
+        air_dual._update_air_dual_profile = fake_update
+
+        try:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = module.run_autotune(FakeClient(), Args())
+        finally:
+            air_dual.resolve_air_dual_profile_defaults = original_resolve
+            air_dual.build_autotune_trial = original_build_trial
+            air_dual.build_autotune_verify_trial = original_build_verify_trial
+            air_dual.run_air_dual_batch = original_run_batch
+            air_dual.finalize_air_dual_best = original_finalize
+            air_dual._update_air_dual_profile = original_update_profile
+
+        self.assertEqual(result, 0)
+        self.assertEqual(len(update_calls), 0)
+        self.assertIn("skip profile write", output.getvalue())
+
+    def test_run_autotune_noninteractive_batch_uses_strong_stop_sequence(self):
+        module = load_module()
+        air_dual = load_host_package_module("air_dual")
+
+        original_resolve = air_dual.resolve_air_dual_profile_defaults
+        original_build_trial = air_dual.build_autotune_trial
+        original_build_verify_trial = air_dual.build_autotune_verify_trial
+        original_run_batch = air_dual.run_air_dual_batch
+        original_finalize = air_dual.finalize_air_dual_best
+        original_update_profile = air_dual._update_air_dual_profile
+        original_apply_speed_gains = air_dual.apply_speed_gains
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+        class Args(object):
+            rest_seconds = 0.0
+            autotune_tail_zero_ms = 0
+            score_min_target_speed = module.DEFAULT_MIN_SCORE_TARGET_SPEED
+            score_rise_weight = module.DEFAULT_SCORE_CONFIG.rise_weight
+            score_overshoot_weight = module.DEFAULT_SCORE_CONFIG.overshoot_weight
+            score_settle_weight = module.DEFAULT_SCORE_CONFIG.settle_weight
+            score_steady_weight = module.DEFAULT_SCORE_CONFIG.steady_weight
+            score_overshoot_gate = module.DEFAULT_SCORE_CONFIG.overshoot_gate
+            score_overshoot_gate_penalty = module.DEFAULT_SCORE_CONFIG.overshoot_gate_penalty
+            save_best = False
+            candidate_limit = 10
+            interactive_batches = False
+            repeat_each = 1
+            iterations = 1
+            search_tolerance = module.DEFAULT_AUTOTUNE_SEARCH_TOLERANCE
+            delta_kp = 5.0
+            delta_ki = 2.0
+            delta_kd = 0.2
+            kd_overshoot_runs = module.DEFAULT_KD_OVERSHOOT_RUNS
+
+        initial_pair = module.WheelPidGains(
+            module.PidGains(100.0, 20.0, 0.0),
+            module.PidGains(105.0, 20.0, 0.0),
+        )
+
+        def fake_resolve(args):
+            del args
+            return {
+                "profile": {},
+                "profile_path": pathlib.Path("dummy.json"),
+                "autotune_sequence": "20:500,40:500",
+                "verify_sequence": "20:300,40:300",
+                "initial_pair": initial_pair,
+                "shared_targets": {},
+            }
+
+        def fake_build_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("trial", ((20.0, 500), (40.0, 500)), 1000)
+
+        def fake_build_verify_trial(sequence_text=None):
+            del sequence_text
+            return module.GroundLoadTrial("verify", ((20.0, 300), (40.0, 300)), 600)
+
+        def fake_run_batch(client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan):
+            del client, args, trial, verify_trial, score_config, baseline_pair, batch_plan
+            return {
+                "batch_round": batch_round,
+                "candidate_count": 10,
+                "stage_stopped": "batch-stop",
+                "preset_name": "coarse",
+                "field_name": "kp",
+                "step": 10.0,
+                "repeat_each": 1,
+                "best_pair": initial_pair,
+                "best_label": "KP-baseline",
+                "best_step_multiplier": 0,
+                "best_is_edge": 0,
+                "left_score": 7.0,
+                "right_score": 6.0,
+                "score": 6.5,
+                "combined_score": 6.5,
+                "history_rows": [],
+            }
+
+        def fail_finalize(*args, **kwargs):
+            del args, kwargs
+            self.fail("non-interactive batch should not finalize best pid")
+
+        def fake_update(*args, **kwargs):
+            del args, kwargs
+
+        def fake_apply_speed_gains(client, gains):
+            del gains
+            client.send_command("APPLY")
+
+        air_dual.resolve_air_dual_profile_defaults = fake_resolve
+        air_dual.build_autotune_trial = fake_build_trial
+        air_dual.build_autotune_verify_trial = fake_build_verify_trial
+        air_dual.run_air_dual_batch = fake_run_batch
+        air_dual.finalize_air_dual_best = fail_finalize
+        air_dual._update_air_dual_profile = fake_update
+        air_dual.apply_speed_gains = fake_apply_speed_gains
+
+        try:
+            client = FakeClient()
+            result = module.run_autotune(client, Args())
+        finally:
+            air_dual.resolve_air_dual_profile_defaults = original_resolve
+            air_dual.build_autotune_trial = original_build_trial
+            air_dual.build_autotune_verify_trial = original_build_verify_trial
+            air_dual.run_air_dual_batch = original_run_batch
+            air_dual.finalize_air_dual_best = original_finalize
+            air_dual._update_air_dual_profile = original_update_profile
             air_dual.apply_speed_gains = original_apply_speed_gains
 
         self.assertEqual(result, 0)
-        self.assertIn("best right kp=106.0000 ki=18.0000 kd=0.0000 score=9.0000", output.getvalue())
+        self.assertEqual(client.commands[-4:], ["APPLY", "TEST_speed=0", "STOP", "AT_RESET"])
 
     def test_twiddle_optimize_dual_pair_moves_toward_joint_minimum(self):
         module = load_module()

@@ -1,10 +1,12 @@
 import time
 
 from .common import (
+    DEFAULT_TUNING_PROFILE_PATH,
     DEFAULT_MIN_SCORE_TARGET_SPEED,
     DEFAULT_SCORE_CONFIG,
     GroundLoadTrial,
     PidGains,
+    WheelPidGains,
     _build_trial_events,
     _segment_is_scored,
     _split_ground_load_segments,
@@ -14,10 +16,37 @@ from .common import (
     combine_multi_speed_scores,
     describe_gains,
     format_gain,
+    load_tuning_profile,
+    pid_gains_from_dict,
+    profile_rows_to_segments,
+    resolve_profile_path,
+    save_tuning_profile,
+    wheel_pid_gains_from_dict,
+    wheel_pid_gains_to_dict,
 )
 
 
-def build_ground_load_trials():
+def build_ground_load_trials(profile=None):
+    default_sequences = {}
+    custom_sequences = {}
+    forward_segments = ()
+
+    if isinstance(profile, dict):
+        default_sequences = profile.get("shared_targets", {}).get("default_sequences", {})
+        custom_sequences = profile.get("shared_targets", {}).get("custom_sequences", {})
+        forward_segments = profile_rows_to_segments(custom_sequences.get("ground_forward"))
+        if not forward_segments:
+            forward_segments = profile_rows_to_segments(default_sequences.get("ground_forward"))
+
+    if forward_segments:
+        return [
+            GroundLoadTrial(
+                "profile_ground_forward",
+                forward_segments,
+                sum([segment[1] for segment in forward_segments]),
+            ),
+        ]
+
     return [
         GroundLoadTrial(
             "sequence_25_35_45_35_25",
@@ -25,6 +54,43 @@ def build_ground_load_trials():
             1000,
         ),
     ]
+
+
+def _ensure_wheel_pair(gains):
+    if isinstance(gains, WheelPidGains):
+        return gains
+    return WheelPidGains(gains, gains)
+
+
+def resolve_ground_dual_initial_gains(profile, default_gains):
+    default_pair = _ensure_wheel_pair(default_gains)
+
+    ground_best = wheel_pid_gains_from_dict(profile.get("ground_dual", {}).get("best_pid"))
+    if ground_best is not None:
+        return ground_best
+
+    air_pair = wheel_pid_gains_from_dict(profile.get("air_dual", {}).get("best_pid"))
+    if air_pair is not None:
+        return air_pair
+
+    identify_pair = wheel_pid_gains_from_dict(profile.get("pwm_identify", {}).get("seed_pi"))
+    if identify_pair is not None:
+        return identify_pair
+
+    return default_pair
+
+
+def _update_ground_dual_profile(profile, profile_path, initial_gains, best_gains, best_score, trials):
+    profile["ground_dual"] = {
+        "baseline_pid": wheel_pid_gains_to_dict(initial_gains),
+        "best_pid": wheel_pid_gains_to_dict(best_gains),
+        "last_summary": {
+            "best_score": float(best_score),
+            "trial_name": trials[0].name,
+            "segments_ms": [[float(target_speed), int(hold_ms)] for target_speed, hold_ms in trials[0].segments_ms],
+        },
+    }
+    save_tuning_profile(profile, profile_path)
 
 
 def build_ground_load_return_trial(forward_trial, speed_scale=0.6, max_speed=30.0):
@@ -351,9 +417,33 @@ def _evaluate_ground_load_stage(
     return best_gains, best_score, best_results, score_rows
 
 
+def _pair_with_delta(base_pair, wheel_name, field_name, delta):
+    if wheel_name == "left":
+        if field_name == "kp":
+            return WheelPidGains(PidGains(max(0.0, base_pair.left.kp + delta), base_pair.left.ki, base_pair.left.kd), base_pair.right)
+        if field_name == "ki":
+            return WheelPidGains(PidGains(base_pair.left.kp, max(0.0, base_pair.left.ki + delta), base_pair.left.kd), base_pair.right)
+        return WheelPidGains(PidGains(base_pair.left.kp, base_pair.left.ki, max(0.0, base_pair.left.kd + delta)), base_pair.right)
+
+    if field_name == "kp":
+        return WheelPidGains(base_pair.left, PidGains(max(0.0, base_pair.right.kp + delta), base_pair.right.ki, base_pair.right.kd))
+    if field_name == "ki":
+        return WheelPidGains(base_pair.left, PidGains(base_pair.right.kp, max(0.0, base_pair.right.ki + delta), base_pair.right.kd))
+    return WheelPidGains(base_pair.left, PidGains(base_pair.right.kp, base_pair.right.ki, max(0.0, base_pair.right.kd + delta)))
+
+
 def run_ground_load_autotune(client, args):
     all_rows = []
-    trials = build_ground_load_trials()
+    profile = load_tuning_profile(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)), required=False)
+    profile_path = resolve_profile_path(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)))
+    initial_gains = resolve_ground_dual_initial_gains(
+        profile,
+        WheelPidGains(
+            PidGains(100.0, 20.0, 0.0),
+            PidGains(100.0, 20.0, 0.0),
+        ),
+    )
+    trials = build_ground_load_trials(profile)
     score_config = build_score_config(args)
     auto_cycle = 1 if args.ground_return_scale > 0.0 else 0
     return_trial = None
@@ -376,7 +466,13 @@ def run_ground_load_autotune(client, args):
         if not auto_cycle:
             input(message)
 
-    stage1_candidates = [PidGains(kp, 20.0, 0.0) for kp in (95.0, 100.0, 105.0, 110.0)]
+    stage1_candidates = [
+        initial_gains,
+        _pair_with_delta(initial_gains, "left", "kp", -5.0),
+        _pair_with_delta(initial_gains, "left", "kp", 5.0),
+        _pair_with_delta(initial_gains, "right", "kp", -5.0),
+        _pair_with_delta(initial_gains, "right", "kp", 5.0),
+    ]
     best, best_score, best_results, stage_rows = _evaluate_ground_load_stage(
         client,
         stage1_candidates,
@@ -388,7 +484,13 @@ def run_ground_load_autotune(client, args):
     )
     all_rows.extend(stage_rows)
 
-    stage2_candidates = [PidGains(best.kp, ki, 0.0) for ki in (15.0, 20.0, 25.0)]
+    stage2_candidates = [
+        best,
+        _pair_with_delta(best, "left", "ki", -5.0),
+        _pair_with_delta(best, "left", "ki", 5.0),
+        _pair_with_delta(best, "right", "ki", -5.0),
+        _pair_with_delta(best, "right", "ki", 5.0),
+    ]
     best, best_score, best_results, stage_rows = _evaluate_ground_load_stage(
         client,
         stage2_candidates,
@@ -405,7 +507,10 @@ def run_ground_load_autotune(client, args):
         trials=trials,
         min_target_speed=args.score_min_target_speed,
     ) > 1.0:
-        stage3_candidates = [PidGains(best.kp, best.ki, kd) for kd in (0.2, 0.5)]
+        stage3_candidates = [
+            _pair_with_delta(best, "left", "kd", 0.2),
+            _pair_with_delta(best, "right", "kd", 0.2),
+        ]
         kd_best, kd_score, kd_results, stage_rows = _evaluate_ground_load_stage(
             client,
             stage3_candidates,
@@ -432,23 +537,15 @@ def run_ground_load_autotune(client, args):
 
     print("scoreboard")
     for gains, score in all_rows:
-        print(
-            "  kp={0:.4f} ki={1:.4f} kd={2:.4f} score={3:.4f}".format(
-                gains.kp,
-                gains.ki,
-                gains.kd,
-                score,
-            )
-        )
+        print("  {0} score={1:.4f}".format(describe_gains(gains), score))
 
     print(
-        "best ground-load kp={0:.4f} ki={1:.4f} kd={2:.4f} score={3:.4f}".format(
-            best.kp,
-            best.ki,
-            best.kd,
+        "best ground-load {0} score={1:.4f}".format(
+            describe_gains(best),
             best_score,
         )
     )
+    _update_ground_dual_profile(profile, profile_path, initial_gains, best, best_score, trials)
     return 0
 
 

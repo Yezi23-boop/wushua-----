@@ -1,4 +1,7 @@
 import collections
+import json
+import os
+import pathlib
 import time
 
 
@@ -67,6 +70,289 @@ MODE_AIR_DUAL = "air-dual"
 MODE_GROUND_DUAL = "ground-dual"
 MODE_PWM_IDENTIFY = "pwm-identify"
 MODE_PWM_MAP = "pwm-map"
+PROFILE_VERSION = 1
+DEFAULT_TUNING_PROFILE_PATH = pathlib.Path(__file__).resolve().parents[1] / "logs" / "current_tuning_profile.json"
+PROFILE_TOP_REFERENCE_SPEED = 45.0
+PROFILE_BAND_SPEEDS = {
+    "low": 15.0,
+    "mid": 25.0,
+    "high": 35.0,
+    "top": 45.0,
+}
+DEFAULT_AIR_PRIMARY_HOLD_MS = 500
+DEFAULT_AIR_VERIFY_HOLD_MS = 300
+DEFAULT_GROUND_FORWARD_HOLD_MS = 200
+
+
+def _format_profile_float(value):
+    text = "{0:.6f}".format(float(value)).rstrip("0").rstrip(".")
+    if text == "-0":
+        return "0"
+    return text
+
+
+def resolve_profile_path(profile_path_text=None):
+    if profile_path_text:
+        return pathlib.Path(profile_path_text)
+    return DEFAULT_TUNING_PROFILE_PATH
+
+
+def _empty_profile():
+    return {
+        "meta": {
+            "profile_version": PROFILE_VERSION,
+        }
+    }
+
+
+def load_tuning_profile(profile_path_text=None, required=False):
+    profile_path = resolve_profile_path(profile_path_text)
+    if not profile_path.exists():
+        if required:
+            raise RuntimeError("Missing tuning profile: {0}. Run pwm-map first.".format(profile_path))
+        return _empty_profile()
+
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        raise RuntimeError("Invalid tuning profile: {0}".format(profile_path)) from exc
+
+    if not isinstance(profile, dict):
+        raise RuntimeError("Invalid tuning profile: {0}".format(profile_path))
+
+    if "meta" not in profile or not isinstance(profile["meta"], dict):
+        profile["meta"] = {}
+    if "profile_version" not in profile["meta"]:
+        profile["meta"]["profile_version"] = PROFILE_VERSION
+    return profile
+
+
+def _order_shared_targets(shared_targets):
+    ordered = {}
+    preferred_keys = (
+        "custom_sequences",
+        "bands",
+        "default_sequences",
+        "policy",
+        "shared_max_encoder",
+    )
+
+    if not isinstance(shared_targets, dict):
+        return shared_targets
+
+    for key in preferred_keys:
+        if key in shared_targets:
+            ordered[key] = shared_targets[key]
+
+    for key, value in shared_targets.items():
+        if key not in ordered:
+            ordered[key] = value
+
+    return ordered
+
+
+def _order_tuning_profile(profile):
+    ordered = {}
+    preferred_keys = (
+        "shared_targets",
+        "meta",
+        "pwm_map",
+        "pwm_identify",
+        "air_dual",
+        "ground_dual",
+    )
+
+    if not isinstance(profile, dict):
+        return profile
+
+    for key in preferred_keys:
+        if key in profile:
+            ordered[key] = profile[key]
+
+    for key, value in profile.items():
+        if key not in ordered:
+            ordered[key] = value
+
+    return ordered
+
+
+def save_tuning_profile(profile, profile_path_text=None):
+    profile_path = resolve_profile_path(profile_path_text)
+    now_text = time.strftime("%Y-%m-%d %H:%M:%S")
+    meta = profile.get("meta")
+    if not isinstance(meta, dict):
+        meta = {}
+        profile["meta"] = meta
+    if "created_at" not in meta:
+        meta["created_at"] = now_text
+    meta["updated_at"] = now_text
+    meta["profile_version"] = PROFILE_VERSION
+    if isinstance(profile.get("shared_targets"), dict):
+        profile["shared_targets"] = _order_shared_targets(profile["shared_targets"])
+    profile = _order_tuning_profile(profile)
+
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = profile_path.with_name(profile_path.name + ".tmp")
+    temp_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(str(temp_path), str(profile_path))
+    return profile_path
+
+
+def pid_gains_to_dict(gains):
+    return {
+        "kp": float(gains.kp),
+        "ki": float(gains.ki),
+        "kd": float(gains.kd),
+    }
+
+
+def wheel_pid_gains_to_dict(gains):
+    return {
+        "left": pid_gains_to_dict(gains.left),
+        "right": pid_gains_to_dict(gains.right),
+    }
+
+
+def pid_gains_from_dict(data, default_gains=None):
+    if not isinstance(data, dict):
+        return default_gains
+
+    try:
+        return PidGains(
+            float(data.get("kp", 0.0)),
+            float(data.get("ki", 0.0)),
+            float(data.get("kd", 0.0)),
+        )
+    except (TypeError, ValueError):
+        return default_gains
+
+
+def wheel_pid_gains_from_dict(data, default_gains=None):
+    if not isinstance(data, dict):
+        return default_gains
+
+    if "left" not in data and "right" not in data:
+        gains = pid_gains_from_dict(data)
+        if gains is None:
+            return default_gains
+        return WheelPidGains(gains, gains)
+
+    left = pid_gains_from_dict(data.get("left"))
+    right = pid_gains_from_dict(data.get("right"))
+    if left is None or right is None:
+        return default_gains
+
+    return WheelPidGains(left, right)
+
+
+def collapse_wheel_pid_gains(gains, default_gains=None):
+    if gains is None:
+        return default_gains
+
+    return PidGains(gains.left.kp, gains.left.ki, gains.left.kd)
+
+
+def segments_to_profile_rows(segments_ms):
+    rows = []
+    for target_speed, hold_ms in segments_ms:
+        rows.append(
+            {
+                "target_speed": float(target_speed),
+                "hold_ms": int(hold_ms),
+            }
+        )
+    return rows
+
+
+def _parse_profile_sequence_text(sequence_text):
+    parts = [item.strip() for item in sequence_text.split(",") if item.strip()]
+    segments = []
+
+    for item in parts:
+        speed_text, hold_text = item.split(":")
+        target_speed = float(speed_text.strip())
+        hold_ms = int(hold_text.strip())
+        if hold_ms <= 0:
+            raise ValueError("segment duration must be positive")
+        segments.append((target_speed, hold_ms))
+
+    if not segments:
+        raise ValueError("sequence must contain at least one segment")
+
+    return tuple(segments)
+
+
+def profile_rows_to_segments(sequence_rows):
+    segments = []
+
+    if isinstance(sequence_rows, str):
+        return _parse_profile_sequence_text(sequence_rows)
+
+    if not isinstance(sequence_rows, list):
+        return tuple(segments)
+
+    for row in sequence_rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            target_speed = float(row.get("target_speed", 0.0))
+            hold_ms = int(row.get("hold_ms", 0))
+        except (TypeError, ValueError):
+            continue
+
+        if hold_ms <= 0:
+            continue
+        segments.append((target_speed, hold_ms))
+
+    return tuple(segments)
+
+
+def profile_rows_to_sequence_text(sequence_rows):
+    parts = []
+
+    for target_speed, hold_ms in profile_rows_to_segments(sequence_rows):
+        parts.append("{0}:{1}".format(_format_profile_float(target_speed), int(hold_ms)))
+
+    return ",".join(parts)
+
+
+def _build_profile_sequence(target_values, hold_ms):
+    rows = []
+    for target_value in target_values:
+        rows.append(
+            {
+                "target_speed": float(target_value),
+                "hold_ms": int(hold_ms),
+            }
+        )
+    return rows
+
+
+def build_shared_target_profile(left_max_steady_encoder, right_max_steady_encoder):
+    shared_max = min(float(left_max_steady_encoder), float(right_max_steady_encoder))
+    if shared_max < 0.0:
+        shared_max = 0.0
+
+    low = shared_max * PROFILE_BAND_SPEEDS["low"] / PROFILE_TOP_REFERENCE_SPEED
+    mid = shared_max * PROFILE_BAND_SPEEDS["mid"] / PROFILE_TOP_REFERENCE_SPEED
+    high = shared_max * PROFILE_BAND_SPEEDS["high"] / PROFILE_TOP_REFERENCE_SPEED
+    top = shared_max * PROFILE_BAND_SPEEDS["top"] / PROFILE_TOP_REFERENCE_SPEED
+
+    return {
+        "policy": "min_wheel_max",
+        "shared_max_encoder": shared_max,
+        "bands": {
+            "low": low,
+            "mid": mid,
+            "high": high,
+            "top": top,
+        },
+        "default_sequences": {
+            "air_primary": _build_profile_sequence((low, mid, mid, low, low), DEFAULT_AIR_PRIMARY_HOLD_MS),
+            "air_verify": _build_profile_sequence((low, mid, mid, low, low), DEFAULT_AIR_VERIFY_HOLD_MS),
+            "ground_forward": _build_profile_sequence((low, mid, low), DEFAULT_GROUND_FORWARD_HOLD_MS),
+        },
+    }
 
 
 def parse_telemetry_line(raw_line):

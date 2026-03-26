@@ -3,7 +3,7 @@ import csv
 import pathlib
 import time
 
-from .common import _median_value
+from .common import _median_value, build_shared_target_profile, load_tuning_profile, resolve_profile_path, save_tuning_profile
 
 
 PwmMapLevelMetrics = collections.namedtuple(
@@ -315,6 +315,43 @@ def _print_pwm_map_summary(wheel_name, metrics, deadzone_break_pwm):
     )
 
 
+def _metrics_to_profile_row(metrics):
+    return {
+        "pwm_command": int(metrics.pwm_command),
+        "steady_encoder": float(metrics.steady_encoder),
+        "peak_encoder": float(metrics.peak_encoder),
+        "sample_count": int(metrics.sample_count),
+        "repeat_count": int(metrics.repeat_count),
+        "stop_flag_seen": int(metrics.stop_flag_seen),
+    }
+
+
+def _build_pwm_map_profile_section(output_path, wheel_rows, wheel_deadzones):
+    left_rows = wheel_rows.get("left", [])
+    right_rows = wheel_rows.get("right", [])
+    left_max = 0.0
+    right_max = 0.0
+
+    if left_rows:
+        left_max = max([row["steady_encoder"] for row in left_rows])
+    if right_rows:
+        right_max = max([row["steady_encoder"] for row in right_rows])
+
+    return {
+        "raw_csv_path": str(output_path),
+        "left": {
+            "deadzone_break_pwm": wheel_deadzones.get("left"),
+            "max_steady_encoder": left_max,
+            "map_rows": left_rows,
+        },
+        "right": {
+            "deadzone_break_pwm": wheel_deadzones.get("right"),
+            "max_steady_encoder": right_max,
+            "map_rows": right_rows,
+        },
+    }
+
+
 def run_pwm_map(client, args):
     output_path = None
     writer = None
@@ -330,6 +367,9 @@ def run_pwm_map(client, args):
     effective_pwm_runs = []
     effective_pwm = 0
     stop_after_row = 0
+    wheel_rows = {"left": [], "right": []}
+    wheel_deadzones = {"left": None, "right": None}
+    profile = None
 
     if args.map_output:
         output_path = pathlib.Path(args.map_output)
@@ -404,7 +444,9 @@ def run_pwm_map(client, args):
                 )
                 _print_pwm_map_summary(wheel_name, aggregated, row_deadzone)
                 last_written_pwm = int(aggregated.pwm_command)
+                wheel_rows[wheel_name].append(_metrics_to_profile_row(aggregated))
                 if row_deadzone != "":
+                    wheel_deadzones[wheel_name] = int(row_deadzone)
                     print("{0} deadzone_break_pwm={1}".format(wheel_name, row_deadzone))
                 if stop_after_row:
                     print(
@@ -417,5 +459,13 @@ def run_pwm_map(client, args):
                     break
     finally:
         handle.close()
+
+    profile = load_tuning_profile(args.profile_path, required=False)
+    profile["pwm_map"] = _build_pwm_map_profile_section(output_path, wheel_rows, wheel_deadzones)
+    profile["shared_targets"] = build_shared_target_profile(
+        profile["pwm_map"]["left"]["max_steady_encoder"],
+        profile["pwm_map"]["right"]["max_steady_encoder"],
+    )
+    save_tuning_profile(profile, resolve_profile_path(args.profile_path))
 
     return 0
