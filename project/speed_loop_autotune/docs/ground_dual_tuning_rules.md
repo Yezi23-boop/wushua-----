@@ -1,24 +1,24 @@
 # Ground Dual Speed Loop Tuning Rules
 
-这份文档只记录 `ground-dual` 的带负载双轮回归规则，不复用 `air-dual` 或 `pwm-identify` 的结论。
+This file stays aligned with the Codex skill entrypoint in `docs/agent_autotune.md`. The agent runs the batch flow, keeps `save` explicit at batch boundaries, and uses structured metrics first with waveform as secondary evidence.
 
-## 目标
+## Goal
 
-- 验证带负载双轮在真实阻力、供电压降和停车条件下是否仍稳定
-- 重点看整组试验可重复性，而不是单段最低分
+- Verify loaded dual-wheel recovery under real friction, supply sag, and stop conditions.
+- Keep the focus on whole-trial repeatability instead of a single low score.
 
-## 默认环境
+## Default Environment
 
-- 串口：`COM8`
-- 模式：`ground-dual`
-- 负压：按实车需要设置，不默认沿用 `AT_FUYA=0`
-- 默认不发送 `SAVE`
+- Serial port: `COM8`
+- Mode: `ground-dual`
+- Vacuum: set as needed for the real car, not forced to `AT_FUYA=0`
+- Default save behavior: no automatic `SAVE`
 
-## 默认序列
+## Default Sequence
 
 - `25:200,35:200,45:200,35:200,25:200`
 
-## 默认命令链
+## Default Command Chain
 
 1. `AT_FUYA=<value>`
 2. `AT_COOLDOWN_MS=<value>`
@@ -27,16 +27,25 @@
 5. `AT_SPEED=<first_target>`
 6. `AT_FIRE`
 
-## 评分关注点
+## Scoring Focus
 
-- 各段综合得分
+- Integrated score across all segments.
 - `stop_flag`
 - `trial_active`
-- 冷却段残余速度
-- 冷却段残余 PWM
+- Remaining speed during the cooldown segment.
+- Remaining PWM during the cooldown segment.
 
-## 使用边界
+## Usage Boundary
 
-- `ground-dual` 只做带载回归和保守筛选
-- 不在本模式里做开环 PWM 辨识
-- 如果 `air-dual` 单轮更优、但 `ground-dual` 明显更差，优先保守回退
+- `ground-dual` only performs loaded recovery and conservative screening.
+- Do not do open-loop PWM identification in this mode.
+- If `air-dual` is better in isolation but `ground-dual` is clearly worse, prefer the conservative fallback.
+
+## Agent Batch Policy
+
+- Use the skill entrypoint from `docs/agent_autotune.md`.
+- Run `ground_dual` as a 10-round batch.
+- Stop at the batch boundary for the user's action word.
+- Keep `save` explicit and do not auto-save after `ground_dual`.
+- Treat waveform as secondary evidence when structured metrics already explain the result.
+
