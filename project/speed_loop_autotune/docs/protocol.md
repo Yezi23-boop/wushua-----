@@ -7,7 +7,7 @@ This document describes the current skill-managed protocol for speed-loop autotu
 - The autotune skill is the only user-facing entry point for this workflow.
 - The skill reads `project/speed_loop_autotune/logs/current_tuning_profile.json` first.
 - If required profile fields are missing, the skill may auto-run `pwm_map` and `pwm_identify` before tuning starts.
-- Public docs should describe the skill-managed workflow, not promise parser flags or shell commands that are not yet implemented.
+- The host parser now exposes step worker modes, but user-facing docs should still describe the skill-managed workflow first.
 
 ## Batch Model
 
@@ -46,5 +46,5 @@ Action words are only exposed at batch boundaries, never in the middle of a batc
 
 ## Implementation Note
 
-- Worker-side CLI flags, if they are still evolving, should be treated as implementation details until parser support lands.
-- The stable contract for this doc is the batch flow, boundary actions, and save gate.
+- Step worker CLI details are implementation-facing.
+- The stable contract for this doc is the batch flow, boundary actions, save gate, and evidence policy.

@@ -1,5 +1,8 @@
+import json
+import pathlib
 import time
 
+from . import agent_session, common
 from .common import (
     DEFAULT_TUNING_PROFILE_PATH,
     DEFAULT_MIN_SCORE_TARGET_SPEED,
@@ -16,11 +19,14 @@ from .common import (
     combine_multi_speed_scores,
     describe_gains,
     format_gain,
+    load_wheel_pid_gains_json,
     load_tuning_profile,
+    normalize_band_scores,
     pid_gains_from_dict,
     profile_rows_to_segments,
     resolve_profile_path,
     save_tuning_profile,
+    write_json_file,
     wheel_pid_gains_from_dict,
     wheel_pid_gains_to_dict,
 )
@@ -61,37 +67,257 @@ def _ensure_wheel_pair(gains):
         return gains
     return WheelPidGains(gains, gains)
 
+def resolve_ground_dual_step_start_pair(profile, default_pair):
+    ground_state = profile.get("ground_dual", {})
+    active_batch = ground_state.get("active_batch", {})
+    if not isinstance(active_batch, dict):
+        active_batch = {}
+    active_best = wheel_pid_gains_from_dict(active_batch.get("current_best_pid"))
+    if active_best is not None:
+        return active_best
 
-def resolve_ground_dual_initial_gains(profile, default_gains):
-    default_pair = _ensure_wheel_pair(default_gains)
-
-    ground_best = wheel_pid_gains_from_dict(profile.get("ground_dual", {}).get("best_pid"))
+    ground_best = wheel_pid_gains_from_dict(ground_state.get("best_pid"))
     if ground_best is not None:
         return ground_best
 
-    air_pair = wheel_pid_gains_from_dict(profile.get("air_dual", {}).get("best_pid"))
-    if air_pair is not None:
-        return air_pair
+    air_best = wheel_pid_gains_from_dict(profile.get("air_dual", {}).get("best_pid"))
+    if air_best is not None:
+        return air_best
 
-    identify_pair = wheel_pid_gains_from_dict(profile.get("pwm_identify", {}).get("seed_pi"))
-    if identify_pair is not None:
-        return identify_pair
+    seed_pair = wheel_pid_gains_from_dict(profile.get("pwm_identify", {}).get("seed_pi"))
+    if seed_pair is not None:
+        return seed_pair
 
-    return default_pair
+    return _ensure_wheel_pair(default_pair)
 
 
-def _update_ground_dual_profile(profile, profile_path, initial_gains, best_gains, best_score, trials):
-    profile["ground_dual"] = {
-        "baseline_pid": wheel_pid_gains_to_dict(initial_gains),
-        "best_pid": wheel_pid_gains_to_dict(best_gains),
-        "last_summary": {
-            "best_score": float(best_score),
-            "trial_name": trials[0].name,
-            "segments_ms": [[float(target_speed), int(hold_ms)] for target_speed, hold_ms in trials[0].segments_ms],
-        },
+def resolve_ground_dual_step_baseline_pair(profile, fallback_pair):
+    baseline_pair = wheel_pid_gains_from_dict(profile.get("ground_dual", {}).get("baseline_pid"))
+    if baseline_pair is not None:
+        return baseline_pair
+    return fallback_pair
+
+
+def _resolve_ground_step_result_path(args, profile_path):
+    if getattr(args, "result_json", ""):
+        return pathlib.Path(args.result_json)
+    return agent_session.build_round_result_path(profile_path.parent, "ground_dual", getattr(args, "batch_id", "ground_step"), getattr(args, "round_index", 1))
+
+
+def _resolve_ground_step_waveform_path(args, profile_path):
+    if getattr(args, "waveform_path", ""):
+        return pathlib.Path(args.waveform_path)
+    return agent_session.build_waveform_path(profile_path.parent, "ground_dual", getattr(args, "batch_id", "ground_step"), getattr(args, "round_index", 1))
+
+
+def _resolve_band_targets(shared_targets):
+    bands = {}
+    targets = {}
+
+    if isinstance(shared_targets, dict):
+        bands = shared_targets.get("bands", {})
+
+    for band_name, default_target in common.PROFILE_BAND_SPEEDS.items():
+        try:
+            targets[band_name] = abs(float(bands.get(band_name, default_target)))
+        except (TypeError, ValueError):
+            targets[band_name] = abs(float(default_target))
+
+    return targets
+
+
+def _build_ground_segment_display(group_results, trials, score_config=None, min_target_speed=DEFAULT_MIN_SCORE_TARGET_SPEED):
+    display_segments = []
+
+    if score_config is None:
+        score_config = DEFAULT_SCORE_CONFIG
+
+    for trial, samples in zip(trials, group_results):
+        segment_groups = _split_ground_load_segments(samples, trial)
+        segment_index = 0
+        while segment_index < len(trial.segments_ms):
+            target_speed = trial.segments_ms[segment_index][0]
+            if segment_index < len(segment_groups) and segment_groups[segment_index]:
+                group = segment_groups[segment_index]
+                metrics = analyze_trial(group, score_config=score_config)
+                mean_speed = sum([0.5 * (sample.left_speed + sample.right_speed) for sample in group]) / float(len(group))
+                display_segments.append(
+                    {
+                        "target_speed": float(target_speed),
+                        "score": float(metrics.score),
+                        "mean_speed": float(mean_speed),
+                        "overshoot": float(metrics.overshoot),
+                    }
+                )
+            elif abs(target_speed) >= min_target_speed:
+                display_segments.append(
+                    {
+                        "target_speed": float(target_speed),
+                        "score": None,
+                        "mean_speed": None,
+                        "overshoot": None,
+                    }
+                )
+            segment_index += 1
+
+    return {"segments": display_segments}
+
+
+def _build_band_scores_from_display(display, shared_targets):
+    segment_scores = {}
+    band_targets = _resolve_band_targets(shared_targets)
+
+    for segment in display.get("segments", []):
+        score = segment.get("score")
+        target_speed = abs(float(segment.get("target_speed", 0.0)))
+        if score is None or target_speed <= 0.0:
+            continue
+        segment_scores.setdefault(target_speed, []).append(float(score))
+
+    if not segment_scores:
+        return normalize_band_scores(None)
+
+    averaged = {}
+    for target_speed, scores in segment_scores.items():
+        averaged[target_speed] = sum(scores) / float(len(scores))
+
+    resolved = {}
+    for band_name, target_speed in band_targets.items():
+        nearest_speed = min(averaged.keys(), key=lambda value: abs(value - target_speed))
+        resolved[band_name] = averaged[nearest_speed]
+
+    return normalize_band_scores(resolved)
+
+
+def _sample_to_dict(sample):
+    if hasattr(sample, "_asdict"):
+        return dict(sample._asdict())
+    return {
+        "target": float(getattr(sample, "target", 0.0)),
+        "left_speed": float(getattr(sample, "left_speed", 0.0)),
+        "right_speed": float(getattr(sample, "right_speed", 0.0)),
+        "left_pwm": float(getattr(sample, "left_pwm", 0.0)),
+        "right_pwm": float(getattr(sample, "right_pwm", 0.0)),
+        "trial_active": float(getattr(sample, "trial_active", 0.0)),
+        "stop_flag": float(getattr(sample, "stop_flag", 0.0)),
+        "mode_id": float(getattr(sample, "mode_id", 0.0)),
+        "left_cmd_pwm": float(getattr(sample, "left_cmd_pwm", 0.0)),
+        "right_cmd_pwm": float(getattr(sample, "right_cmd_pwm", 0.0)),
     }
-    save_tuning_profile(profile, profile_path)
 
+
+def _write_waveform_jsonl(path, group_results):
+    waveform_path = pathlib.Path(path)
+    waveform_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with waveform_path.open("w", encoding="utf-8") as handle:
+        run_index = 0
+        for samples in group_results:
+            sample_index = 0
+            for sample in samples:
+                row = _sample_to_dict(sample)
+                row["run_index"] = run_index + 1
+                row["sample_index"] = sample_index
+                handle.write(json.dumps(row, ensure_ascii=False))
+                handle.write("\n")
+                sample_index += 1
+            run_index += 1
+
+    return waveform_path
+
+
+def _build_waveform_digest(group_results):
+    peak_windows = []
+    tail_jitter = 0.0
+    run_index = 0
+
+    for samples in group_results:
+        if not samples:
+            run_index += 1
+            continue
+
+        peak_speed = max([max(abs(sample.left_speed), abs(sample.right_speed)) for sample in samples])
+        tail_samples = samples[-3:]
+        tail_speeds = [max(abs(sample.left_speed), abs(sample.right_speed)) for sample in tail_samples]
+        if tail_speeds:
+            tail_jitter = max(tail_jitter, max(tail_speeds) - min(tail_speeds))
+
+        peak_windows.append({"run_index": run_index + 1, "peak_speed": float(peak_speed)})
+        run_index += 1
+
+    return {"tail_jitter": float(tail_jitter), "peak_windows": peak_windows}
+
+
+def _compute_stop_clean_flag(group_results):
+    if not group_results:
+        return 0
+
+    for samples in group_results:
+        if not samples:
+            return 0
+        last = samples[-1]
+        residual_speed = max(abs(last.left_speed), abs(last.right_speed))
+        residual_pwm = max(abs(last.left_pwm), abs(last.right_pwm))
+        if last.stop_flag < 0.5 or residual_speed > 3.0 or residual_pwm > 400.0:
+            return 0
+
+    return 1
+
+
+def _compute_overshoot_flag(display, overshoot_gate):
+    for segment in display.get("segments", []):
+        overshoot = segment.get("overshoot")
+        if overshoot is not None and float(overshoot) > overshoot_gate:
+            return 1
+    return 0
+
+
+def _compute_speed_drop_flag(display, min_target_speed):
+    for segment in display.get("segments", []):
+        target_speed = abs(float(segment.get("target_speed", 0.0)))
+        mean_speed = segment.get("mean_speed")
+        if target_speed < min_target_speed or mean_speed is None:
+            continue
+        if abs(float(mean_speed)) < target_speed * 0.88:
+            return 1
+    return 0
+
+
+def _compute_pwm_saturation_ratio(group_results, threshold=3300.0):
+    total_count = 0
+    saturated_count = 0
+
+    for samples in group_results:
+        for sample in samples:
+            total_count += 1
+            if max(abs(sample.left_pwm), abs(sample.right_pwm), abs(sample.left_cmd_pwm), abs(sample.right_cmd_pwm)) >= threshold:
+                saturated_count += 1
+
+    if total_count == 0:
+        return 0.0
+
+    return saturated_count / float(total_count)
+
+
+def _evaluate_ground_dual_step_candidate(client, args, trials, return_trial, score_config, gains):
+    score, group_results = run_ground_load_group(
+        client,
+        gains,
+        wait_for_operator=lambda _message: None,
+        fuya_pwm=args.fuya_pwm,
+        cooldown_ms=args.ground_cooldown_ms,
+        precharge_ms=args.ground_precharge_ms,
+        trials=trials,
+        return_trial=return_trial,
+        score_config=score_config,
+        min_target_speed=args.score_min_target_speed,
+    )
+    return (
+        {
+            "combined_score": float(score),
+        },
+        group_results,
+    )
 
 def build_ground_load_return_trial(forward_trial, speed_scale=0.6, max_speed=30.0):
     if speed_scale <= 0.0:
@@ -341,213 +567,77 @@ def _average_group_overshoot(
 
     return overshoot_sum / float(overshoot_count)
 
-
-def _print_group_result(
-    gains,
-    score,
-    group_results,
-    trials=None,
-    score_config=None,
-    min_target_speed=DEFAULT_MIN_SCORE_TARGET_SPEED,
-):
-    if trials is None:
-        trials = build_ground_load_trials()
-
-    summary_parts = []
-    for trial, samples in zip(trials, group_results):
-        summary_parts.append(
-            summarize_ground_load_trial(
-                samples,
-                trial,
-                score_config=score_config,
-                min_target_speed=min_target_speed,
-            )
-        )
-    print(
-        "group {0} score={1:.4f}".format(
-            describe_gains(gains),
-            score,
-        )
-    )
-    for part in summary_parts:
-        print("  {0}".format(part))
-
-
-def _evaluate_ground_load_stage(
-    client,
-    candidates,
-    args,
-    trials,
-    wait_for_operator,
-    return_trial,
-    score_config,
-):
-    best_gains = None
-    best_score = float("inf")
-    best_results = []
-    score_rows = []
-
-    for gains in candidates:
-        score, group_results = run_ground_load_group(
-            client,
-            gains,
-            wait_for_operator=wait_for_operator,
-            fuya_pwm=args.fuya_pwm,
-            cooldown_ms=args.ground_cooldown_ms,
-            precharge_ms=args.ground_precharge_ms,
-            trials=trials,
-            return_trial=return_trial,
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-        )
-        _print_group_result(
-            gains,
-            score,
-            group_results,
-            trials=trials,
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-        )
-        score_rows.append((gains, score))
-        if score < best_score:
-            best_score = score
-            best_gains = gains
-            best_results = group_results
-
-    return best_gains, best_score, best_results, score_rows
-
-
-def _pair_with_delta(base_pair, wheel_name, field_name, delta):
-    if wheel_name == "left":
-        if field_name == "kp":
-            return WheelPidGains(PidGains(max(0.0, base_pair.left.kp + delta), base_pair.left.ki, base_pair.left.kd), base_pair.right)
-        if field_name == "ki":
-            return WheelPidGains(PidGains(base_pair.left.kp, max(0.0, base_pair.left.ki + delta), base_pair.left.kd), base_pair.right)
-        return WheelPidGains(PidGains(base_pair.left.kp, base_pair.left.ki, max(0.0, base_pair.left.kd + delta)), base_pair.right)
-
-    if field_name == "kp":
-        return WheelPidGains(base_pair.left, PidGains(max(0.0, base_pair.right.kp + delta), base_pair.right.ki, base_pair.right.kd))
-    if field_name == "ki":
-        return WheelPidGains(base_pair.left, PidGains(base_pair.right.kp, max(0.0, base_pair.right.ki + delta), base_pair.right.kd))
-    return WheelPidGains(base_pair.left, PidGains(base_pair.right.kp, base_pair.right.ki, max(0.0, base_pair.right.kd + delta)))
-
-
-def run_ground_load_autotune(client, args):
-    all_rows = []
+def run_ground_dual_step(client, args):
     profile = load_tuning_profile(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)), required=False)
     profile_path = resolve_profile_path(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)))
-    initial_gains = resolve_ground_dual_initial_gains(
-        profile,
-        WheelPidGains(
-            PidGains(100.0, 20.0, 0.0),
-            PidGains(100.0, 20.0, 0.0),
-        ),
-    )
     trials = build_ground_load_trials(profile)
     score_config = build_score_config(args)
-    auto_cycle = 1 if args.ground_return_scale > 0.0 else 0
-    return_trial = None
+    default_pair = _ensure_wheel_pair(
+        WheelPidGains(
+            PidGains(args.initial_kp, args.initial_ki, args.initial_kd),
+            PidGains(args.initial_kp, args.initial_ki, args.initial_kd),
+        )
+    )
+    candidate_pair = load_wheel_pid_gains_json(getattr(args, "candidate_json", ""), None)
+    if candidate_pair is None:
+        candidate_pair = resolve_ground_dual_step_start_pair(profile, default_pair)
 
-    if auto_cycle:
+    baseline_pair = load_wheel_pid_gains_json(getattr(args, "baseline_json", ""), None)
+    if baseline_pair is None:
+        baseline_pair = resolve_ground_dual_step_baseline_pair(profile, candidate_pair)
+
+    return_trial = None
+    if args.ground_return_scale > 0.0:
         return_trial = build_ground_load_return_trial(
             trials[-1],
             speed_scale=args.ground_return_scale,
             max_speed=args.ground_return_max_speed,
         )
 
-    wait_state = {"prompt_needed": 1}
-
-    def wait_for_operator(message):
-        if wait_state["prompt_needed"]:
-            input(message)
-            if auto_cycle:
-                wait_state["prompt_needed"] = 0
-            return
-        if not auto_cycle:
-            input(message)
-
-    stage1_candidates = [
-        initial_gains,
-        _pair_with_delta(initial_gains, "left", "kp", -5.0),
-        _pair_with_delta(initial_gains, "left", "kp", 5.0),
-        _pair_with_delta(initial_gains, "right", "kp", -5.0),
-        _pair_with_delta(initial_gains, "right", "kp", 5.0),
-    ]
-    best, best_score, best_results, stage_rows = _evaluate_ground_load_stage(
+    evaluation, group_results = _evaluate_ground_dual_step_candidate(
         client,
-        stage1_candidates,
         args,
         trials,
-        wait_for_operator,
         return_trial,
         score_config,
+        candidate_pair,
     )
-    all_rows.extend(stage_rows)
-
-    stage2_candidates = [
-        best,
-        _pair_with_delta(best, "left", "ki", -5.0),
-        _pair_with_delta(best, "left", "ki", 5.0),
-        _pair_with_delta(best, "right", "ki", -5.0),
-        _pair_with_delta(best, "right", "ki", 5.0),
-    ]
-    best, best_score, best_results, stage_rows = _evaluate_ground_load_stage(
-        client,
-        stage2_candidates,
-        args,
-        trials,
-        wait_for_operator,
-        return_trial,
-        score_config,
-    )
-    all_rows.extend(stage_rows)
-
-    if _average_group_overshoot(
-        best_results,
-        trials=trials,
-        min_target_speed=args.score_min_target_speed,
-    ) > 1.0:
-        stage3_candidates = [
-            _pair_with_delta(best, "left", "kd", 0.2),
-            _pair_with_delta(best, "right", "kd", 0.2),
-        ]
-        kd_best, kd_score, kd_results, stage_rows = _evaluate_ground_load_stage(
-            client,
-            stage3_candidates,
-            args,
+    display = evaluation.get("display")
+    if not isinstance(display, dict):
+        display = _build_ground_segment_display(
+            group_results,
             trials,
-            wait_for_operator,
-            return_trial,
-            score_config,
+            score_config=score_config,
+            min_target_speed=args.score_min_target_speed,
         )
-        all_rows.extend(stage_rows)
-        if kd_score < best_score:
-            best = kd_best
-            best_score = kd_score
-            best_results = kd_results
 
-    client.send_command("AT_FUYA={0}".format(int(args.fuya_pwm)))
-    client.send_command("AT_COOLDOWN_MS={0}".format(int(args.ground_cooldown_ms)))
-    apply_speed_gains(client, best)
-    client.send_command("AT_RESET")
-    client.send_command("TEST_speed=0")
+    result_path = _resolve_ground_step_result_path(args, profile_path)
+    waveform_path = _resolve_ground_step_waveform_path(args, profile_path)
+    _write_waveform_jsonl(waveform_path, group_results)
 
-    if args.save_best:
-        client.send_command("SAVE")
+    payload = {
+        "mode": common.MODE_GROUND_DUAL_STEP,
+        "batch_id": getattr(args, "batch_id", ""),
+        "round_index": int(getattr(args, "round_index", 1) or 1),
+        "candidate_pid": wheel_pid_gains_to_dict(candidate_pair),
+        "baseline_pid": wheel_pid_gains_to_dict(baseline_pair),
+        "a_score": float(evaluation.get("combined_score", float("inf"))),
+        "b_score": float(evaluation.get("combined_score", float("inf"))),
+        "combined_score": float(evaluation.get("combined_score", float("inf"))),
+        "band_scores": _build_band_scores_from_display(display, profile.get("shared_targets")),
+        "stage_reached": "step_completed",
+        "overshoot_flag": _compute_overshoot_flag(display, score_config.overshoot_gate),
+        "persistent_overshoot_flag": int(_average_group_overshoot(group_results, trials=trials, min_target_speed=args.score_min_target_speed) > 1.0),
+        "speed_drop_flag": _compute_speed_drop_flag(display, args.score_min_target_speed),
+        "stop_clean_flag": _compute_stop_clean_flag(group_results),
+        "pwm_saturation_ratio": _compute_pwm_saturation_ratio(group_results),
+        "waveform_path": waveform_path.as_posix(),
+        "waveform_digest": _build_waveform_digest(group_results),
+        "trial_name": trials[0].name,
+        "segments_ms": [[float(target_speed), int(hold_ms)] for target_speed, hold_ms in trials[0].segments_ms],
+        "result_path": result_path.as_posix(),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    write_json_file(result_path, payload)
+    return payload
 
-    print("scoreboard")
-    for gains, score in all_rows:
-        print("  {0} score={1:.4f}".format(describe_gains(gains), score))
-
-    print(
-        "best ground-load {0} score={1:.4f}".format(
-            describe_gains(best),
-            best_score,
-        )
-    )
-    _update_ground_dual_profile(profile, profile_path, initial_gains, best, best_score, trials)
-    return 0
-
-
-def run_ground_dual_autotune(client, args):
-    return run_ground_load_autotune(client, args)

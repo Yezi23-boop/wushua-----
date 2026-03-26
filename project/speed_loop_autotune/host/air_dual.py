@@ -1,14 +1,17 @@
 import csv
+import json
 import pathlib
 import sys
 import time
 
+from . import agent_session, common
 from .common import (
     DEFAULT_AUTOTUNE_SEARCH_TOLERANCE,
     DEFAULT_KD_OVERSHOOT_RUNS,
     DEFAULT_MIN_SCORE_TARGET_SPEED,
     DEFAULT_SCORE_CONFIG,
     DEFAULT_TUNING_PROFILE_PATH,
+    MODE_AIR_DUAL_STEP,
     GroundLoadTrial,
     PidGains,
     RepeatScoreSummary,
@@ -28,7 +31,9 @@ from .common import (
     build_score_config,
     combine_multi_speed_scores,
     format_gain,
+    load_wheel_pid_gains_json,
     load_tuning_profile,
+    normalize_band_scores,
     profile_rows_to_sequence_text,
     resolve_profile_path,
     score_multi_speed_trial,
@@ -36,6 +41,7 @@ from .common import (
     summarize_repeat_scores,
     twiddle_optimize,
     save_tuning_profile,
+    write_json_file,
     wheel_pid_gains_from_dict,
     wheel_pid_gains_to_dict,
 )
@@ -138,134 +144,6 @@ class CandidateLimitTracker(object):
                 self.best_score,
             )
 
-
-def _format_compact_gain(value):
-    text = "{0:.4f}".format(value).rstrip("0").rstrip(".")
-    if text == "-0":
-        return "0"
-    return text
-
-
-def _clone_pid_with_delta(gains, field_name, delta):
-    if field_name == "kp":
-        return PidGains(_clamp_non_negative(gains.kp + delta), gains.ki, gains.kd)
-    if field_name == "ki":
-        return PidGains(gains.kp, _clamp_non_negative(gains.ki + delta), gains.kd)
-    if field_name == "kd":
-        return PidGains(gains.kp, gains.ki, _clamp_non_negative(gains.kd + delta))
-    raise ValueError("unsupported field_name")
-
-
-def _clone_pair_with_delta(pair, wheel_name, field_name, delta):
-    if wheel_name == "left":
-        return WheelPidGains(_clone_pid_with_delta(pair.left, field_name, delta), pair.right)
-    if wheel_name == "right":
-        return WheelPidGains(pair.left, _clone_pid_with_delta(pair.right, field_name, delta))
-    raise ValueError("unsupported wheel_name")
-
-
-def _clone_pair_with_shared_delta(pair, field_name, delta):
-    return WheelPidGains(
-        _clone_pid_with_delta(pair.left, field_name, delta),
-        _clone_pid_with_delta(pair.right, field_name, delta),
-    )
-
-
-def build_dual_family_batch_metadata(base_pair, field_name, step):
-    step = abs(float(step))
-    if step <= 0.0:
-        raise ValueError("batch step must be positive")
-
-    metadata = [
-        {
-            "pair": base_pair,
-            "field_name": field_name,
-            "direction": 0,
-            "step_multiplier": 0,
-            "label": "{0}-baseline".format(field_name.upper()),
-        }
-    ]
-
-    for step_multiplier in (-4, -3, -2, -1, 1, 2, 3, 4):
-        metadata.append(
-            {
-                "pair": _clone_pair_with_shared_delta(base_pair, field_name, step * float(step_multiplier)),
-                "field_name": field_name,
-                "direction": -1 if step_multiplier < 0 else 1,
-                "step_multiplier": step_multiplier,
-                "label": "{0}{1:+d}".format(field_name.upper(), step_multiplier),
-            }
-        )
-
-    return metadata
-
-
-def build_dual_family_adaptive_candidate(base_pair, field_name, step, direction):
-    direction_value = int(direction or 0)
-    if direction_value > 0:
-        return {
-            "pair": _clone_pair_with_shared_delta(base_pair, field_name, abs(float(step)) * 5.0),
-            "field_name": field_name,
-            "direction": 1,
-            "step_multiplier": 5,
-            "label": "{0}+5".format(field_name.upper()),
-        }
-    if direction_value < 0:
-        return {
-            "pair": _clone_pair_with_shared_delta(base_pair, field_name, -abs(float(step)) * 5.0),
-            "field_name": field_name,
-            "direction": -1,
-            "step_multiplier": -5,
-            "label": "{0}-5".format(field_name.upper()),
-        }
-    return {
-        "pair": base_pair,
-        "field_name": field_name,
-        "direction": 0,
-        "step_multiplier": 0,
-        "label": "{0}-repeat".format(field_name.upper()),
-    }
-
-
-def _is_edge_step_multiplier(step_multiplier):
-    return abs(int(step_multiplier or 0)) >= 4
-
-
-def build_air_dual_stage_plans():
-    plans = []
-
-    for preset in TUNING_PRESETS:
-        plans.append(
-            {
-                "preset_name": preset["name"],
-                "field_name": "kp",
-                "step": float(preset["kp_step"]),
-                "repeat_each": int(preset["repeat_each"]),
-            }
-        )
-        plans.append(
-            {
-                "preset_name": preset["name"],
-                "field_name": "ki",
-                "step": float(preset["ki_step"]),
-                "repeat_each": int(preset["repeat_each"]),
-            }
-        )
-
-    return plans
-
-
-def select_batch_best(candidate_rows):
-    return min(
-        candidate_rows,
-        key=lambda row: (
-            row.get("score", row.get("combined_score", float("inf"))),
-            max(row.get("left_score", float("inf")), row.get("right_score", float("inf"))),
-            row.get("left_score", float("inf")) + row.get("right_score", float("inf")),
-        ),
-    )
-
-
 def resolve_air_dual_profile_defaults(args):
     profile = load_tuning_profile(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)), required=False)
     autotune_sequence = args.autotune_sequence
@@ -317,114 +195,319 @@ def resolve_air_dual_profile_defaults(args):
     }
 
 
-def _print_air_dual_profile_targets(resolved):
-    shared_targets = resolved.get("shared_targets")
+def resolve_air_dual_step_start_pair(profile, default_pair):
+    air_dual_state = profile.get("air_dual", {})
+    active_batch = air_dual_state.get("active_batch", {})
+    if not isinstance(active_batch, dict):
+        active_batch = {}
+    active_best = wheel_pid_gains_from_dict(active_batch.get("current_best_pid"))
+    if active_best is not None:
+        return active_best
+
+    last_batch_best_block = air_dual_state.get("last_batch_best", {})
+    if not isinstance(last_batch_best_block, dict):
+        last_batch_best_block = {}
+    last_batch_best = wheel_pid_gains_from_dict(last_batch_best_block.get("best_pid"))
+    if last_batch_best is not None:
+        return last_batch_best
+
+    best_pair = wheel_pid_gains_from_dict(air_dual_state.get("best_pid"))
+    if best_pair is not None:
+        return best_pair
+
+    seed_pair = wheel_pid_gains_from_dict(profile.get("pwm_identify", {}).get("seed_pi"))
+    if seed_pair is not None:
+        return seed_pair
+
+    return default_pair
+
+
+def resolve_air_dual_step_baseline_pair(profile, fallback_pair):
+    baseline_pair = wheel_pid_gains_from_dict(profile.get("air_dual", {}).get("baseline_pid"))
+    if baseline_pair is not None:
+        return baseline_pair
+    return fallback_pair
+
+
+def _resolve_air_step_result_path(args, profile_path):
+    if getattr(args, "result_json", ""):
+        return pathlib.Path(args.result_json)
+    return agent_session.build_round_result_path(profile_path.parent, "air_dual", getattr(args, "batch_id", "air_step"), getattr(args, "round_index", 1))
+
+
+def _resolve_air_step_waveform_path(args, profile_path):
+    if getattr(args, "waveform_path", ""):
+        return pathlib.Path(args.waveform_path)
+    return agent_session.build_waveform_path(profile_path.parent, "air_dual", getattr(args, "batch_id", "air_step"), getattr(args, "round_index", 1))
+
+
+def _resolve_band_targets(shared_targets):
     bands = {}
+    targets = {}
 
-    if not isinstance(shared_targets, dict):
-        return
+    if isinstance(shared_targets, dict):
+        bands = shared_targets.get("bands", {})
 
-    bands = shared_targets.get("bands", {})
-    print("profile path={0}".format(resolved["profile_path"]))
-    print("profile shared_max_encoder={0}".format(_format_compact_gain(shared_targets.get("shared_max_encoder", 0.0))))
-    print(
-        "profile bands low={0} mid={1} high={2} top={3}".format(
-            _format_compact_gain(bands.get("low", 0.0)),
-            _format_compact_gain(bands.get("mid", 0.0)),
-            _format_compact_gain(bands.get("high", 0.0)),
-            _format_compact_gain(bands.get("top", 0.0)),
-        )
-    )
+    for band_name, default_target in common.PROFILE_BAND_SPEEDS.items():
+        try:
+            targets[band_name] = abs(float(bands.get(band_name, default_target)))
+        except (TypeError, ValueError):
+            targets[band_name] = abs(float(default_target))
+
+    return targets
 
 
-def _trim_batch_history(history_rows, max_items=DEFAULT_BATCH_HISTORY_LIMIT):
-    if not isinstance(history_rows, list):
-        return []
-    if len(history_rows) <= max_items:
-        return history_rows
-    return history_rows[-max_items:]
+def _build_band_scores_from_display(display, shared_targets):
+    segment_scores = {}
+    band_targets = _resolve_band_targets(shared_targets)
+
+    for wheel_summary in display.get("wheels", {}).values():
+        for segment in wheel_summary.get("segments", []):
+            score = segment.get("score")
+            target_speed = abs(float(segment.get("target_speed", 0.0)))
+            if score is None or target_speed <= 0.0:
+                continue
+            segment_scores.setdefault(target_speed, []).append(float(score))
+
+    if not segment_scores:
+        return normalize_band_scores(None)
+
+    averaged = {}
+    for target_speed, scores in segment_scores.items():
+        averaged[target_speed] = sum(scores) / float(len(scores))
+
+    resolved = {}
+    for band_name, target_speed in band_targets.items():
+        nearest_speed = min(averaged.keys(), key=lambda value: abs(value - target_speed))
+        resolved[band_name] = averaged[nearest_speed]
+
+    return normalize_band_scores(resolved)
 
 
-def _extract_air_dual_best_score(air_dual_state):
-    last_summary = None
-    score = None
-
-    if not isinstance(air_dual_state, dict):
-        return None
-
-    last_summary = air_dual_state.get("last_summary")
-    if not isinstance(last_summary, dict):
-        return None
-
-    score = last_summary.get("score", last_summary.get("combined_score"))
-    if score is None:
-        return None
-
-    try:
-        return float(score)
-    except (TypeError, ValueError):
-        return None
-
-
-def _update_air_dual_profile(
-    resolved,
-    initial_pair,
-    best_pair,
-    left_score,
-    right_score,
-    score=None,
-    combined_score=None,
-    last_batch_best=None,
-    batch_round=None,
-    batch_history=None,
-):
-    profile = resolved.get("profile")
-    if not isinstance(profile, dict):
-        profile = {}
-
-    existing_air_dual = profile.get("air_dual", {})
-    if not isinstance(existing_air_dual, dict):
-        existing_air_dual = {}
-
-    existing_history = existing_air_dual.get("batch_history", [])
-    if not isinstance(existing_history, list):
-        existing_history = []
-    if batch_history is None:
-        batch_history = existing_history
-
-    if score is None:
-        if combined_score is not None:
-            score = combined_score
-        else:
-            score = (left_score + right_score) * 0.5
-
-    profile["air_dual"] = {
-        "baseline_pid": wheel_pid_gains_to_dict(initial_pair),
-        "best_pid": wheel_pid_gains_to_dict(best_pair),
-        "last_summary": {
-            "left_score": float(left_score),
-            "right_score": float(right_score),
-            "score": float(score),
-            "combined_score": float(score),
-            "autotune_sequence": resolved["autotune_sequence"],
-        },
-        "last_batch_best": last_batch_best,
-        "batch_round": int(batch_round or 0),
-        "batch_history": _trim_batch_history(batch_history),
+def _sample_to_dict(sample):
+    if hasattr(sample, "_asdict"):
+        return dict(sample._asdict())
+    return {
+        "target": float(getattr(sample, "target", 0.0)),
+        "left_speed": float(getattr(sample, "left_speed", 0.0)),
+        "right_speed": float(getattr(sample, "right_speed", 0.0)),
+        "left_pwm": float(getattr(sample, "left_pwm", 0.0)),
+        "right_pwm": float(getattr(sample, "right_pwm", 0.0)),
+        "trial_active": float(getattr(sample, "trial_active", 0.0)),
+        "stop_flag": float(getattr(sample, "stop_flag", 0.0)),
+        "mode_id": float(getattr(sample, "mode_id", 0.0)),
+        "left_cmd_pwm": float(getattr(sample, "left_cmd_pwm", 0.0)),
+        "right_cmd_pwm": float(getattr(sample, "right_cmd_pwm", 0.0)),
     }
-    save_tuning_profile(profile, resolved["profile_path"])
 
 
-def format_pid_pair_label(pair):
-    return "L{0}/{1}/{2} R{3}/{4}/{5}".format(
-        _format_compact_gain(pair.left.kp),
-        _format_compact_gain(pair.left.ki),
-        _format_compact_gain(pair.left.kd),
-        _format_compact_gain(pair.right.kp),
-        _format_compact_gain(pair.right.ki),
-        _format_compact_gain(pair.right.kd),
+def _write_waveform_jsonl(path, sample_runs):
+    waveform_path = pathlib.Path(path)
+    waveform_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with waveform_path.open("w", encoding="utf-8") as handle:
+        run_index = 0
+        for samples in sample_runs:
+            sample_index = 0
+            for sample in samples:
+                row = _sample_to_dict(sample)
+                row["run_index"] = run_index + 1
+                row["sample_index"] = sample_index
+                handle.write(json.dumps(row, ensure_ascii=False))
+                handle.write("\n")
+                sample_index += 1
+            run_index += 1
+
+    return waveform_path
+
+
+def _build_waveform_digest(sample_runs):
+    peak_windows = []
+    tail_jitter = 0.0
+    run_index = 0
+
+    for samples in sample_runs:
+        if not samples:
+            run_index += 1
+            continue
+
+        peak_speed = max([max(abs(sample.left_speed), abs(sample.right_speed)) for sample in samples])
+        tail_samples = samples[-3:]
+        tail_speeds = [max(abs(sample.left_speed), abs(sample.right_speed)) for sample in tail_samples]
+        if tail_speeds:
+            tail_jitter = max(tail_jitter, max(tail_speeds) - min(tail_speeds))
+
+        peak_windows.append(
+            {
+                "run_index": run_index + 1,
+                "peak_speed": float(peak_speed),
+            }
+        )
+        run_index += 1
+
+    return {
+        "tail_jitter": float(tail_jitter),
+        "peak_windows": peak_windows,
+    }
+
+
+def _compute_pwm_saturation_ratio(sample_runs, threshold=DEFAULT_DUAL_PWM_HIGH_THRESHOLD):
+    total_count = 0
+    saturated_count = 0
+
+    for samples in sample_runs:
+        for sample in samples:
+            total_count += 1
+            if max(abs(sample.left_pwm), abs(sample.right_pwm), abs(sample.left_cmd_pwm), abs(sample.right_cmd_pwm)) >= threshold:
+                saturated_count += 1
+
+    if total_count == 0:
+        return 0.0
+
+    return saturated_count / float(total_count)
+
+
+def _compute_stop_clean_flag(sample_runs):
+    if not sample_runs:
+        return 0
+
+    for samples in sample_runs:
+        if not samples:
+            return 0
+        last = samples[-1]
+        residual_speed = max(abs(last.left_speed), abs(last.right_speed))
+        residual_pwm = max(abs(last.left_pwm), abs(last.right_pwm))
+        if last.stop_flag < 0.5 or residual_speed > 3.0 or residual_pwm > 400.0:
+            return 0
+
+    return 1
+
+
+def _compute_speed_drop_flag(display, min_target_speed):
+    for wheel_summary in display.get("wheels", {}).values():
+        for segment in wheel_summary.get("segments", []):
+            target_speed = abs(float(segment.get("target_speed", 0.0)))
+            mean_speed = segment.get("mean_speed")
+            if target_speed < min_target_speed or mean_speed is None:
+                continue
+            if abs(float(mean_speed)) < target_speed * DEFAULT_DUAL_SPEED_RATIO_FLOOR:
+                return 1
+    return 0
+
+
+def _compute_overshoot_flag(display, overshoot_gate):
+    for wheel_summary in display.get("wheels", {}).values():
+        for segment in wheel_summary.get("segments", []):
+            overshoot = segment.get("overshoot")
+            if overshoot is not None and float(overshoot) > overshoot_gate:
+                return 1
+    return 0
+
+
+def _evaluate_air_dual_step_candidate(client, args, trial, verify_trial, score_config, gains_pair):
+    del verify_trial
+    sample_runs = []
+    repeat_each = max(1, int(getattr(args, "repeat_each", DEFAULT_AUTOTUNE_REPEAT_COUNT) or 1))
+
+    run_index = 0
+    while run_index < repeat_each:
+        sample_runs.append(
+            run_autotune_trial(
+                client,
+                gains_pair,
+                trial,
+                args.rest_seconds,
+                tail_zero_ms=args.autotune_tail_zero_ms,
+            )
+        )
+        run_index += 1
+
+    result = evaluate_repeated_dual_candidate(
+        sample_runs,
+        trial,
+        score_config=score_config,
+        min_target_speed=args.score_min_target_speed,
+        overshoot_gate=score_config.overshoot_gate,
+        required_overshoot_runs=args.kd_overshoot_runs,
+    )
+    display = _build_trial_display_summary(
+        sample_runs,
+        trial,
+        ["left", "right"],
+        score_config=score_config,
+        min_target_speed=args.score_min_target_speed,
+    )
+    score = result.median_score
+
+    return (
+        {
+            "gains": gains_pair,
+            "score": score,
+            "combined_score": score,
+            "a_score": score,
+            "b_score": score,
+            "left_score": display["wheels"]["left"]["total_score"],
+            "right_score": display["wheels"]["right"]["total_score"],
+            "display": display,
+            "persistent_overshoot": int(result.persistent_overshoot),
+        },
+        sample_runs,
     )
 
+
+def run_air_dual_step(client, args):
+    resolved = resolve_air_dual_profile_defaults(args)
+    trial = build_autotune_trial(resolved["autotune_sequence"])
+    verify_trial = build_autotune_verify_trial(resolved["verify_sequence"])
+    score_config = build_score_config(args)
+    profile = resolved["profile"]
+    default_pair = resolved["initial_pair"]
+    candidate_pair = load_wheel_pid_gains_json(getattr(args, "candidate_json", ""), None)
+    if candidate_pair is None:
+        candidate_pair = resolve_air_dual_step_start_pair(profile, default_pair)
+
+    baseline_pair = load_wheel_pid_gains_json(getattr(args, "baseline_json", ""), None)
+    if baseline_pair is None:
+        baseline_pair = resolve_air_dual_step_baseline_pair(profile, candidate_pair)
+
+    evaluation, sample_runs = _evaluate_air_dual_step_candidate(
+        client,
+        args,
+        trial,
+        verify_trial,
+        score_config,
+        candidate_pair,
+    )
+    result_path = _resolve_air_step_result_path(args, resolved["profile_path"])
+    waveform_path = _resolve_air_step_waveform_path(args, resolved["profile_path"])
+    _write_waveform_jsonl(waveform_path, sample_runs)
+
+    display = evaluation.get("display", {})
+    payload = {
+        "mode": MODE_AIR_DUAL_STEP,
+        "batch_id": getattr(args, "batch_id", ""),
+        "round_index": int(getattr(args, "round_index", 1) or 1),
+        "candidate_pid": wheel_pid_gains_to_dict(candidate_pair),
+        "baseline_pid": wheel_pid_gains_to_dict(baseline_pair),
+        "a_score": float(evaluation.get("a_score", evaluation.get("combined_score", float("inf")))),
+        "b_score": float(evaluation.get("b_score", evaluation.get("combined_score", float("inf")))),
+        "combined_score": float(evaluation.get("combined_score", evaluation.get("score", float("inf")))),
+        "left_score": float(evaluation.get("left_score", float("inf"))),
+        "right_score": float(evaluation.get("right_score", float("inf"))),
+        "band_scores": _build_band_scores_from_display(display, resolved.get("shared_targets")),
+        "stage_reached": "step_completed",
+        "overshoot_flag": _compute_overshoot_flag(display, score_config.overshoot_gate),
+        "persistent_overshoot_flag": int(evaluation.get("persistent_overshoot", 0)),
+        "speed_drop_flag": _compute_speed_drop_flag(display, args.score_min_target_speed),
+        "stop_clean_flag": _compute_stop_clean_flag(sample_runs),
+        "pwm_saturation_ratio": _compute_pwm_saturation_ratio(sample_runs),
+        "waveform_path": waveform_path.as_posix(),
+        "waveform_digest": _build_waveform_digest(sample_runs),
+        "result_path": result_path.as_posix(),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    write_json_file(result_path, payload)
+    return payload
 
 def _filter_projected_samples(projected_samples):
     filtered = []
@@ -595,187 +678,6 @@ def _build_trial_display_summary(sample_runs, trial, wheel_names, score_config=N
         "wheels": aggregated_wheels,
     }
 
-
-def _build_primary_segment_index(trial_display):
-    segment_index = {}
-
-    for wheel_name, wheel_summary in trial_display["wheels"].items():
-        for segment in wheel_summary["segments"]:
-            target_speed = abs(segment["target_speed"])
-            if target_speed < SUMMARY_PRIMARY_TARGET_MIN:
-                continue
-            segment_index[(wheel_name, target_speed)] = segment
-
-    return segment_index
-
-
-def _has_primary_segment_regression(candidate_display, baseline_display):
-    candidate_index = _build_primary_segment_index(candidate_display)
-    baseline_index = _build_primary_segment_index(baseline_display)
-
-    for key, baseline_segment in baseline_index.items():
-        candidate_segment = candidate_index.get(key)
-        if candidate_segment is None:
-            return 1
-
-        baseline_score = baseline_segment["score"]
-        candidate_score = candidate_segment["score"]
-        baseline_speed = baseline_segment["mean_speed"]
-        candidate_speed = candidate_segment["mean_speed"]
-        target_speed = key[1]
-
-        if baseline_score is not None and candidate_score is None:
-            return 1
-
-        if baseline_score is not None and candidate_score is not None:
-            if (
-                candidate_score > baseline_score + SUMMARY_PRIMARY_SCORE_REJECT_DELTA
-                and candidate_score > baseline_score * SUMMARY_PRIMARY_SCORE_REJECT_RATIO
-            ):
-                return 1
-
-        if baseline_speed is not None and candidate_speed is not None:
-            if candidate_speed < baseline_speed - max(SUMMARY_PRIMARY_SPEED_DROP_MIN, target_speed * SUMMARY_PRIMARY_SPEED_DROP_RATIO):
-                return 1
-
-    return 0
-
-
-def build_stage_baseline_reference(a_score, b_score, combined_score, a_display, b_display):
-    return {
-        "a_score": a_score,
-        "b_score": b_score,
-        "combined_score": combined_score,
-        "a_display": a_display,
-        "b_display": b_display,
-    }
-
-
-def decide_candidate_status(a_score, b_score, combined_score, a_display, b_display, baseline_reference=None):
-    if baseline_reference is None:
-        return "复验"
-
-    if (
-        a_score == baseline_reference["a_score"]
-        and b_score == baseline_reference["b_score"]
-        and combined_score == baseline_reference["combined_score"]
-    ):
-        return "基线"
-
-    primary_regression = _has_primary_segment_regression(a_display, baseline_reference["a_display"])
-    if not primary_regression:
-        primary_regression = _has_primary_segment_regression(b_display, baseline_reference["b_display"])
-
-    if (
-        combined_score <= baseline_reference["combined_score"] * SUMMARY_KEEP_COMBINED_RATIO
-        and a_score <= baseline_reference["a_score"] * SUMMARY_KEEP_TRIAL_RATIO
-        and b_score <= baseline_reference["b_score"] * SUMMARY_KEEP_TRIAL_RATIO
-        and not primary_regression
-    ):
-        return "保留"
-
-    if (
-        combined_score > baseline_reference["combined_score"] * SUMMARY_REJECT_COMBINED_RATIO
-        or a_score > baseline_reference["a_score"] * SUMMARY_REJECT_TRIAL_RATIO
-        or b_score > baseline_reference["b_score"] * SUMMARY_REJECT_TRIAL_RATIO
-        or primary_regression
-    ):
-        return "淘汰"
-
-    return "复验"
-
-
-def _append_csv_row(csv_path, headers, row):
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not csv_path.exists()
-
-    with csv_path.open("a", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=headers)
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
-
-
-def append_candidate_history(stage_name, gains, score, decision, display, timestamp_text=None):
-    pid_label = format_pid_pair_label(gains)
-    if timestamp_text is None:
-        timestamp_text = time.strftime("%Y-%m-%d %H:%M:%S")
-
-    _append_csv_row(
-        SUMMARY_HISTORY_PATH,
-        SUMMARY_HISTORY_HEADERS,
-        {
-            "timestamp": timestamp_text,
-            "stage": stage_name,
-            "pid_label": pid_label,
-            "left_kp": gains.left.kp,
-            "left_ki": gains.left.ki,
-            "left_kd": gains.left.kd,
-            "right_kp": gains.right.kp,
-            "right_ki": gains.right.ki,
-            "right_kd": gains.right.kd,
-            "a_score": "",
-            "b_score": "",
-            "combined_score": score,
-            "decision": decision,
-        },
-    )
-
-    for wheel_name, wheel_summary in display["wheels"].items():
-        for segment in wheel_summary["segments"]:
-            _append_csv_row(
-                SEGMENT_HISTORY_PATH,
-                SEGMENT_HISTORY_HEADERS,
-                {
-                    "timestamp": timestamp_text,
-                    "stage": stage_name,
-                    "pid_label": pid_label,
-                    "trial_label": "S",
-                    "wheel": wheel_name,
-                    "target_speed": segment["target_speed"],
-                    "sample_count": segment["sample_count"],
-                    "mean_speed": segment["mean_speed"],
-                    "segment_score": segment["score"],
-                    "rise_ratio": segment["rise_ratio"],
-                    "settle_ratio": segment["settle_ratio"],
-                    "overshoot": segment["overshoot"],
-                    "steady_error": segment["steady_error"],
-                },
-            )
-
-
-def format_candidate_summary_row(gains, score, *rest):
-    decision = ""
-    if len(rest) == 1:
-        decision = rest[0]
-    elif len(rest) >= 2:
-        score = rest[-2]
-        decision = rest[-1]
-
-    return "{0:<31} {1:>6.2f}    {2}".format(
-        format_pid_pair_label(gains),
-        score,
-        decision,
-    )
-
-
-def emit_candidate_summary(stage_name, gains, score, decision, header_state):
-    if not header_state.get("printed"):
-        print("{0} summary".format(stage_name))
-        print("PID                             总分    结论")
-        header_state["printed"] = 1
-
-    print(format_candidate_summary_row(gains, score, decision))
-
-
-def build_isolated_wheel_pair(candidate_gains, wheel_name):
-    if wheel_name == "left":
-        return WheelPidGains(candidate_gains, ZERO_PID_GAINS)
-    if wheel_name == "right":
-        return WheelPidGains(ZERO_PID_GAINS, candidate_gains)
-    raise ValueError("wheel_name must be 'left' or 'right'")
-
-
 def _parse_sequence_text(sequence_text):
     parts = [item.strip() for item in sequence_text.split(",") if item.strip()]
     segments = []
@@ -865,13 +767,6 @@ def run_autotune_trial(
     )
     client.send_command("TEST_speed=0")
     return samples
-
-
-def send_air_dual_stop_sequence(client):
-    client.send_command("TEST_speed=0")
-    client.send_command("STOP")
-    client.send_command("AT_RESET")
-
 
 def _dual_pwm_margin_penalty(
     samples,
@@ -1034,925 +929,3 @@ def evaluate_repeated_dual_candidate(
         repeat_summary.persistent_overshoot,
     )
 
-
-def evaluate_dual_candidate(client, args, trial, verify_trial, score_config, gains_pair, repeat_each=None):
-    run_index = 0
-    sample_runs = []
-    del verify_trial
-
-    if repeat_each is None:
-        repeat_each = args.repeat_each
-
-    while run_index < repeat_each:
-        sample_runs.append(
-            run_autotune_trial(
-                client,
-                gains_pair,
-                trial,
-                args.rest_seconds,
-                tail_zero_ms=args.autotune_tail_zero_ms,
-            )
-        )
-        run_index += 1
-
-    result = evaluate_repeated_dual_candidate(
-        sample_runs,
-        trial,
-        score_config=score_config,
-        min_target_speed=args.score_min_target_speed,
-        overshoot_gate=score_config.overshoot_gate,
-        required_overshoot_runs=args.kd_overshoot_runs,
-    )
-    display = _build_trial_display_summary(
-        sample_runs,
-        trial,
-        ["left", "right"],
-        score_config=score_config,
-        min_target_speed=args.score_min_target_speed,
-    )
-    score = result.median_score
-
-    return {
-        "gains": gains_pair,
-        "score": score,
-        "combined_score": score,
-        "a_score": score,
-        "b_score": score,
-        "left_score": display["wheels"]["left"]["total_score"],
-        "right_score": display["wheels"]["right"]["total_score"],
-        "result": result,
-        "a_result": result,
-        "b_result": result,
-        "display": display,
-        "a_display": display,
-        "b_display": display,
-        "persistent_overshoot": int(result.persistent_overshoot),
-    }
-
-
-def run_air_dual_batch(client, args, trial, verify_trial, score_config, baseline_pair, batch_round, batch_plan):
-    stage_name = "batch-{0}-{1}-{2}".format(batch_round, batch_plan["preset_name"], batch_plan["field_name"])
-    header_state = {"printed": 0}
-    candidate_rows = []
-    baseline_reference = None
-    candidate_metadata = build_dual_family_batch_metadata(
-        baseline_pair,
-        batch_plan["field_name"],
-        batch_plan["step"],
-    )
-    candidate_limit = int(getattr(args, "candidate_limit", 10) or 0)
-    if candidate_limit <= 0 or candidate_limit > 10:
-        candidate_limit = 10
-
-    for metadata in candidate_metadata:
-        if len(candidate_rows) >= candidate_limit:
-            break
-        candidate_row = evaluate_dual_candidate(
-            client,
-            args,
-            trial,
-            verify_trial,
-            score_config,
-            metadata["pair"],
-            repeat_each=batch_plan["repeat_each"],
-        )
-        candidate_row.update(metadata)
-        if baseline_reference is None:
-            decision = "鍩虹嚎"
-            baseline_reference = build_stage_baseline_reference(
-                candidate_row["score"],
-                candidate_row["score"],
-                candidate_row["score"],
-                candidate_row["display"],
-                candidate_row["display"],
-            )
-        else:
-            decision = decide_candidate_status(
-                candidate_row["score"],
-                candidate_row["score"],
-                candidate_row["score"],
-                candidate_row["display"],
-                candidate_row["display"],
-                baseline_reference=baseline_reference,
-            )
-        candidate_row["decision"] = decision
-        emit_candidate_summary(
-            stage_name,
-            candidate_row["gains"],
-            candidate_row["score"],
-            decision,
-            header_state,
-        )
-        append_candidate_history(
-            stage_name,
-            candidate_row["gains"],
-            candidate_row["score"],
-            decision,
-            candidate_row["display"],
-        )
-        candidate_rows.append(candidate_row)
-
-    if candidate_limit <= len(candidate_rows):
-        batch_best = select_batch_best(candidate_rows)
-        return {
-            "batch_round": batch_round,
-            "candidate_count": len(candidate_rows),
-            "stage_stopped": stage_name,
-            "preset_name": batch_plan["preset_name"],
-            "field_name": batch_plan["field_name"],
-            "step": batch_plan["step"],
-            "repeat_each": batch_plan["repeat_each"],
-            "best_pair": batch_best["gains"],
-            "best_label": batch_best.get("label", ""),
-            "best_step_multiplier": int(batch_best.get("step_multiplier", 0)),
-            "best_is_edge": int(_is_edge_step_multiplier(batch_best.get("step_multiplier", 0))),
-            "left_score": batch_best["left_score"],
-            "right_score": batch_best["right_score"],
-            "score": batch_best["score"],
-            "combined_score": batch_best["score"],
-            "history_rows": candidate_rows,
-        }
-
-    adaptive_source = select_batch_best(candidate_rows)
-    adaptive_candidate = build_dual_family_adaptive_candidate(
-        baseline_pair,
-        batch_plan["field_name"],
-        batch_plan["step"],
-        adaptive_source.get("direction", 0) if _is_edge_step_multiplier(adaptive_source.get("step_multiplier", 0)) else 0,
-    )
-
-    adaptive_row = evaluate_dual_candidate(
-        client,
-        args,
-        trial,
-        verify_trial,
-        score_config,
-        adaptive_candidate["pair"],
-        repeat_each=batch_plan["repeat_each"],
-    )
-    adaptive_row.update(adaptive_candidate)
-    adaptive_row["decision"] = decide_candidate_status(
-        adaptive_row["score"],
-        adaptive_row["score"],
-        adaptive_row["score"],
-        adaptive_row["display"],
-        adaptive_row["display"],
-        baseline_reference=baseline_reference,
-    )
-    emit_candidate_summary(
-        stage_name,
-        adaptive_row["gains"],
-        adaptive_row["score"],
-        adaptive_row["decision"],
-        header_state,
-    )
-    append_candidate_history(
-        stage_name,
-        adaptive_row["gains"],
-        adaptive_row["score"],
-        adaptive_row["decision"],
-        adaptive_row["display"],
-    )
-    candidate_rows.append(adaptive_row)
-
-    batch_best = select_batch_best(candidate_rows)
-    return {
-        "batch_round": batch_round,
-        "candidate_count": len(candidate_rows),
-        "stage_stopped": stage_name,
-        "preset_name": batch_plan["preset_name"],
-        "field_name": batch_plan["field_name"],
-        "step": batch_plan["step"],
-        "repeat_each": batch_plan["repeat_each"],
-        "best_pair": batch_best["gains"],
-        "best_label": batch_best.get("label", ""),
-        "best_step_multiplier": int(batch_best.get("step_multiplier", 0)),
-        "best_is_edge": int(_is_edge_step_multiplier(batch_best.get("step_multiplier", 0))),
-        "left_score": batch_best["left_score"],
-        "right_score": batch_best["right_score"],
-        "score": batch_best["score"],
-        "combined_score": batch_best["score"],
-        "history_rows": candidate_rows,
-    }
-
-
-def prompt_air_dual_batch_action(batch_result, input_fn=input):
-    prompt = "batch {0} complete, enter continue or stop: ".format(batch_result["batch_round"])
-
-    while True:
-        try:
-            answer = input_fn(prompt)
-        except EOFError:
-            return "stop"
-        answer = answer.strip().lower()
-        if answer in ("continue", "stop"):
-            return answer
-
-
-def finalize_air_dual_best(client, args, trial, verify_trial, score_config, best_pair):
-    del verify_trial
-    verification_samples = run_autotune_trial(
-        client,
-        best_pair,
-        trial,
-        args.rest_seconds,
-        tail_zero_ms=args.autotune_tail_zero_ms,
-    )
-    left_score = score_wheel_multi_speed_trial(
-        verification_samples,
-        trial,
-        "left",
-        score_config=score_config,
-        min_target_speed=args.score_min_target_speed,
-    )
-    right_score = score_wheel_multi_speed_trial(
-        verification_samples,
-        trial,
-        "right",
-        score_config=score_config,
-        min_target_speed=args.score_min_target_speed,
-    )
-    combined_score = score_dual_wheel_multi_speed_trial(
-        verification_samples,
-        trial,
-        score_config=score_config,
-        min_target_speed=args.score_min_target_speed,
-    )
-
-    apply_speed_gains(client, best_pair)
-    send_air_dual_stop_sequence(client)
-
-    if args.save_best:
-        client.send_command("SAVE")
-
-    return {
-        "left_score": left_score,
-        "right_score": right_score,
-        "a_score": combined_score,
-        "b_score": combined_score,
-        "score": combined_score,
-        "combined_score": combined_score,
-    }
-
-
-def _build_dual_pair_from_values(values, template_pair):
-    return WheelPidGains(
-        PidGains(
-            _clamp_non_negative(values[0]),
-            _clamp_non_negative(values[1]),
-            template_pair.left.kd,
-        ),
-        PidGains(
-            _clamp_non_negative(values[2]),
-            _clamp_non_negative(values[3]),
-            template_pair.right.kd,
-        ),
-    )
-
-
-def _flatten_dual_pair_values(pair):
-    return [pair.left.kp, pair.left.ki, pair.right.kp, pair.right.ki]
-
-
-def _advance_batch_stage_state(stage_plans, state, batch_result):
-    next_state = {
-        "plan_index": int(state.get("plan_index", 0)),
-        "centered_runs": int(state.get("centered_runs", 0)),
-    }
-
-    if batch_result.get("best_is_edge"):
-        next_state["centered_runs"] = 0
-        return next_state
-
-    next_state["centered_runs"] += 1
-    if next_state["centered_runs"] < DEFAULT_STAGE_CONFIRM_BATCHES:
-        return next_state
-
-    next_state["centered_runs"] = 0
-    if next_state["plan_index"] < len(stage_plans) - 1:
-        next_state["plan_index"] += 1
-    return next_state
-
-
-def _describe_next_batch(stage_plans, state):
-    plan = stage_plans[int(state.get("plan_index", 0))]
-    return "{0}-{1} step={2:.4f} repeat_each={3}".format(
-        plan["preset_name"],
-        plan["field_name"],
-        plan["step"],
-        plan["repeat_each"],
-    )
-
-
-def twiddle_optimize_dual_pair(
-    initial_pair,
-    delta_pair,
-    evaluator,
-    iterations=10,
-    tolerance=DEFAULT_AUTOTUNE_SEARCH_TOLERANCE,
-):
-    best = _build_dual_pair_from_values(_flatten_dual_pair_values(initial_pair), initial_pair)
-    best_score = evaluator(best)
-    working_deltas = [
-        abs(delta_pair.left.kp),
-        abs(delta_pair.left.ki),
-        abs(delta_pair.right.kp),
-        abs(delta_pair.right.ki),
-    ]
-    index_list = [0, 1, 2, 3]
-
-    for _ in range(iterations):
-        if sum(working_deltas) <= tolerance:
-            break
-
-        improved = 0
-        for index in index_list:
-            delta = working_deltas[index]
-            if delta <= tolerance:
-                continue
-
-            values = _flatten_dual_pair_values(best)
-            values[index] += delta
-            candidate = _build_dual_pair_from_values(values, best)
-            candidate_score = evaluator(candidate)
-            if candidate_score < best_score:
-                best = candidate
-                best_score = candidate_score
-                working_deltas[index] = delta * 1.15
-                improved = 1
-                continue
-
-            values = _flatten_dual_pair_values(best)
-            values[index] -= delta
-            candidate = _build_dual_pair_from_values(values, best)
-            candidate_score = evaluator(candidate)
-            if candidate_score < best_score:
-                best = candidate
-                best_score = candidate_score
-                working_deltas[index] = delta * 1.05
-                improved = 1
-                continue
-
-            working_deltas[index] = delta * 0.55
-
-        if not improved and sum(working_deltas) <= tolerance:
-            break
-
-    return best, best_score
-
-
-def _optimize_single_wheel(client, args, trial, verify_trial, score_config, wheel_name, fixed_pair, candidate_limit_tracker=None):
-    if wheel_name == "left":
-        wheel_initial = fixed_pair.left
-    else:
-        wheel_initial = fixed_pair.right
-
-    def collect_candidate(candidate_gains):
-        run_index = 0
-        sample_runs = []
-        verify_runs = []
-        applied_gains = build_isolated_wheel_pair(candidate_gains, wheel_name)
-
-        while run_index < args.repeat_each:
-            sample_runs.append(
-                run_autotune_trial(
-                    client,
-                    applied_gains,
-                    trial,
-                    args.rest_seconds,
-                    tail_zero_ms=args.autotune_tail_zero_ms,
-                )
-            )
-            verify_runs.append(
-                run_autotune_trial(
-                    client,
-                    applied_gains,
-                    verify_trial,
-                    args.rest_seconds,
-                    tail_zero_ms=args.autotune_tail_zero_ms,
-                )
-            )
-            run_index += 1
-
-        a_result = evaluate_repeated_wheel_candidate(
-            sample_runs,
-            trial,
-            wheel_name,
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-            overshoot_gate=score_config.overshoot_gate,
-            required_overshoot_runs=args.kd_overshoot_runs,
-        )
-        b_result = evaluate_repeated_wheel_candidate(
-            verify_runs,
-            verify_trial,
-            wheel_name,
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-            overshoot_gate=score_config.overshoot_gate,
-            required_overshoot_runs=args.kd_overshoot_runs,
-        )
-        a_display = _build_trial_display_summary(
-            sample_runs,
-            trial,
-            [wheel_name],
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-        )
-        b_display = _build_trial_display_summary(
-            verify_runs,
-            verify_trial,
-            [wheel_name],
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-        )
-        combined_score = (a_result.median_score + b_result.median_score) * 0.5
-
-        return {
-            "applied_gains": applied_gains,
-            "reported_gains": WheelPidGains(
-                candidate_gains,
-                fixed_pair.right,
-            ) if wheel_name == "left" else WheelPidGains(
-                fixed_pair.left,
-                candidate_gains,
-            ),
-            "a_result": a_result,
-            "b_result": b_result,
-            "a_display": a_display,
-            "b_display": b_display,
-            "combined_score": combined_score,
-        }
-
-    def optimize_stage(stage_name, stage_initial, stage_delta, iterations):
-        header_state = {"printed": 0}
-        baseline_bundle = collect_candidate(stage_initial)
-        baseline_reference = build_stage_baseline_reference(
-            baseline_bundle["a_result"].median_score,
-            baseline_bundle["b_result"].median_score,
-            baseline_bundle["combined_score"],
-            baseline_bundle["a_display"],
-            baseline_bundle["b_display"],
-        )
-
-        emit_candidate_summary(
-            stage_name,
-            baseline_bundle["applied_gains"],
-            baseline_bundle["a_result"].median_score,
-            baseline_bundle["b_result"].median_score,
-            baseline_bundle["combined_score"],
-            "基线",
-            header_state,
-        )
-        append_candidate_history(
-            stage_name,
-            baseline_bundle["applied_gains"],
-            baseline_bundle["a_result"].median_score,
-            baseline_bundle["b_result"].median_score,
-            baseline_bundle["combined_score"],
-            "基线",
-            baseline_bundle["a_display"],
-            baseline_bundle["b_display"],
-        )
-        if candidate_limit_tracker is not None:
-            candidate_limit_tracker.observe(
-                stage_name,
-                baseline_bundle["reported_gains"],
-                baseline_bundle["combined_score"],
-            )
-
-        def evaluator(candidate_gains):
-            if (
-                candidate_gains.kp == stage_initial.kp
-                and candidate_gains.ki == stage_initial.ki
-                and candidate_gains.kd == stage_initial.kd
-            ):
-                return baseline_bundle["a_result"].median_score
-
-            candidate_bundle = collect_candidate(candidate_gains)
-            decision = decide_candidate_status(
-                candidate_bundle["a_result"].median_score,
-                candidate_bundle["b_result"].median_score,
-                candidate_bundle["combined_score"],
-                candidate_bundle["a_display"],
-                candidate_bundle["b_display"],
-                baseline_reference=baseline_reference,
-            )
-            emit_candidate_summary(
-                stage_name,
-                candidate_bundle["applied_gains"],
-                candidate_bundle["a_result"].median_score,
-                candidate_bundle["b_result"].median_score,
-                candidate_bundle["combined_score"],
-                decision,
-                header_state,
-            )
-            append_candidate_history(
-                stage_name,
-                candidate_bundle["applied_gains"],
-                candidate_bundle["a_result"].median_score,
-                candidate_bundle["b_result"].median_score,
-                candidate_bundle["combined_score"],
-                decision,
-                candidate_bundle["a_display"],
-                candidate_bundle["b_display"],
-            )
-            if candidate_limit_tracker is not None:
-                candidate_limit_tracker.observe(
-                    stage_name,
-                    candidate_bundle["reported_gains"],
-                    candidate_bundle["combined_score"],
-                )
-            return candidate_bundle["a_result"].median_score
-
-        best_candidate, best_score = twiddle_optimize(
-            stage_initial,
-            stage_delta,
-            evaluator,
-            iterations=iterations,
-            tolerance=args.search_tolerance,
-        )
-
-        return best_candidate, best_score, collect_candidate(best_candidate)
-
-    stage1_initial = PidGains(wheel_initial.kp, 0.0, 0.0)
-    stage1_delta = PidGains(args.delta_kp, 0.0, 0.0)
-    best, best_score, _ = optimize_stage(
-        "{0}-isolated-kp".format(wheel_name),
-        stage1_initial,
-        stage1_delta,
-        max(3, args.iterations // 2),
-    )
-
-    stage2_initial = PidGains(best.kp, wheel_initial.ki, 0.0)
-    stage2_delta = PidGains(max(2.0, args.delta_kp * 0.5), args.delta_ki, 0.0)
-    best, best_score, stage2_bundle = optimize_stage(
-        "{0}-isolated-ki".format(wheel_name),
-        stage2_initial,
-        stage2_delta,
-        args.iterations,
-    )
-
-    stage2_result = stage2_bundle["a_result"]
-    if stage2_result.persistent_overshoot and args.delta_kd > 0.0:
-        stage3_initial = PidGains(best.kp, best.ki, wheel_initial.kd)
-        stage3_delta = PidGains(
-            max(1.0, args.delta_kp * 0.25),
-            max(1.0, args.delta_ki * 0.5),
-            args.delta_kd,
-        )
-        best, best_score, _ = optimize_stage(
-            "{0}-isolated-kd".format(wheel_name),
-            stage3_initial,
-            stage3_delta,
-            args.iterations,
-        )
-
-    return best, best_score
-
-
-def _optimize_dual_pair(client, args, trial, score_config, base_pair, candidate_limit_tracker=None):
-    verify_trial = build_autotune_verify_trial(args.autotune_verify_sequence)
-    stage_name = "dual-refine"
-
-    def collect_candidate(candidate_pair):
-        run_index = 0
-        sample_runs = []
-        verify_runs = []
-
-        while run_index < args.repeat_each:
-            sample_runs.append(
-                run_autotune_trial(
-                    client,
-                    candidate_pair,
-                    trial,
-                    args.rest_seconds,
-                    tail_zero_ms=args.autotune_tail_zero_ms,
-                )
-            )
-            verify_runs.append(
-                run_autotune_trial(
-                    client,
-                    candidate_pair,
-                    verify_trial,
-                    args.rest_seconds,
-                    tail_zero_ms=args.autotune_tail_zero_ms,
-                )
-            )
-            run_index += 1
-
-        a_result = evaluate_repeated_dual_candidate(
-            sample_runs,
-            trial,
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-            overshoot_gate=score_config.overshoot_gate,
-            required_overshoot_runs=args.kd_overshoot_runs,
-        )
-        b_result = evaluate_repeated_dual_candidate(
-            verify_runs,
-            verify_trial,
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-            overshoot_gate=score_config.overshoot_gate,
-            required_overshoot_runs=args.kd_overshoot_runs,
-        )
-        a_display = _build_trial_display_summary(
-            sample_runs,
-            trial,
-            ["left", "right"],
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-        )
-        b_display = _build_trial_display_summary(
-            verify_runs,
-            verify_trial,
-            ["left", "right"],
-            score_config=score_config,
-            min_target_speed=args.score_min_target_speed,
-        )
-        combined_score = (a_result.median_score + b_result.median_score) * 0.5
-        return {
-            "reported_gains": candidate_pair,
-            "a_result": a_result,
-            "b_result": b_result,
-            "a_display": a_display,
-            "b_display": b_display,
-            "combined_score": combined_score,
-        }
-
-    header_state = {"printed": 0}
-    baseline_bundle = collect_candidate(base_pair)
-    baseline_reference = build_stage_baseline_reference(
-        baseline_bundle["a_result"].median_score,
-        baseline_bundle["b_result"].median_score,
-        baseline_bundle["combined_score"],
-        baseline_bundle["a_display"],
-        baseline_bundle["b_display"],
-    )
-
-    emit_candidate_summary(
-        stage_name,
-        base_pair,
-        baseline_bundle["a_result"].median_score,
-        baseline_bundle["b_result"].median_score,
-        baseline_bundle["combined_score"],
-        "基线",
-        header_state,
-    )
-    append_candidate_history(
-        stage_name,
-        base_pair,
-        baseline_bundle["a_result"].median_score,
-        baseline_bundle["b_result"].median_score,
-        baseline_bundle["combined_score"],
-        "基线",
-        baseline_bundle["a_display"],
-        baseline_bundle["b_display"],
-    )
-    if candidate_limit_tracker is not None:
-        candidate_limit_tracker.observe(
-            stage_name,
-            baseline_bundle["reported_gains"],
-            baseline_bundle["combined_score"],
-        )
-
-    def evaluator(candidate_pair):
-        if candidate_pair == base_pair:
-            return baseline_bundle["a_result"].median_score
-
-        candidate_bundle = collect_candidate(candidate_pair)
-        decision = decide_candidate_status(
-            candidate_bundle["a_result"].median_score,
-            candidate_bundle["b_result"].median_score,
-            candidate_bundle["combined_score"],
-            candidate_bundle["a_display"],
-            candidate_bundle["b_display"],
-            baseline_reference=baseline_reference,
-        )
-        emit_candidate_summary(
-            stage_name,
-            candidate_pair,
-            candidate_bundle["a_result"].median_score,
-            candidate_bundle["b_result"].median_score,
-            candidate_bundle["combined_score"],
-            decision,
-            header_state,
-        )
-        append_candidate_history(
-            stage_name,
-            candidate_pair,
-            candidate_bundle["a_result"].median_score,
-            candidate_bundle["b_result"].median_score,
-            candidate_bundle["combined_score"],
-            decision,
-            candidate_bundle["a_display"],
-            candidate_bundle["b_display"],
-        )
-        if candidate_limit_tracker is not None:
-            candidate_limit_tracker.observe(
-                stage_name,
-                candidate_bundle["reported_gains"],
-                candidate_bundle["combined_score"],
-            )
-        return candidate_bundle["a_result"].median_score
-
-    dual_step = max(DEFAULT_DUAL_REFINE_STEP, args.search_tolerance * 2.0)
-    delta_pair = WheelPidGains(
-        PidGains(dual_step, dual_step, base_pair.left.kd),
-        PidGains(dual_step, dual_step, base_pair.right.kd),
-    )
-
-    return twiddle_optimize_dual_pair(
-        base_pair,
-        delta_pair,
-        evaluator,
-        iterations=max(4, args.iterations // 2),
-        tolerance=args.search_tolerance,
-    )
-
-
-def run_autotune(client, args):
-    resolved = resolve_air_dual_profile_defaults(args)
-    score_config = build_score_config(args)
-    trial = build_autotune_trial(resolved["autotune_sequence"])
-    verify_trial = None
-    initial_pair = resolved["initial_pair"]
-    batch_round = 1
-    baseline_pair = initial_pair
-    batch_history = []
-    stage_plans = build_air_dual_stage_plans()
-    batch_state = {"plan_index": 0, "centered_runs": 0}
-    persisted_best_score = _extract_air_dual_best_score(
-        resolved.get("profile", {}).get("air_dual", {})
-    )
-
-    _print_air_dual_profile_targets(resolved)
-
-    while True:
-        current_plan = stage_plans[batch_state["plan_index"]]
-        batch_result = run_air_dual_batch(
-            client,
-            args,
-            trial,
-            verify_trial,
-            score_config,
-            baseline_pair,
-            batch_round,
-            current_plan,
-        )
-        batch_left_score = float(batch_result.get("left_score", batch_result.get("a_score", float("inf"))))
-        batch_right_score = float(batch_result.get("right_score", batch_result.get("b_score", float("inf"))))
-        batch_score = float(batch_result.get("score", batch_result.get("combined_score", float("inf"))))
-        batch_summary = {
-            "batch_round": int(batch_result["batch_round"]),
-            "stage_stopped": batch_result["stage_stopped"],
-            "preset_name": batch_result["preset_name"],
-            "field_name": batch_result["field_name"],
-            "step": float(batch_result["step"]),
-            "repeat_each": int(batch_result["repeat_each"]),
-            "best_label": batch_result.get("best_label", ""),
-            "best_step_multiplier": int(batch_result.get("best_step_multiplier", 0)),
-            "best_is_edge": int(batch_result.get("best_is_edge", 0)),
-            "best_pid": wheel_pid_gains_to_dict(batch_result["best_pair"]),
-            "left_score": batch_left_score,
-            "right_score": batch_right_score,
-            "score": batch_score,
-            "combined_score": batch_score,
-            "decision": "batch-best",
-        }
-        batch_history.append(batch_summary)
-        batch_history = _trim_batch_history(batch_history)
-
-        if persisted_best_score is None or batch_score < persisted_best_score:
-            _update_air_dual_profile(
-                resolved,
-                baseline_pair,
-                batch_result["best_pair"],
-                batch_left_score,
-                batch_right_score,
-                score=batch_score,
-                combined_score=batch_score,
-                last_batch_best=batch_summary,
-                batch_round=batch_result["batch_round"],
-                batch_history=batch_history,
-            )
-            persisted_best_score = batch_score
-        else:
-            print(
-                "  skip profile write: batch score {0:.4f} is not better than recorded best {1:.4f}".format(
-                    batch_score,
-                    persisted_best_score,
-                )
-            )
-
-        print("batch {0} best".format(batch_result["batch_round"]))
-        print(
-            "  preset={0} field={1} step={2:.4f} repeat_each={3} best={4}".format(
-                batch_result["preset_name"],
-                batch_result["field_name"],
-                batch_result["step"],
-                batch_result["repeat_each"],
-                batch_result.get("best_label", ""),
-            )
-        )
-        print(
-            "  left kp={0:.4f} ki={1:.4f} kd={2:.4f}".format(
-                batch_result["best_pair"].left.kp,
-                batch_result["best_pair"].left.ki,
-                batch_result["best_pair"].left.kd,
-            )
-        )
-        print(
-            "  right kp={0:.4f} ki={1:.4f} kd={2:.4f}".format(
-                batch_result["best_pair"].right.kp,
-                batch_result["best_pair"].right.ki,
-                batch_result["best_pair"].right.kd,
-            )
-        )
-        print(
-            "  left score={0:.4f} right score={1:.4f} total={2:.4f}".format(
-                batch_left_score,
-                batch_right_score,
-                batch_score,
-            )
-        )
-
-        next_state = _advance_batch_stage_state(stage_plans, batch_state, batch_result)
-        print(
-            "  next baseline left={0:.4f}/{1:.4f}/{2:.4f} right={3:.4f}/{4:.4f}/{5:.4f}".format(
-                batch_result["best_pair"].left.kp,
-                batch_result["best_pair"].left.ki,
-                batch_result["best_pair"].left.kd,
-                batch_result["best_pair"].right.kp,
-                batch_result["best_pair"].right.ki,
-                batch_result["best_pair"].right.kd,
-            )
-        )
-        print("  next batch plan={0}".format(_describe_next_batch(stage_plans, next_state)))
-
-        if not getattr(args, "interactive_batches", 1):
-            apply_speed_gains(client, batch_result["best_pair"])
-            send_air_dual_stop_sequence(client)
-            print("interactive batches disabled; stopping after current batch")
-            return 0
-
-        action = prompt_air_dual_batch_action(batch_result)
-        if action == "continue":
-            baseline_pair = batch_result["best_pair"]
-            batch_state = next_state
-            batch_round += 1
-            continue
-
-        final_scores = finalize_air_dual_best(
-            client,
-            args,
-            trial,
-            verify_trial,
-            score_config,
-            batch_result["best_pair"],
-        )
-        if persisted_best_score is None or final_scores["score"] < persisted_best_score:
-            _update_air_dual_profile(
-                resolved,
-                baseline_pair,
-                batch_result["best_pair"],
-                final_scores["left_score"],
-                final_scores["right_score"],
-                score=final_scores["score"],
-                combined_score=final_scores["combined_score"],
-                last_batch_best=batch_summary,
-                batch_round=batch_result["batch_round"],
-                batch_history=batch_history,
-            )
-            persisted_best_score = final_scores["score"]
-        else:
-            print(
-                "  skip final profile write: verified score {0:.4f} is not better than recorded best {1:.4f}".format(
-                    final_scores["score"],
-                    persisted_best_score,
-                )
-            )
-
-        print(
-            "best left kp={0:.4f} ki={1:.4f} kd={2:.4f} score={3:.4f}".format(
-                batch_result["best_pair"].left.kp,
-                batch_result["best_pair"].left.ki,
-                batch_result["best_pair"].left.kd,
-                final_scores["left_score"],
-            )
-        )
-        print(
-            "best right kp={0:.4f} ki={1:.4f} kd={2:.4f} score={3:.4f}".format(
-                batch_result["best_pair"].right.kp,
-                batch_result["best_pair"].right.ki,
-                batch_result["best_pair"].right.kd,
-                final_scores["right_score"],
-            )
-        )
-        print("best total score={0:.4f}".format(final_scores["score"]))
-        return 0
-
-
-def run_air_dual_autotune(client, args):
-    return run_autotune(client, args)

@@ -1,2 +1,8 @@
 **/project/mdk/out_file
 .worktrees/
+**/__pycache__/
+**/*.pyc
+project/speed_loop_autotune/logs/agent_candidates/
+project/speed_loop_autotune/logs/agent_rounds/
+project/speed_loop_autotune/logs/agent_waveforms/
+project/speed_loop_autotune/logs/agent_decision_trace.jsonl

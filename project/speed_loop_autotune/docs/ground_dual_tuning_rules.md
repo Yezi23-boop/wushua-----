@@ -6,12 +6,16 @@ This file covers the current `ground_dual` batch workflow and the final save gat
 
 - Validate the dual-wheel controller under load, supply sag, and stop conditions.
 - Prefer repeatable batch quality over a single best round.
+- Keep the focus on whole-trial repeatability instead of a single low score.
 
 ## Batch Flow
 
 - `ground_dual` runs as 10-round batches.
 - The current profile should be read before the batch starts.
 - The batch should start from the best candidate already stored in the profile.
+- The batch boundary actions are limited to `continue_ground`, `save`, and `stop_without_save`.
+- `save` is only valid after a completed `ground_dual` batch.
+- The batch should start from the current best candidate already stored in the profile.
 - The batch boundary actions are limited to `continue_ground`, `save`, and `stop_without_save`.
 - `save` is only valid after a completed `ground_dual` batch.
 
@@ -40,3 +44,9 @@ This file covers the current `ground_dual` batch workflow and the final save gat
 - `continue_ground` keeps tuning within the ground stage.
 - `save` closes the ground stage with persistence.
 - `stop_without_save` exits without changing the saved profile.
+
+## Usage Boundary
+
+- `ground_dual` only performs loaded recovery and conservative screening.
+- Do not do open-loop PWM identification in this mode.
+- If `air_dual` is better in isolation but `ground_dual` is clearly worse, prefer the conservative fallback.
