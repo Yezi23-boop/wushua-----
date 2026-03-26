@@ -166,6 +166,106 @@ class AgentSessionRoundTests(unittest.TestCase):
         self.assertIn('"delta": 5.0', content)
 
 
+class AgentBatchFinalizeTests(unittest.TestCase):
+    def test_finish_batch_summary_writes_last_batch_summary_and_pending_action(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        start_pid = {
+            "left": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+            "right": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+        }
+        batch_best = {
+            "left": {"kp": 1.5, "ki": 2.2, "kd": 0.0},
+            "right": {"kp": 1.5, "ki": 2.2, "kd": 0.0},
+        }
+
+        updated = agent_session.start_batch(profile, "air_dual", "air_0002", start_pid)
+        updated = agent_session.finish_batch_summary(
+            updated,
+            "air_dual",
+            {
+                "batch_id": "air_0002",
+                "combined_score": 9.5,
+                "a_score": 9.5,
+                "b_score": 9.5,
+                "best_pid": batch_best,
+                "band_scores": {"low": 1.0, "mid": 2.0, "high": 3.0, "top": 4.0},
+            },
+            "continue_air",
+            ["continue_air", "enter_ground", "stop_air"],
+            "recent rounds still improved",
+        )
+
+        self.assertEqual(updated["air_dual"]["batch_round"], 1)
+        self.assertEqual(updated["air_dual"]["last_batch_summary"]["combined_score"], 9.5)
+        self.assertEqual(updated["air_dual"]["last_batch_best"]["best_pid"], batch_best)
+        self.assertEqual(updated["air_dual"]["best_pid"], batch_best)
+        self.assertEqual(updated["agent_tuning"]["workflow_status"], "waiting_user")
+        self.assertEqual(updated["agent_tuning"]["pending_user_action"]["recommended_action"], "continue_air")
+
+    def test_finish_batch_summary_rejects_illegal_action_words(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+
+        with self.assertRaises(ValueError):
+            agent_session.finish_batch_summary(
+                profile,
+                "air_dual",
+                {"batch_id": "air_0002", "best_pid": None, "combined_score": 9.5},
+                "save",
+                ["save"],
+                "illegal action for air",
+            )
+
+    def test_finish_batch_summary_keeps_existing_air_best_when_new_batch_is_worse(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        existing_best = {
+            "left": {"kp": 1.1, "ki": 2.1, "kd": 0.0},
+            "right": {"kp": 1.1, "ki": 2.1, "kd": 0.0},
+        }
+        worse_best = {
+            "left": {"kp": 1.8, "ki": 2.8, "kd": 0.0},
+            "right": {"kp": 1.8, "ki": 2.8, "kd": 0.0},
+        }
+        profile["air_dual"]["best_pid"] = existing_best
+        profile["air_dual"]["last_summary"] = {"combined_score": 5.0}
+
+        updated = agent_session.finish_batch_summary(
+            profile,
+            "air_dual",
+            {
+                "batch_id": "air_0003",
+                "combined_score": 9.5,
+                "best_pid": worse_best,
+            },
+            "stop_air",
+            ["continue_air", "enter_ground", "stop_air"],
+            "worse batch",
+        )
+
+        self.assertEqual(updated["air_dual"]["best_pid"], existing_best)
+
+    def test_finalize_stage_best_requires_explicit_save_action(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        ground_best = {
+            "left": {"kp": 11.0, "ki": 3.0, "kd": 0.0},
+            "right": {"kp": 12.0, "ki": 3.5, "kd": 0.0},
+        }
+        summary = {
+            "batch_id": "ground_0001",
+            "combined_score": 5.5,
+            "band_scores": {"low": 1.0, "mid": 2.0, "high": 3.0, "top": 4.0},
+            "trial_name": "ground_forward",
+            "segments_ms": [[15.0, 200], [25.0, 200]],
+        }
+
+        unchanged = agent_session.finalize_stage_best(profile, "ground_dual", ground_best, summary, "continue_ground")
+        self.assertIsNone(unchanged["ground_dual"]["best_pid"])
+
+        saved = agent_session.finalize_stage_best(profile, "ground_dual", ground_best, summary, "save")
+        self.assertEqual(saved["ground_dual"]["best_pid"], ground_best)
+        self.assertEqual(saved["ground_dual"]["last_summary"]["combined_score"], 5.5)
+        self.assertEqual(saved["agent_tuning"]["workflow_status"], "completed")
+
+
 class StepWorkerTests(unittest.TestCase):
     def _make_step_samples(self):
         return [

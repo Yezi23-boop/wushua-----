@@ -47,6 +47,13 @@ def _default_stage_block():
     }
 
 
+def _allowed_actions_for_stage(stage_name):
+    _validate_stage_name(stage_name)
+    if stage_name == "air_dual":
+        return ("continue_air", "enter_ground", "stop_air")
+    return ("continue_ground", "save", "stop_without_save")
+
+
 def _validate_stage_name(stage_name):
     if stage_name not in ("air_dual", "ground_dual"):
         raise ValueError("Unsupported stage_name: {0}".format(stage_name))
@@ -110,6 +117,49 @@ def _extract_candidate_pid(result_payload):
         return copied
 
     return _copy_pid_pair(result_payload.get("gains"))
+
+
+def _copy_summary(summary):
+    if not isinstance(summary, dict):
+        return {}
+    return json.loads(json.dumps(summary, ensure_ascii=False))
+
+
+def _extract_batch_best(summary):
+    best_pid = _copy_pid_pair(summary.get("best_pid"))
+    payload = {
+        "best_pid": best_pid,
+        "combined_score": _coerce_score(summary.get("combined_score")),
+    }
+    if "a_score" in summary:
+        payload["a_score"] = _coerce_score(summary.get("a_score"))
+    if "b_score" in summary:
+        payload["b_score"] = _coerce_score(summary.get("b_score"))
+    if "band_scores" in summary:
+        payload["band_scores"] = common.normalize_band_scores(summary.get("band_scores"))
+    return payload
+
+
+def _extract_summary_score(summary):
+    if not isinstance(summary, dict):
+        return None
+    return _coerce_score(summary.get("combined_score", summary.get("score")))
+
+
+def _validate_allowed_actions(stage_name, recommended_action, allowed_actions):
+    valid_actions = _allowed_actions_for_stage(stage_name)
+    normalized_allowed = list(allowed_actions)
+
+    if not normalized_allowed:
+        raise ValueError("allowed_actions must not be empty")
+    if recommended_action not in normalized_allowed:
+        raise ValueError("recommended_action must be included in allowed_actions")
+
+    for action in normalized_allowed:
+        if action not in valid_actions:
+            raise ValueError("Unsupported action for {0}: {1}".format(stage_name, action))
+
+    return normalized_allowed
 
 
 def ensure_agent_profile_defaults(profile):
@@ -187,6 +237,7 @@ def start_batch(profile, stage_name, batch_id, start_pid):
 def set_pending_user_action(profile, stage_name, batch_id, recommended_action, allowed_actions, reason):
     profile = ensure_agent_profile_defaults(profile)
     stage_name = _validate_stage_name(stage_name)
+    allowed_actions = _validate_allowed_actions(stage_name, recommended_action, allowed_actions)
     agent_tuning = profile["agent_tuning"]
     agent_tuning["workflow_stage"] = stage_name
     agent_tuning["workflow_status"] = "waiting_user"
@@ -195,7 +246,7 @@ def set_pending_user_action(profile, stage_name, batch_id, recommended_action, a
         "stage": stage_name,
         "batch_id": batch_id,
         "recommended_action": recommended_action,
-        "allowed_actions": list(allowed_actions),
+        "allowed_actions": allowed_actions,
         "reason": reason,
     }
     return profile
@@ -291,3 +342,61 @@ def resume_session_state(profile):
         "last_result_path": agent_tuning.get("last_result_path", ""),
         "last_decision_trace_path": agent_tuning.get("last_decision_trace_path", ""),
     }
+
+
+def finish_batch_summary(profile, stage_name, batch_summary, recommended_action, allowed_actions, reason):
+    profile = ensure_agent_profile_defaults(profile)
+    stage_name = _validate_stage_name(stage_name)
+    stage_block = _ensure_stage_block(profile, stage_name)
+    summary = _copy_summary(batch_summary)
+    best_payload = _extract_batch_best(summary)
+    active_batch = stage_block.get("active_batch")
+    batch_id = summary.get("batch_id", "")
+    previous_best_score = _extract_summary_score(stage_block.get("last_summary"))
+
+    if isinstance(active_batch, dict):
+        if not batch_id:
+            batch_id = active_batch.get("batch_id", "")
+        if stage_block.get("baseline_pid") is None and active_batch.get("start_pid") is not None:
+            stage_block["baseline_pid"] = _copy_pid_pair(active_batch.get("start_pid"))
+        stage_block["active_batch"] = active_batch
+    stage_block["last_batch_summary"] = summary
+    stage_block["last_summary"] = summary
+    stage_block["last_batch_best"] = best_payload
+    stage_block["batch_round"] = int(stage_block.get("batch_round", 0) or 0) + 1
+
+    if stage_name == "air_dual" and best_payload.get("best_pid") is not None:
+        if previous_best_score is None or (
+            best_payload.get("combined_score") is not None and best_payload.get("combined_score") <= previous_best_score
+        ):
+            stage_block["best_pid"] = _copy_pid_pair(best_payload.get("best_pid"))
+
+    profile = set_pending_user_action(profile, stage_name, batch_id, recommended_action, allowed_actions, reason)
+    return profile
+
+
+def finalize_stage_best(profile, stage_name, best_pid, summary, explicit_action):
+    profile = ensure_agent_profile_defaults(profile)
+    stage_name = _validate_stage_name(stage_name)
+    stage_block = _ensure_stage_block(profile, stage_name)
+    copied_summary = _copy_summary(summary)
+    copied_best_pid = _copy_pid_pair(best_pid)
+    agent_tuning = profile["agent_tuning"]
+
+    stage_block["last_summary"] = copied_summary
+    if stage_block.get("baseline_pid") is None:
+        stage_block["baseline_pid"] = copied_best_pid
+
+    if stage_name == "ground_dual":
+        if explicit_action == "save" and copied_best_pid is not None:
+            stage_block["best_pid"] = copied_best_pid
+            agent_tuning["workflow_status"] = "completed"
+            agent_tuning["pending_user_action"] = None
+        return profile
+
+    if copied_best_pid is not None:
+        stage_block["best_pid"] = copied_best_pid
+    if explicit_action in ("enter_ground", "stop_air"):
+        agent_tuning["workflow_status"] = "completed"
+        agent_tuning["pending_user_action"] = None
+    return profile
