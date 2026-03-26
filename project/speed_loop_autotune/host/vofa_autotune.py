@@ -35,7 +35,16 @@ def build_argument_parser():
     parser.add_argument("--timeout", type=float, default=0.2, help="Read timeout in seconds.")
     parser.add_argument(
         "--mode",
-        choices=[MODE_AIR_DUAL, MODE_GROUND_DUAL, MODE_PWM_IDENTIFY, MODE_PWM_MAP, "autotune", "ground-load"],
+        choices=[
+            MODE_AIR_DUAL,
+            MODE_GROUND_DUAL,
+            MODE_AIR_DUAL_STEP,
+            MODE_GROUND_DUAL_STEP,
+            MODE_PWM_IDENTIFY,
+            MODE_PWM_MAP,
+            "autotune",
+            "ground-load",
+        ],
         default=MODE_AIR_DUAL,
         help="Tuning mode. Prefer 'air-dual', 'ground-dual', 'pwm-identify', or 'pwm-map'; old labels stay available for compatibility.",
     )
@@ -133,6 +142,37 @@ def build_argument_parser():
         "--profile-path",
         default=str(DEFAULT_TUNING_PROFILE_PATH),
         help="Shared tuning profile path used across pwm-map, pwm-identify, air-dual, and ground-dual.",
+    )
+    parser.add_argument(
+        "--candidate-json",
+        default="",
+        help="Optional JSON file containing the candidate PID pair for a single step worker run.",
+    )
+    parser.add_argument(
+        "--baseline-json",
+        default="",
+        help="Optional JSON file containing the baseline PID pair for a single step worker run.",
+    )
+    parser.add_argument(
+        "--result-json",
+        default="",
+        help="Optional JSON output path for single step worker results.",
+    )
+    parser.add_argument(
+        "--waveform-path",
+        default="",
+        help="Optional JSONL output path for the step worker waveform snapshot.",
+    )
+    parser.add_argument(
+        "--batch-id",
+        default="",
+        help="Optional batch identifier attached to single step worker outputs.",
+    )
+    parser.add_argument(
+        "--round-index",
+        type=int,
+        default=1,
+        help="1-based round index attached to single step worker outputs.",
     )
     parser.add_argument(
         "--autotune-tail-zero-ms",
@@ -258,6 +298,8 @@ def validate_args(args):
         raise RuntimeError("pwm-map requires --map-hold-ms >= 20")
     if args.mode == MODE_AIR_DUAL and args.candidate_limit < 0:
         raise RuntimeError("air-dual requires --candidate-limit >= 0")
+    if args.mode in (MODE_AIR_DUAL_STEP, MODE_GROUND_DUAL_STEP) and args.round_index < 1:
+        raise RuntimeError("step workers require --round-index >= 1")
 
 
 def main(argv=None):
@@ -295,6 +337,10 @@ def main(argv=None):
             return run_pwm_identify(client, args)
         if args.mode == MODE_PWM_MAP:
             return run_pwm_map(client, args)
+        if args.mode == MODE_AIR_DUAL_STEP:
+            return run_air_dual_step(client, args)
+        if args.mode == MODE_GROUND_DUAL_STEP:
+            return run_ground_dual_step(client, args)
         if args.mode == MODE_GROUND_DUAL:
             return run_ground_dual_autotune(client, args)
         return run_air_dual_autotune(client, args)

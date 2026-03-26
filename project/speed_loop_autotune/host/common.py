@@ -179,6 +179,7 @@ def _order_tuning_profile(profile):
     preferred_keys = (
         "shared_targets",
         "meta",
+        "agent_tuning",
         "pwm_map",
         "pwm_identify",
         "air_dual",
@@ -219,6 +220,40 @@ def save_tuning_profile(profile, profile_path_text=None):
     temp_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(str(temp_path), str(profile_path))
     return profile_path
+
+
+def load_json_dict(path_text):
+    path = pathlib.Path(path_text)
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise RuntimeError("Unable to read JSON file: {0}".format(path)) from exc
+    except ValueError as exc:
+        raise RuntimeError("Invalid JSON file: {0}".format(path)) from exc
+
+    if not isinstance(payload, dict):
+        raise RuntimeError("Expected JSON object in: {0}".format(path))
+
+    return payload
+
+
+def load_wheel_pid_gains_json(path_text, default_gains=None):
+    if not path_text:
+        return default_gains
+
+    payload = load_json_dict(path_text)
+    gains = wheel_pid_gains_from_dict(payload, default_gains)
+    if gains is None:
+        raise RuntimeError("Invalid PID pair JSON: {0}".format(path_text))
+    return gains
+
+
+def write_json_file(path_text, payload):
+    path = pathlib.Path(path_text)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
 
 
 def pid_gains_to_dict(gains):
@@ -633,6 +668,10 @@ def build_score_config(args):
 
 
 def normalize_mode_name(mode_name):
+    if mode_name == MODE_AIR_DUAL_STEP:
+        return MODE_AIR_DUAL_STEP
+    if mode_name == MODE_GROUND_DUAL_STEP:
+        return MODE_GROUND_DUAL_STEP
     if mode_name in (MODE_AIR_DUAL, "autotune"):
         return MODE_AIR_DUAL
     if mode_name in (MODE_GROUND_DUAL, "ground-load"):
