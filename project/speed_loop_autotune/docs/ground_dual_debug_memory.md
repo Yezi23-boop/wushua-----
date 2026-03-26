@@ -1,5 +1,10 @@
 # Ground Dual Speed Loop Debug Memory
 
+Historical note:
+- This file keeps prior `ground_dual` stage findings only.
+- The old `ground-dual` user entrypoint is removed.
+- Current tuning must enter the load stage through the Agent workflow in `docs/agent_autotune.md`.
+
 这份文档用于沉淀带负载双轮 `ground-dual` 下已经验证过的经验。
 它和 `debug_memory.md` 分开维护，避免把架空双轮结果误当成带负载双轮结论。
 
@@ -18,7 +23,7 @@
 - 避免后续把 `air-dual` 经验误写到带负载双轮链路里
 
 已验证事实：
-- 当前代码里，带负载双轮入口是 `ground-dual`
+- 当前工作流里，带负载双轮只通过 Agent 编排进入 `ground_dual` stage
 - 带负载双轮默认使用 `AT_ARM + AT_FIRE + AT_SPEED` 链路
 - 当前默认试验序列是 `25:200,35:200,45:200,35:200,25:200`
 - 当前评分会额外看 `stop_flag`、`trial_active`、冷却段残余速度和残余 PWM

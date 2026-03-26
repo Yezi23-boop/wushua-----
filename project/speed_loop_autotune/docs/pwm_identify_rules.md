@@ -1,5 +1,9 @@
 # PWM Identify Rules
 
+Current workflow note:
+- `pwm-identify` is still part of the supported path.
+- Once seed PI is produced, the next closed-loop stage must continue through the Agent workflow in `docs/agent_autotune.md`.
+
 这份文档只记录 `pwm-identify` 的开环 PWM 辨识规则。
 
 ## 当前默认前提
@@ -64,4 +68,4 @@
 
 - 辨识完成后只打印左右轮种子 PID
 - 只有打开 `--apply-identify-seed` 时，才下发到 RAM
-- 真正的闭环精调仍回到 `air-dual`
+- 真正的闭环精调改为回到 Agent 工作流里的 `air_dual` batch stage

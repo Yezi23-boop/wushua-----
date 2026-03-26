@@ -66,8 +66,6 @@ DEFAULT_MIN_SCORE_TARGET_SPEED = 10.0
 DEFAULT_MULTI_SPEED_WORST_WEIGHT = 0.7
 DEFAULT_KD_OVERSHOOT_RUNS = 3
 DEFAULT_AUTOTUNE_SEARCH_TOLERANCE = 1.0
-MODE_AIR_DUAL = "air-dual"
-MODE_GROUND_DUAL = "ground-dual"
 MODE_PWM_IDENTIFY = "pwm-identify"
 MODE_PWM_MAP = "pwm-map"
 MODE_AIR_DUAL_STEP = "air-dual-step"
@@ -672,10 +670,6 @@ def normalize_mode_name(mode_name):
         return MODE_AIR_DUAL_STEP
     if mode_name == MODE_GROUND_DUAL_STEP:
         return MODE_GROUND_DUAL_STEP
-    if mode_name in (MODE_AIR_DUAL, "autotune"):
-        return MODE_AIR_DUAL
-    if mode_name in (MODE_GROUND_DUAL, "ground-load"):
-        return MODE_GROUND_DUAL
     if mode_name == MODE_PWM_IDENTIFY:
         return MODE_PWM_IDENTIFY
     if mode_name == MODE_PWM_MAP:

@@ -1,5 +1,10 @@
 # Air Dual Speed Loop Autotune Debug Memory
 
+Historical note:
+- This file records prior `air_dual` stage observations only.
+- The old `air-dual` and `ground-dual` user entrypoints are removed.
+- Current tuning must start from `docs/agent_autotune.md` and run through the Agent workflow.
+
 ## 2026-03-24 confirmed PWM range memory
 
 Goal:
@@ -12,14 +17,14 @@ Verified facts:
 - a full `pwm-map` run then completed to `10000`
 
 Default rule update:
-- treat wheel PWM as `0~10000` in `air-dual`, `ground-dual`, `pwm-identify`, and `pwm-map`
+- treat wheel PWM as `0~10000` in the `air_dual` stage, the `ground_dual` stage, `pwm-identify`, and `pwm-map`
 - treat `AT_FUYA` as `0~4000`
 - do not reintroduce the old `4000` wheel limit unless a future board image proves otherwise
 - standard tuning order is now:
   - `pwm-map`
   - `pwm-identify`
-  - `air-dual`
-  - `ground-dual`
+- `air_dual` stage batches
+- `ground_dual` stage batches
 - `pwm-identify` should consume the deadzone already measured by `pwm-map`, not re-test deadzone on its own
 - the shared runtime handoff file is:
   - `project/speed_loop_autotune/logs/current_tuning_profile.json`

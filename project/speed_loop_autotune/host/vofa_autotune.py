@@ -15,9 +15,11 @@ from project.speed_loop_autotune.host import pwm_map as _pwm_map
 from project.speed_loop_autotune.host import pwm_identify as _pwm_identify
 
 
-def _reexport_module(module):
+def _reexport_module(module, excluded_names=None):
+    if excluded_names is None:
+        excluded_names = ()
     for name in dir(module):
-        if not name.startswith("__"):
+        if not name.startswith("__") and name not in excluded_names:
             globals()[name] = getattr(module, name)
 
 
@@ -36,17 +38,13 @@ def build_argument_parser():
     parser.add_argument(
         "--mode",
         choices=[
-            MODE_AIR_DUAL,
-            MODE_GROUND_DUAL,
             MODE_AIR_DUAL_STEP,
             MODE_GROUND_DUAL_STEP,
             MODE_PWM_IDENTIFY,
             MODE_PWM_MAP,
-            "autotune",
-            "ground-load",
         ],
-        default=MODE_AIR_DUAL,
-        help="Tuning mode. Prefer 'air-dual', 'ground-dual', 'pwm-identify', or 'pwm-map'; old labels stay available for compatibility.",
+        default=MODE_PWM_MAP,
+        help="Worker mode. Use 'pwm-map', 'pwm-identify', 'air-dual-step', or 'ground-dual-step'.",
     )
     parser.add_argument(
         "--autotune-sequence",
@@ -56,18 +54,14 @@ def build_argument_parser():
     parser.add_argument(
         "--autotune-verify-sequence",
         default=DEFAULT_AUTOTUNE_VERIFY_SEQUENCE,
-        help="Compatibility-only secondary sequence. air-dual single-sequence tuning ignores this unless legacy code paths use it.",
+        help="Optional secondary verification sequence for air-dual-step worker runs.",
     )
     parser.add_argument("--target-speed", type=float, default=35.0, help="Step target for TEST_speed.")
     parser.add_argument("--rest-seconds", type=float, default=0.35, help="Idle time before each trial.")
     parser.add_argument("--measure-seconds", type=float, default=1.2, help="Capture time for each trial.")
-    parser.add_argument("--iterations", type=int, default=10, help="Maximum twiddle iterations.")
     parser.add_argument("--initial-kp", type=float, default=100.0, help="Initial Kp.")
     parser.add_argument("--initial-ki", type=float, default=20.0, help="Initial Ki.")
     parser.add_argument("--initial-kd", type=float, default=0.0, help="Initial Kd.")
-    parser.add_argument("--delta-kp", type=float, default=10.0, help="Legacy Kp search step. air-dual batch tuning now uses built-in coarse/fine/micro presets.")
-    parser.add_argument("--delta-ki", type=float, default=5.0, help="Legacy Ki search step. air-dual batch tuning now uses built-in coarse/fine/micro presets.")
-    parser.add_argument("--delta-kd", type=float, default=0.5, help="Legacy Kd search step kept for compatibility.")
     parser.add_argument(
         "--identify-pwm-step",
         type=int,
@@ -141,7 +135,7 @@ def build_argument_parser():
     parser.add_argument(
         "--profile-path",
         default=str(DEFAULT_TUNING_PROFILE_PATH),
-        help="Shared tuning profile path used across pwm-map, pwm-identify, air-dual, and ground-dual.",
+        help="Shared tuning profile path used across pwm-map, pwm-identify, and the step workers.",
     )
     parser.add_argument(
         "--candidate-json",
@@ -184,32 +178,7 @@ def build_argument_parser():
         "--repeat-each",
         type=int,
         default=DEFAULT_AUTOTUNE_REPEAT_COUNT,
-        help="Legacy repeat count option. air-dual batch tuning now uses built-in coarse/fine/micro repeat counts.",
-    )
-    parser.add_argument(
-        "--candidate-limit",
-        type=int,
-        default=10,
-        help="Maximum candidate PID groups to evaluate per air-dual batch. Defaults to 10.",
-    )
-    parser.set_defaults(interactive_batches=True)
-    parser.add_argument(
-        "--interactive-batches",
-        dest="interactive_batches",
-        action="store_true",
-        help="Prompt to continue or stop after each air-dual batch. Enabled by default.",
-    )
-    parser.add_argument(
-        "--no-interactive-batches",
-        dest="interactive_batches",
-        action="store_false",
-        help="Run a single air-dual batch and exit without finalizing best_pid.",
-    )
-    parser.add_argument(
-        "--search-tolerance",
-        type=float,
-        default=DEFAULT_AUTOTUNE_SEARCH_TOLERANCE,
-        help="Stop shrinking the search once the working step reaches this value.",
+        help="Repeat count for a single air-dual-step evaluation.",
     )
     parser.add_argument(
         "--kd-overshoot-runs",
@@ -217,8 +186,8 @@ def build_argument_parser():
         default=DEFAULT_KD_OVERSHOOT_RUNS,
         help="Required consecutive overshooting runs before trying Kd.",
     )
-    parser.add_argument("--fuya-pwm", type=int, default=2000, help="Fixed suction PWM for ground-load mode.")
-    parser.add_argument("--ground-cooldown-ms", type=int, default=450, help="Ground-load cooldown time.")
+    parser.add_argument("--fuya-pwm", type=int, default=2000, help="Fixed suction PWM for ground-dual-step.")
+    parser.add_argument("--ground-cooldown-ms", type=int, default=450, help="Ground-dual-step cooldown time.")
     parser.add_argument("--ground-precharge-ms", type=int, default=700, help="Delay after AT_ARM before AT_FIRE.")
     parser.add_argument("--ground-return-scale", type=float, default=0.6, help="Scale factor for the unscored reverse return run. Use 0 to disable.")
     parser.add_argument("--ground-return-max-speed", type=float, default=30.0, help="Absolute cap for the reverse return speed.")
@@ -296,8 +265,6 @@ def validate_args(args):
         raise RuntimeError("pwm-map requires --map-repeat >= 1")
     if args.mode == MODE_PWM_MAP and args.map_hold_ms < 20:
         raise RuntimeError("pwm-map requires --map-hold-ms >= 20")
-    if args.mode == MODE_AIR_DUAL and args.candidate_limit < 0:
-        raise RuntimeError("air-dual requires --candidate-limit >= 0")
     if args.mode in (MODE_AIR_DUAL_STEP, MODE_GROUND_DUAL_STEP) and args.round_index < 1:
         raise RuntimeError("step workers require --round-index >= 1")
 
@@ -341,9 +308,7 @@ def main(argv=None):
             return run_air_dual_step(client, args)
         if args.mode == MODE_GROUND_DUAL_STEP:
             return run_ground_dual_step(client, args)
-        if args.mode == MODE_GROUND_DUAL:
-            return run_ground_dual_autotune(client, args)
-        return run_air_dual_autotune(client, args)
+        raise RuntimeError("Unsupported mode for worker CLI: {0}. Use the skill/agent workflow.".format(args.mode))
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 2

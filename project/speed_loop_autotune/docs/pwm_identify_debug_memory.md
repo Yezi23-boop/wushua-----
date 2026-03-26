@@ -1,5 +1,10 @@
 # PWM Identify Debug Memory
 
+Current workflow note:
+- `pwm-identify` remains a supported worker stage.
+- It no longer hands control to any removed `air-dual` entrypoint.
+- Batch continuation now happens only through the Agent workflow in `docs/agent_autotune.md`.
+
 这份文档用于沉淀 `pwm-identify` 的开环辨识事实和结论。
 
 使用规则：
@@ -11,4 +16,4 @@
 
 - 2026-03-23：新增 `pwm-identify` 模式，默认按单轮开环 PWM 阶跃收集有效级别
 - 2026-03-23：Telemetry 追加 `mode_id,left_cmd_pwm,right_cmd_pwm`
-- 2026-03-23：种子 PI 只产出到 RAM，不自动串联 `air-dual`
+- 2026-03-23：种子 PI 只产出到 RAM，不自动串联任何已删除的 `air-dual` 入口
