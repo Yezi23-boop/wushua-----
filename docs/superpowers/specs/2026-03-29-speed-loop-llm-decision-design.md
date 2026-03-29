@@ -118,6 +118,7 @@ worker 只负责单轮试验执行：
 7. agent 返回原始文本输出
 8. skill 调用 orchestrator `submit_agent_response()`
 9. orchestrator 解析、校验、重试并执行本轮，随后：
+   - 若当前轮需要重试，则返回同一轮的 `decision_request`
    - 若批次未结束，则返回下一个 `decision_request`
    - 若批次结束或触发熔断，则返回 `waiting_user`
 10. skill 只在 `waiting_user` 时向用户展示摘要和动作词
@@ -507,11 +508,13 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `batch_id`
 - `round_index`
 - `request_id`
+- `response_status`
 - `raw_agent_output`
 
 职责：
 
-- 解析 `raw_agent_output`，目标产物为 `llm_decision`
+- 当 `response_status = ok` 时，解析 `raw_agent_output`，目标产物为 `llm_decision`
+- 当 `response_status = timeout` 时，不解析文本，直接进入 timeout 重试分支
 - 做 schema 校验
 - 做数值边界校验
 - 处理 malformed JSON、字段缺失、非法枚举和超时重试预算
@@ -577,9 +580,17 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - required 集合：
   - `request_id`
   - `context`
+  - `retry_index`
 - 字段：
-  - `request_id`: string，非空，建议格式 `<batch_id>_r<round_index>`
+  - `request_id`: string，非空，必须匹配正则 `^[a-z]+_[0-9]{4}_r[0-9]{2}$`
+  - `retry_index`: integer，范围 `0..decision_retry_budget`
   - `context`: `decision_context`
+
+约束：
+
+- `request_id` 必须与外层 `batch_id`、`round_index` 一致
+- 对同一轮重试时，`request_id` 不变，`retry_index` 递增
+- orchestrator 必须拒绝来自旧 `request_id` 的重放响应
 
 `allowed_actions` 在 `waiting_user` 下必须按阶段固定枚举：
 
@@ -614,7 +625,11 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 
 1. 记录一次 `decision_error`
 2. 同一轮最多重试 `decision_retry_budget` 次，默认 `2`
-3. 若仍失败：
+3. 若仍有预算，则返回：
+   - `state = decision_required`
+   - 同一 `request_id`
+   - `retry_index = previous_retry_index + 1`
+4. 若预算耗尽：
    - 当前 batch 进入 `waiting_user`
    - `recommended_action = stop_air` 或 `stop_without_save`，按阶段决定
    - `allowed_actions` 只暴露安全动作
@@ -625,7 +640,11 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 
 1. 记录 `decision_timeout`
 2. 同一轮最多重试 `timeout_retry_budget` 次，默认 `1`
-3. 再失败则进入 `waiting_user`
+3. 若仍有预算，则返回：
+   - `state = decision_required`
+   - 同一 `request_id`
+   - `retry_index = previous_retry_index + 1`
+4. 再失败则进入 `waiting_user`
 
 ### 低信心高风险输出
 
@@ -640,8 +659,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 但必须在 `agent_decision_trace.jsonl` 当前轮记录里写 `high_risk_round = true`
 - 且下一轮 `decision_context.recovery_state.high_risk_round_seen = true`
 - 若本轮执行后同时满足：
-  - `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
-  - 或 `combined_score` 相比当前 batch 最优恶化大于同一阈值
+  - 若 `previous_combined` 非空，则 `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
+  - 或若 `current_batch_best_score` 非空，则 `combined_score` 相比当前 batch 最优恶化大于同一阈值
 则下一轮：
 
 - `decision_context.recovery_state.must_recover = true`
@@ -690,7 +709,14 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   - `b_score`
   - `left_score`
   - `right_score`
+  - `waveform_flags`
   - `result_path`
+- `waveform_flags` 来源固定为 worker 输出并写入 `round_result.json`
+- `waveform_flags` 结构固定为：
+  - `looks_noisy: boolean`
+  - `looks_underdamped: boolean`
+  - `looks_saturated: boolean`
+  - `looks_measurement_limited: boolean`
 
 ### 3. 批内恢复
 
@@ -698,8 +724,9 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 
 明显恶化定义为满足任一条件：
 
-- `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
-- `combined_score` 相比当前 batch 最优恶化大于同一阈值
+- 若 `previous_combined` 非空，则 `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
+- 若 `current_batch_best_score` 非空，则 `combined_score` 相比当前 batch 最优恶化大于同一阈值
+- 若两者都为空，则本轮不触发“明显恶化”，只保留硬边界和异常标记护栏
 
 - 当前轮标记 `recovery_recommended = true`
 - 下一轮 `recovery_state.must_recover = true`
@@ -762,6 +789,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - PID 非数字、负数、越界时报错
 - 数组元素 shape 错误时报错
 - `decision_request_payload` 的 `request_id/context` 缺失时报错
+- `request_id` regex 不匹配或与外层 `batch_id/round_index` 不一致时报错
 
 ### 2. 正常批次测试
 
@@ -778,6 +806,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `low confidence + high risk` 且结果显著恶化后，下一轮 `must_recover = true`
 - `high_risk_round = true` 正确写入当前轮 `decision_trace`
 - `submit_agent_response()` 能接收原始文本，并由 orchestrator 自行解析和重试
+- 同一轮重试时 `request_id` 不变、`retry_index` 正确递增
 
 ### 4. 熔断与恢复测试
 
@@ -786,6 +815,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `stop_clean_flag = false` 持续达到阈值后触发熔断
 - 熔断后不得继续自动跑下一轮
 - 普通轮次明显恶化但未熔断时，下一轮也必须进入 `must_recover = true`
+- 首轮或缺少参考基线时，不得误触发“明显恶化”分支
 
 ### 5. 落盘与幂等测试
 
