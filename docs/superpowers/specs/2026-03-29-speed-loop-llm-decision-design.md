@@ -235,6 +235,11 @@ worker 只负责单轮试验执行：
 - 必填：是
 - 长度：`0..5`
 - 元素类型：`recent_round`
+- 必须按 `round_index` 升序排列
+- `round_index` 必须唯一
+- 不允许跨 batch、跨 stage 混入
+- 当数组非空时，最后一项的 `round_index` 必须等于 `stage_context.round_index - 1`
+- 若存在多项，则 `round_index` 必须连续
 
 `recent_round` 字段：
 
@@ -381,6 +386,18 @@ worker 只负责单轮试验执行：
 - `high_risk_round_seen`: boolean，必填
 - `recovery_reason`: `string | null`，必填，枚举 `score_regression | high_risk_failure | manual_resume | null`
 
+状态规则：
+
+- `must_recover` 置位来源只有三种：
+  - 普通轮次明显恶化
+  - `low confidence + high risk` 且执行恶化
+  - 用户在保护停机后通过 `submit_user_action(continue_air|continue_ground)` 恢复运行
+- 当恢复后一轮成功提交，且未再次触发明显恶化、熔断或高风险失败时：
+  - `must_recover = false`
+  - `recovery_reason = null`
+- `high_risk_round_seen` 只在当前 batch 内保留；新 batch 启动时必须清零
+- `manual_resume` 只允许由 `submit_user_action(continue_air|continue_ground)` 写入
+
 ### `advisory_hints`
 
 - 类型：object
@@ -522,6 +539,12 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 若需要下一轮决策：`state = decision_required`
 - 若已到用户边界：`state = waiting_user`
 
+边界约束：
+
+- 在用户尚未通过 `submit_user_action(enter_ground)` 显式授权前：
+  - `requested_stage = ground_dual` 必须被拒绝，或降级为仅恢复当前阶段现状
+  - orchestrator 不得借 `requested_stage` 越过 `enter_ground` 用户边界
+
 ### 2. `submit_agent_response()`
 
 输入：
@@ -661,6 +684,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
    - 当前 batch 进入 `waiting_user`
    - `recommended_action = stop_air` 或 `stop_without_save`，按阶段决定
    - `allowed_actions` 只暴露安全动作
+   - 写一条 `failure_trace`，类型为 `decision_error_exhausted`
+   - 当前 `request_id` 不视为已成功消费
 
 ### 模型超时
 
@@ -674,6 +699,10 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
    - `retry_counters.timeouts_used = previous + 1`
    - `retry_counters.decision_errors_used` 保持不变
 4. 再失败则进入 `waiting_user`
+   - `recommended_action = stop_air` 或 `stop_without_save`，按阶段决定
+   - `allowed_actions` 只暴露安全动作
+   - 写一条 `failure_trace`，类型为 `decision_timeout_exhausted`
+   - 当前 `request_id` 不视为已成功消费
 
 ### 低信心高风险输出
 
@@ -756,6 +785,11 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   - `looks_measurement_limited: boolean`
 - `delta_vs_previous_combined`、`delta_vs_batch_best_combined`、`left_right_gap`、`score_trend`、`plateau_detected` 允许由 orchestrator 派生
 - 若这些派生字段无法依据已提交的历史轮次重建，则当前 `round_result` 也视为不完整
+- 执行侧熔断时必须：
+  - 写一条 `failure_trace`，类型为 `worker_circuit_break`
+  - `recommended_action = stop_air` 或 `stop_without_save`，按阶段决定
+  - `allowed_actions` 只暴露安全动作
+  - 当前 `request_id` 视为已消费，因为 worker 已经执行过该轮
 
 ### 3. 批内恢复
 
@@ -838,6 +872,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 若 `round_result.json` 的 `request_id` 高于 `last_committed_request_id`，视为未提交成功，忽略并重放该轮
 - 若 `decision_trace` 中某轮为 `pending` 且 `request_id` 高于 `last_committed_request_id`，视为未提交成功，忽略并重放该轮
 - 若三者冲突，以 `last_committed_request_id` 为准决定已提交边界
+- 若 `failure_trace` 表示 `worker_circuit_break`，则对应 `request_id` 视为已消费，恢复时不得再次执行该轮
+- 若 `failure_trace` 表示 `decision_error_exhausted` 或 `decision_timeout_exhausted`，则对应 `request_id` 视为未消费，恢复时可继续当前轮
 
 ## 测试策略
 
@@ -880,6 +916,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 熔断后不得继续自动跑下一轮
 - 普通轮次明显恶化但未熔断时，下一轮也必须进入 `must_recover = true`
 - 首轮或缺少参考基线时，不得误触发“明显恶化”分支
+- 执行侧熔断后恢复时，同一 `request_id` 不得被重复执行
 
 ### 5. 落盘与幂等测试
 
@@ -891,9 +928,12 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 同一 `request_id` 在成功消费后重复提交会被拒绝
 - `submit_agent_response()` 的一次性消费语义可验证
 - `last_committed_request_id` 与 `round_result/decision_trace` 冲突时，恢复逻辑按提交边界处理
+- `decision_error_exhausted` / `decision_timeout_exhausted` 场景下，同一 `request_id` 仍可继续当前轮
+- `must_recover` 与 `manual_resume` 在成功一轮后会正确清除并回到常态
 
 ### 6. 用户边界测试
 
+- 未显式 `enter_ground` 前，`requested_stage = ground_dual` 不得越权推进
 - 未显式 `enter_ground` 前不得进入 `ground_dual`
 - 未显式 `save` 前不得写最终保存状态
 - 用户拒绝继续时，不得自动越级到下一阶段
