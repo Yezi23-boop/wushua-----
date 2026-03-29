@@ -43,7 +43,7 @@ skill 只负责：
 - 启动一次调参会话
 - 调用 orchestrator 的公开接口
 - 把 orchestrator 返回的 `decision_request` 转交给 `speed_loop_tuning` agent
-- 把 agent 返回的结构化决策重新交给 orchestrator
+- 把 agent 返回的原始文本输出重新交给 orchestrator
 - 在批次边界向用户展示：
   - 当前阶段
   - 本批摘要
@@ -115,9 +115,9 @@ worker 只负责单轮试验执行：
 4. orchestrator 进入或恢复 `air_dual` / `ground_dual`
 5. orchestrator 返回一个 `decision_request`
 6. skill 把 `decision_request.context` 交给 `speed_loop_tuning` agent
-7. agent 返回结构化 `llm_decision`
-8. skill 调用 orchestrator `submit_llm_decision()`
-9. orchestrator 校验并执行本轮，随后：
+7. agent 返回原始文本输出
+8. skill 调用 orchestrator `submit_agent_response()`
+9. orchestrator 解析、校验、重试并执行本轮，随后：
    - 若批次未结束，则返回下一个 `decision_request`
    - 若批次结束或触发熔断，则返回 `waiting_user`
 10. skill 只在 `waiting_user` 时向用户展示摘要和动作词
@@ -189,6 +189,7 @@ worker 只负责单轮试验执行：
   "recent_rounds": [],
   "waveform_summary": {},
   "runtime_guardrails": {},
+  "recovery_state": {},
   "advisory_hints": {}
 }
 ```
@@ -346,6 +347,25 @@ worker 只负责单轮试验执行：
 
 - 这些阈值属于运行安全参数，不属于 LLM 搜索策略
 - 可由 profile 覆盖；缺失时使用 host 默认值
+- host 默认安全范围固定为：
+  - `kp_min = 0`
+  - `kp_max = 500`
+  - `ki_min = 0`
+  - `ki_max = 200`
+  - `kd_min = 0`
+  - `kd_max = 50`
+
+### `recovery_state`
+
+- 类型：object
+- 必填：是
+- 额外字段：禁止
+
+字段：
+
+- `must_recover`: boolean，必填，作为唯一恢复态真值
+- `high_risk_round_seen`: boolean，必填
+- `recovery_reason`: `string | null`，必填，枚举 `score_regression | high_risk_failure | manual_resume | null`
 
 ### `advisory_hints`
 
@@ -356,8 +376,6 @@ worker 只负责单轮试验执行：
 字段：
 
 - `search_phase`: `string | null`，枚举 `explore | shrink | confirm`
-- `must_recover`: boolean，必填，作为唯一恢复态真值；若为 `true`，orchestrator 与 agent 都必须以此为准
-- `high_risk_round_seen`: boolean，必填
 - `advisory_only`: boolean，必填，固定 `true`
 
 ### `pid_bundle`
@@ -482,18 +500,21 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 若需要下一轮决策：`state = decision_required`
 - 若已到用户边界：`state = waiting_user`
 
-### 2. `submit_llm_decision()`
+### 2. `submit_agent_response()`
 
 输入：
 
 - `batch_id`
 - `round_index`
-- `llm_decision`
+- `request_id`
+- `raw_agent_output`
 
 职责：
 
+- 解析 `raw_agent_output`，目标产物为 `llm_decision`
 - 做 schema 校验
 - 做数值边界校验
+- 处理 malformed JSON、字段缺失、非法枚举和超时重试预算
 - 写入 `decision_trace`
 - 调 worker 执行本轮
 - 更新 profile 和 round result
@@ -560,6 +581,20 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   - `request_id`: string，非空，建议格式 `<batch_id>_r<round_index>`
   - `context`: `decision_context`
 
+`allowed_actions` 在 `waiting_user` 下必须按阶段固定枚举：
+
+- 正常 `air_dual` 批末：
+  - `continue_air`
+  - `enter_ground`
+  - `stop_air`
+- 正常 `ground_dual` 批末：
+  - `continue_ground`
+  - `save`
+  - `stop_without_save`
+- 因非法输出、超时或熔断触发的保护停机：
+  - `air_dual` 只允许 `continue_air | stop_air`
+  - `ground_dual` 只允许 `continue_ground | stop_without_save`
+
 ## LLM 输出失败路径
 
 必须定义清晰失败处理，且由 orchestrator 执行。
@@ -603,11 +638,14 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 
 - 允许执行
 - 但必须在 `agent_decision_trace.jsonl` 当前轮记录里写 `high_risk_round = true`
-- 且下一轮 `decision_context.advisory_hints.high_risk_round_seen = true`
+- 且下一轮 `decision_context.recovery_state.high_risk_round_seen = true`
 - 若本轮执行后同时满足：
   - `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
   - 或 `combined_score` 相比当前 batch 最优恶化大于同一阈值
-则下一轮 `decision_context.advisory_hints.must_recover = true`
+则下一轮：
+
+- `decision_context.recovery_state.must_recover = true`
+- `decision_context.recovery_state.recovery_reason = high_risk_failure`
 
 ## 运行安全护栏
 
@@ -638,6 +676,22 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 连续 `abnormal_persistent_rounds` 轮 `combined_score` 均恶化超过：
   - `max(significant_regression_abs, current_batch_best_score * significant_regression_ratio)`
 
+定义：
+
+- `telemetry 缺失` 指本轮执行期内缺少以下任一必需字段：
+  - `combined_score`
+  - `left_score`
+  - `right_score`
+  - `stop_clean_flag`
+- `result JSON 不完整` 指 `round_result.json` 缺少以下任一必需字段：
+  - `candidate_pid`
+  - `combined_score`
+  - `a_score`
+  - `b_score`
+  - `left_score`
+  - `right_score`
+  - `result_path`
+
 ### 3. 批内恢复
 
 若未触发熔断，但发生“明显恶化”：
@@ -648,7 +702,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `combined_score` 相比当前 batch 最优恶化大于同一阈值
 
 - 当前轮标记 `recovery_recommended = true`
-- 下一轮 `must_recover = true`
+- 下一轮 `recovery_state.must_recover = true`
+- 下一轮 `recovery_state.recovery_reason = score_regression`
 - orchestrator 不替 LLM 决策，只把这个事实写入下一轮上下文
 
 ### 4. 平台区标记
@@ -722,6 +777,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 非法枚举、缺字段、额外字段都会被拒绝
 - `low confidence + high risk` 且结果显著恶化后，下一轮 `must_recover = true`
 - `high_risk_round = true` 正确写入当前轮 `decision_trace`
+- `submit_agent_response()` 能接收原始文本，并由 orchestrator 自行解析和重试
 
 ### 4. 熔断与恢复测试
 
