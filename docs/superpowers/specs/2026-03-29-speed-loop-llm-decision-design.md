@@ -205,7 +205,7 @@ worker 只负责单轮试验执行：
 - `batch_id`: string，必填，非空
 - `round_index`: integer，必填，范围 `1..10`
 - `batch_size`: integer，必填，固定 `10`
-- `current_status`: string，必填，枚举 `running | must_recover`
+- `current_status`: string，必填，固定 `running`
 - `score_direction`: string，必填，固定 `lower_is_better`
 - `waveform_role`: string，必填，固定 `secondary_evidence`
 - `disallowed_actions`: string[]，必填，元素枚举 `save | enter_ground | continue_air | continue_ground | stop_air | stop_without_save`
@@ -236,6 +236,35 @@ worker 只负责单轮试验执行：
 
 `recent_round` 字段：
 
+- 类型：object
+- 必填：是
+- 额外字段：禁止
+- required 集合：
+  - `round_index`
+  - `candidate_pid`
+  - `combined_score`
+  - `a_score`
+  - `b_score`
+  - `left_score`
+  - `right_score`
+  - `band_scores`
+  - `overshoot_flag`
+  - `persistent_overshoot_flag`
+  - `speed_drop_flag`
+  - `stop_clean_flag`
+  - `pwm_saturation_ratio`
+  - `current_limit_or_headroom_flag`
+  - `dominant_issue`
+  - `delta_vs_previous_combined`
+  - `delta_vs_batch_best_combined`
+  - `left_right_gap`
+  - `score_trend`
+  - `plateau_detected`
+  - `decision_hints`
+  - `advisory_only`
+  - `result_path`
+  - `waveform_path`
+
 - `round_index`: integer，必填，范围 `1..10`
 - `candidate_pid`: `pid_bundle`，必填
 - `combined_score`: number，必填
@@ -243,7 +272,7 @@ worker 只负责单轮试验执行：
 - `b_score`: number，必填
 - `left_score`: number，必填
 - `right_score`: number，必填
-- `band_scores`: object，必填，字段固定为 `low/mid/high/top`，值为 `number | null`
+- `band_scores`: object，必填，字段固定为 `low/mid/high/top`，值为 `number | null`，`additionalProperties = false`
 - `overshoot_flag`: boolean，必填
 - `persistent_overshoot_flag`: boolean，必填
 - `speed_drop_flag`: boolean，必填
@@ -270,13 +299,13 @@ worker 只负责单轮试验执行：
 字段：
 
 - `available`: boolean，必填
-- `waveform_digest`: object，必填，字段：
+- `waveform_digest`: object，必填，`additionalProperties = false`，required 集合为全部 5 个字段，字段：
   - `tail_jitter`: `number | null`
   - `peak_windows`: `number | null`
   - `settling_tail_shape`: `string | null`
   - `stop_tail_residual`: `number | null`
   - `oscillation_hint`: `string | null`
-- `waveform_flags`: object，必填，字段：
+- `waveform_flags`: object，必填，`additionalProperties = false`，required 集合为全部 4 个字段，字段：
   - `looks_noisy`: boolean
   - `looks_underdamped`: boolean
   - `looks_saturated`: boolean
@@ -290,14 +319,14 @@ worker 只负责单轮试验执行：
 
 字段：
 
-- `absolute_pid_limits`: object，必填
+- `absolute_pid_limits`: object，必填，`additionalProperties = false`，required 集合为全部 6 个字段
   - `kp_min`: number
   - `kp_max`: number
   - `ki_min`: number
   - `ki_max`: number
   - `kd_min`: number
   - `kd_max`: number
-- `precision`: object，必填
+- `precision`: object，必填，`additionalProperties = false`，required 集合为全部 3 个字段
   - `kp_decimals`: integer，范围 `0..6`
   - `ki_decimals`: integer，范围 `0..6`
   - `kd_decimals`: integer，范围 `0..6`
@@ -327,7 +356,7 @@ worker 只负责单轮试验执行：
 字段：
 
 - `search_phase`: `string | null`，枚举 `explore | shrink | confirm`
-- `must_recover`: boolean，必填
+- `must_recover`: boolean，必填，作为唯一恢复态真值；若为 `true`，orchestrator 与 agent 都必须以此为准
 - `high_risk_round_seen`: boolean，必填
 - `advisory_only`: boolean，必填，固定 `true`
 
@@ -349,6 +378,11 @@ worker 只负责单轮试验执行：
 - 类型均为 `number`
 - 值必须为有限数值
 - 对象 `additionalProperties = false`
+
+补充：
+
+- `left` 与 `right` 自身 `additionalProperties = false`
+- `left/right` 的 required 集合固定为 `kp/ki/kd`
 
 ## 每轮决策输出契约
 
@@ -494,7 +528,10 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   "state": "decision_required",
   "batch_id": "air_0003",
   "round_index": 4,
-  "decision_request": {},
+  "decision_request": {
+    "request_id": "air_0003_r04",
+    "context": {}
+  },
   "batch_summary": null,
   "recommended_action": null,
   "allowed_actions": []
@@ -506,10 +543,22 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `state`: 必填，枚举 `decision_required | waiting_user | workflow_complete | failed`
 - `batch_id`: `string | null`
 - `round_index`: `integer | null`
-- `decision_request`: `decision_context | null`
+- `decision_request`: `decision_request_payload | null`
 - `batch_summary`: `object | null`
 - `recommended_action`: `string | null`
 - `allowed_actions`: `string[]`
+
+`decision_request_payload` 固定结构：
+
+- 类型：object
+- 必填：是
+- `additionalProperties = false`
+- required 集合：
+  - `request_id`
+  - `context`
+- 字段：
+  - `request_id`: string，非空，建议格式 `<batch_id>_r<round_index>`
+  - `context`: `decision_context`
 
 ## LLM 输出失败路径
 
@@ -553,7 +602,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 则：
 
 - 允许执行
-- 但必须写 `high_risk_round = true`
+- 但必须在 `agent_decision_trace.jsonl` 当前轮记录里写 `high_risk_round = true`
+- 且下一轮 `decision_context.advisory_hints.high_risk_round_seen = true`
 - 若本轮执行后同时满足：
   - `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
   - 或 `combined_score` 相比当前 batch 最优恶化大于同一阈值
@@ -590,7 +640,12 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 
 ### 3. 批内恢复
 
-若未触发熔断，但发生明显恶化：
+若未触发熔断，但发生“明显恶化”：
+
+明显恶化定义为满足任一条件：
+
+- `combined_score` 相比上一轮恶化大于 `max(significant_regression_abs, previous_combined * significant_regression_ratio)`
+- `combined_score` 相比当前 batch 最优恶化大于同一阈值
 
 - 当前轮标记 `recovery_recommended = true`
 - 下一轮 `must_recover = true`
@@ -651,6 +706,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 非法枚举时报错
 - PID 非数字、负数、越界时报错
 - 数组元素 shape 错误时报错
+- `decision_request_payload` 的 `request_id/context` 缺失时报错
 
 ### 2. 正常批次测试
 
@@ -665,6 +721,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 超时重试至预算耗尽后进入 `waiting_user`
 - 非法枚举、缺字段、额外字段都会被拒绝
 - `low confidence + high risk` 且结果显著恶化后，下一轮 `must_recover = true`
+- `high_risk_round = true` 正确写入当前轮 `decision_trace`
 
 ### 4. 熔断与恢复测试
 
@@ -672,6 +729,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 波形严重异常超过阈值后触发熔断
 - `stop_clean_flag = false` 持续达到阈值后触发熔断
 - 熔断后不得继续自动跑下一轮
+- 普通轮次明显恶化但未熔断时，下一轮也必须进入 `must_recover = true`
 
 ### 5. 落盘与幂等测试
 
