@@ -204,7 +204,7 @@ worker 只负责单轮试验执行：
 字段：
 
 - `stage_name`: string，必填，枚举 `air_dual | ground_dual`
-- `batch_id`: string，必填，非空
+- `batch_id`: string，必填，必须匹配正则 `^(air|ground)_[0-9]{4}$`
 - `round_index`: integer，必填，范围 `1..10`
 - `batch_size`: integer，必填，固定 `10`
 - `current_status`: string，必填，固定 `running`
@@ -477,6 +477,12 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   - `save`
   - `stop_without_save`
 
+说明：
+
+- `batch_end_recommendation_if_no_improve` 仅作为 agent 的建议性字段写入 trace
+- orchestrator 不得直接用它覆盖 `recommended_action` 或 `allowed_actions`
+- 批末推荐动作最终由 orchestrator 基于阶段、保护停机状态和用户边界生成
+
 ## orchestrator 运行时接口
 
 为支持“Codex 当前会话是决策大脑”，orchestrator 对外公开 4 个接口。skill 只能调用这些接口，不能越级操作内部状态。
@@ -580,17 +586,23 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - required 集合：
   - `request_id`
   - `context`
-  - `retry_index`
+  - `retry_counters`
 - 字段：
-  - `request_id`: string，非空，必须匹配正则 `^[a-z]+_[0-9]{4}_r[0-9]{2}$`
-  - `retry_index`: integer，范围 `0..decision_retry_budget`
+  - `request_id`: string，非空，必须匹配正则 `^(air|ground)_[0-9]{4}_r[0-9]{2}$`
+  - `retry_counters`: object，`additionalProperties = false`，required 集合为 `decision_errors_used` 与 `timeouts_used`
+    - `decision_errors_used`: integer，范围 `0..decision_retry_budget`
+    - `timeouts_used`: integer，范围 `0..timeout_retry_budget`
   - `context`: `decision_context`
 
 约束：
 
 - `request_id` 必须与外层 `batch_id`、`round_index` 一致
-- 对同一轮重试时，`request_id` 不变，`retry_index` 递增
+- 对同一轮重试时，`request_id` 不变
+- 非法 JSON、缺字段、非法枚举只增加 `decision_errors_used`
+- 超时只增加 `timeouts_used`
+- 两类预算相互独立，不共享累计
 - orchestrator 必须拒绝来自旧 `request_id` 的重放响应
+- orchestrator 必须拒绝已成功消费过的 `request_id` 的重复提交
 
 `allowed_actions` 在 `waiting_user` 下必须按阶段固定枚举：
 
@@ -628,7 +640,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 3. 若仍有预算，则返回：
    - `state = decision_required`
    - 同一 `request_id`
-   - `retry_index = previous_retry_index + 1`
+   - `retry_counters.decision_errors_used = previous + 1`
+   - `retry_counters.timeouts_used` 保持不变
 4. 若预算耗尽：
    - 当前 batch 进入 `waiting_user`
    - `recommended_action = stop_air` 或 `stop_without_save`，按阶段决定
@@ -643,7 +656,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 3. 若仍有预算，则返回：
    - `state = decision_required`
    - 同一 `request_id`
-   - `retry_index = previous_retry_index + 1`
+   - `retry_counters.timeouts_used = previous + 1`
+   - `retry_counters.decision_errors_used` 保持不变
 4. 再失败则进入 `waiting_user`
 
 ### 低信心高风险输出
@@ -790,6 +804,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 数组元素 shape 错误时报错
 - `decision_request_payload` 的 `request_id/context` 缺失时报错
 - `request_id` regex 不匹配或与外层 `batch_id/round_index` 不一致时报错
+- `retry_counters` 越界或混合失败路径计数错误时报错
 
 ### 2. 正常批次测试
 
@@ -806,7 +821,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `low confidence + high risk` 且结果显著恶化后，下一轮 `must_recover = true`
 - `high_risk_round = true` 正确写入当前轮 `decision_trace`
 - `submit_agent_response()` 能接收原始文本，并由 orchestrator 自行解析和重试
-- 同一轮重试时 `request_id` 不变、`retry_index` 正确递增
+- 同一轮重试时 `request_id` 不变，且两类 `retry_counters` 分别递增
+- 混合失败路径下，`decision_errors_used` 与 `timeouts_used` 按各自预算独立耗尽
 
 ### 4. 熔断与恢复测试
 
@@ -823,6 +839,9 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `profile` 已更新但 `round_result` 未写完时，恢复逻辑正确
 - 重复调用 `start_or_resume_workflow()` 不会重复消费同一轮
 - `waiting_user` 状态下重复恢复不会偷偷推进状态机
+- 旧 `request_id` 重放会被拒绝
+- 同一 `request_id` 在成功消费后重复提交会被拒绝
+- `submit_agent_response()` 的一次性消费语义可验证
 
 ### 6. 用户边界测试
 
