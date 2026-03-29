@@ -355,6 +355,19 @@ worker 只负责单轮试验执行：
   - `ki_max = 200`
   - `kd_min = 0`
   - `kd_max = 50`
+- 强约束：
+  - `worker_timeout_seconds >= 1`
+  - `decision_retry_budget >= 0`
+  - `timeout_retry_budget >= 0`
+  - `significant_regression_abs >= 0`
+  - `significant_regression_ratio >= 0`
+  - `plateau_abs_threshold >= 0`
+  - `plateau_rounds >= 1`
+  - `abnormal_persistent_rounds >= 1`
+  - `waveform_severe_flag_threshold >= 1`
+  - `kp_min <= kp_max`
+  - `ki_min <= ki_max`
+  - `kd_min <= kd_max`
 
 ### `recovery_state`
 
@@ -482,6 +495,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `batch_end_recommendation_if_no_improve` 仅作为 agent 的建议性字段写入 trace
 - orchestrator 不得直接用它覆盖 `recommended_action` 或 `allowed_actions`
 - 批末推荐动作最终由 orchestrator 基于阶段、保护停机状态和用户边界生成
+- `candidate_pid` 的每个数值必须已经满足 `runtime_guardrails.precision`
+- 超出精度的输出按非法输出处理，不做自动舍入，不做规范化后执行
 
 ## orchestrator 运行时接口
 
@@ -723,6 +738,14 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   - `b_score`
   - `left_score`
   - `right_score`
+  - `band_scores`
+  - `overshoot_flag`
+  - `persistent_overshoot_flag`
+  - `speed_drop_flag`
+  - `stop_clean_flag`
+  - `pwm_saturation_ratio`
+  - `current_limit_or_headroom_flag`
+  - `dominant_issue`
   - `waveform_flags`
   - `result_path`
 - `waveform_flags` 来源固定为 worker 输出并写入 `round_result.json`
@@ -731,6 +754,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
   - `looks_underdamped: boolean`
   - `looks_saturated: boolean`
   - `looks_measurement_limited: boolean`
+- `delta_vs_previous_combined`、`delta_vs_batch_best_combined`、`left_right_gap`、`score_trend`、`plateau_detected` 允许由 orchestrator 派生
+- 若这些派生字段无法依据已提交的历史轮次重建，则当前 `round_result` 也视为不完整
 
 ### 3. 批内恢复
 
@@ -793,6 +818,27 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 如果上次停在 `waiting_user`，下一次恢复不得偷偷继续跑
 - 如果 `decision_trace` 已写入但 `profile` 未完成更新，恢复时必须能识别半提交状态并补全或回滚到上一个完整轮次
 
+### 单轮落盘顺序与恢复真源
+
+单轮提交顺序固定为：
+
+1. 写 `round_result.pending.json`
+2. 追加 `decision_trace`，状态记为 `pending`
+3. 更新 `profile.agent_tuning.last_committed_request_id` 之前的临时状态
+4. 将 `round_result.pending.json` 原子重命名为 `round_result.json`
+5. 更新 `profile.agent_tuning.last_committed_request_id = request_id`
+6. 将 `decision_trace` 当前轮状态改为 `committed`
+
+恢复真源固定为：
+
+- `profile.agent_tuning.last_committed_request_id`
+
+恢复规则：
+
+- 若 `round_result.json` 的 `request_id` 高于 `last_committed_request_id`，视为未提交成功，忽略并重放该轮
+- 若 `decision_trace` 中某轮为 `pending` 且 `request_id` 高于 `last_committed_request_id`，视为未提交成功，忽略并重放该轮
+- 若三者冲突，以 `last_committed_request_id` 为准决定已提交边界
+
 ## 测试策略
 
 ### 1. schema 与校验测试
@@ -805,6 +851,8 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - `decision_request_payload` 的 `request_id/context` 缺失时报错
 - `request_id` regex 不匹配或与外层 `batch_id/round_index` 不一致时报错
 - `retry_counters` 越界或混合失败路径计数错误时报错
+- `runtime_guardrails` 的负预算、零超时、反向边界都会报错
+- 超出 `precision` 的 `candidate_pid` 会报错
 
 ### 2. 正常批次测试
 
@@ -842,6 +890,7 @@ agent 每轮必须输出结构化 `llm_decision` JSON。
 - 旧 `request_id` 重放会被拒绝
 - 同一 `request_id` 在成功消费后重复提交会被拒绝
 - `submit_agent_response()` 的一次性消费语义可验证
+- `last_committed_request_id` 与 `round_result/decision_trace` 冲突时，恢复逻辑按提交边界处理
 
 ### 6. 用户边界测试
 
