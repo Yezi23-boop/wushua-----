@@ -8,7 +8,41 @@ from project.speed_loop_autotune.host import air_dual
 from project.speed_loop_autotune.host import agent_session
 from project.speed_loop_autotune.host import common
 from project.speed_loop_autotune.host import ground_dual
+from project.speed_loop_autotune.host import llm_decision_contract
 from project.speed_loop_autotune.host import vofa_autotune
+
+
+def _make_round_result_payload(mode, batch_id, round_index, candidate_pid, baseline_pid, combined_score):
+    stage_name = "air_dual"
+    result = {
+        "mode": mode,
+        "batch_id": batch_id,
+        "round_index": int(round_index),
+        "candidate_pid": candidate_pid,
+        "baseline_pid": baseline_pid,
+        "a_score": float(combined_score),
+        "b_score": float(combined_score),
+        "combined_score": float(combined_score),
+        "band_scores": {"low": 1.0, "mid": 2.0, "high": 3.0, "top": 4.0},
+        "stage_reached": "step_completed",
+        "overshoot_flag": 0,
+        "persistent_overshoot_flag": 0,
+        "speed_drop_flag": 0,
+        "stop_clean_flag": 1,
+        "pwm_saturation_ratio": 0.0,
+        "waveform_path": "logs/agent_waveforms/{0}/{1}_r{2:02d}.jsonl".format(stage_name, batch_id, int(round_index)),
+        "waveform_digest": {"tail_jitter": 0.1, "peak_windows": [{"run_index": 1, "peak_speed": 25.0}]},
+        "result_path": "logs/agent_rounds/{0}/{1}_r{2:02d}.json".format(stage_name, batch_id, int(round_index)),
+        "timestamp": "2026-04-02 10:00:00",
+    }
+    if mode == common.MODE_GROUND_DUAL_STEP:
+        stage_name = "ground_dual"
+    else:
+        result["left_score"] = float(combined_score) - 0.3
+        result["right_score"] = float(combined_score) + 0.3
+    result["waveform_path"] = "logs/agent_waveforms/{0}/{1}_r{2:02d}.jsonl".format(stage_name, batch_id, int(round_index))
+    result["result_path"] = "logs/agent_rounds/{0}/{1}_r{2:02d}.json".format(stage_name, batch_id, int(round_index))
+    return result
 
 
 class AgentSessionDefaultsTests(unittest.TestCase):
@@ -28,6 +62,19 @@ class AgentSessionDefaultsTests(unittest.TestCase):
         self.assertIsNone(updated["agent_tuning"]["pending_user_action"])
         self.assertEqual(updated["agent_tuning"]["current_round_index"], 0)
         self.assertEqual(updated["agent_tuning"]["last_worker_mode"], common.MODE_AIR_DUAL_STEP)
+        self.assertEqual(updated["agent_tuning"]["last_committed_request_id"], "")
+        self.assertIsNone(updated["agent_tuning"]["failure_trace"])
+        self.assertEqual(
+            updated["agent_tuning"]["recovery_state"],
+            {
+                "must_recover": False,
+                "high_risk_round_seen": False,
+                "recovery_reason": None,
+                "manual_resume": False,
+                "last_committed_request_id": "",
+                "failure_trace": "",
+            },
+        )
         self.assertEqual(updated["air_dual"]["active_batch"], None)
         self.assertEqual(updated["ground_dual"]["active_batch"], None)
 
@@ -98,6 +145,146 @@ class CommonSchemaTests(unittest.TestCase):
 
 
 class AgentSessionRoundTests(unittest.TestCase):
+    def test_mark_recovery_required_sets_must_recover(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+
+        updated = agent_session.mark_recovery_required(
+            profile,
+            "high_risk_failure",
+            failure_trace="decision validation failed",
+        )
+
+        self.assertTrue(updated["agent_tuning"]["recovery_state"]["must_recover"])
+        self.assertTrue(updated["agent_tuning"]["recovery_state"]["high_risk_round_seen"])
+        self.assertEqual(updated["agent_tuning"]["recovery_state"]["recovery_reason"], "high_risk_failure")
+        self.assertEqual(updated["agent_tuning"]["recovery_state"]["failure_trace"], "decision validation failed")
+
+    def test_record_failure_trace_writes_top_level_failure_source(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+
+        updated = agent_session.record_failure_trace(
+            profile,
+            "decision_timeout_exhausted",
+            request_id="air_0001_r01",
+            stage_name="air_dual",
+            batch_id="air_0001",
+            round_index=1,
+            message="timeout budget exhausted",
+            request_consumed=False,
+        )
+
+        self.assertEqual(
+            updated["agent_tuning"]["failure_trace"],
+            {
+                "type": "decision_timeout_exhausted",
+                "request_id": "air_0001_r01",
+                "stage_name": "air_dual",
+                "batch_id": "air_0001",
+                "round_index": 1,
+                "message": "timeout budget exhausted",
+                "request_consumed": False,
+            },
+        )
+
+    def test_mark_recovery_required_rejects_manual_resume_reason(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+
+        with self.assertRaises(ValueError):
+            agent_session.mark_recovery_required(profile, "manual_resume")
+
+    def test_mark_manual_resume_sets_manual_resume_state(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        profile = agent_session.mark_recovery_required(profile, "high_risk_failure")
+
+        updated = agent_session.mark_manual_resume(
+            profile,
+            last_committed_request_id="air_0001_r03",
+            failure_trace="operator resume after stop",
+        )
+
+        self.assertEqual(
+            updated["agent_tuning"]["recovery_state"],
+            {
+                "must_recover": True,
+                "high_risk_round_seen": True,
+                "recovery_reason": "manual_resume",
+                "manual_resume": True,
+                "last_committed_request_id": "air_0001_r03",
+                "failure_trace": "operator resume after stop",
+            },
+        )
+
+    def test_finalize_successful_round_clears_manual_resume_state(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        profile = agent_session.mark_recovery_required(profile, "high_risk_failure")
+        profile = agent_session.mark_manual_resume(
+            profile,
+            last_committed_request_id="air_0001_r03",
+            failure_trace="operator resume after interruption",
+        )
+
+        updated = agent_session.finalize_successful_round(
+            profile,
+            request_id="air_0001_r04",
+        )
+
+        self.assertEqual(
+            updated["agent_tuning"]["recovery_state"],
+            {
+                "must_recover": False,
+                "high_risk_round_seen": True,
+                "recovery_reason": None,
+                "manual_resume": False,
+                "last_committed_request_id": "air_0001_r04",
+                "failure_trace": "",
+            },
+        )
+
+    def test_start_batch_clears_high_risk_round_seen_for_new_batch(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        profile = agent_session.mark_recovery_required(profile, "high_risk_failure")
+        start_pid = {
+            "left": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+            "right": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+        }
+
+        updated = agent_session.start_batch(profile, "air_dual", "air_0001", start_pid)
+
+        self.assertFalse(updated["agent_tuning"]["recovery_state"]["high_risk_round_seen"])
+        self.assertTrue(updated["agent_tuning"]["recovery_state"]["must_recover"])
+
+    def test_record_round_result_keeps_high_risk_marker_within_same_batch(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        profile = agent_session.mark_recovery_required(profile, "high_risk_failure")
+        start_pid = {
+            "left": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+            "right": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+        }
+
+        updated = agent_session.start_batch(profile, "air_dual", "air_0001", start_pid)
+        updated = agent_session.mark_recovery_required(updated, "high_risk_failure")
+        updated = agent_session.record_round_result(
+            updated,
+            "air_dual",
+            "air_0001",
+            1,
+            "logs/agent_rounds/air_dual/air_0001_r01.json",
+            _make_round_result_payload(
+                common.MODE_AIR_DUAL_STEP,
+                "air_0001",
+                1,
+                start_pid,
+                start_pid,
+                18.0,
+            ),
+            request_id="air_0001_r01",
+        )
+
+        self.assertFalse(updated["agent_tuning"]["recovery_state"]["must_recover"])
+        self.assertTrue(updated["agent_tuning"]["recovery_state"]["high_risk_round_seen"])
+        self.assertEqual(updated["agent_tuning"]["recovery_state"]["last_committed_request_id"], "air_0001_r01")
+        self.assertEqual(updated["agent_tuning"]["last_committed_request_id"], "air_0001_r01")
+
     def test_record_round_updates_current_best_and_resume_cursor(self):
         profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
         start_pid = {
@@ -116,10 +303,15 @@ class AgentSessionRoundTests(unittest.TestCase):
             "air_0001",
             1,
             "logs/agent_rounds/air_dual/air_0001_r01.json",
-            {
-                "candidate_pid": start_pid,
-                "combined_score": 18.0,
-            },
+            _make_round_result_payload(
+                common.MODE_AIR_DUAL_STEP,
+                "air_0001",
+                1,
+                start_pid,
+                start_pid,
+                18.0,
+            ),
+            request_id="air_0001_r01",
         )
         updated = agent_session.record_round_result(
             updated,
@@ -127,10 +319,15 @@ class AgentSessionRoundTests(unittest.TestCase):
             "air_0001",
             3,
             "logs/agent_rounds/air_dual/air_0001_r03.json",
-            {
-                "candidate_pid": better_pid,
-                "combined_score": 12.5,
-            },
+            _make_round_result_payload(
+                common.MODE_AIR_DUAL_STEP,
+                "air_0001",
+                3,
+                better_pid,
+                start_pid,
+                12.5,
+            ),
+            request_id="air_0001_r03",
         )
 
         self.assertEqual(updated["agent_tuning"]["current_round_index"], 3)
@@ -146,6 +343,192 @@ class AgentSessionRoundTests(unittest.TestCase):
         self.assertEqual(resumed["current_batch_id"], "air_0001")
         self.assertEqual(resumed["current_round_index"], 3)
         self.assertIsNone(resumed["pending_user_action"])
+        self.assertEqual(resumed["last_committed_request_id"], "air_0001_r03")
+        self.assertIsNone(resumed["failure_trace"])
+
+    def test_resume_session_state_exposes_recovery_state(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        profile = agent_session.mark_recovery_required(
+            profile,
+            "score_regression",
+            last_committed_request_id="air_0001_r02",
+            failure_trace="score regressed by 8.0",
+        )
+
+        resumed = agent_session.resume_session_state(profile)
+
+        self.assertEqual(
+            resumed["recovery_state"],
+            {
+                "must_recover": True,
+                "high_risk_round_seen": False,
+                "recovery_reason": "score_regression",
+                "manual_resume": False,
+                "last_committed_request_id": "air_0001_r02",
+                "failure_trace": "score regressed by 8.0",
+            },
+        )
+        self.assertEqual(resumed["last_committed_request_id"], "")
+        self.assertIsNone(resumed["failure_trace"])
+
+    def test_record_round_result_rejects_invalid_payload(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                profile,
+                "air_dual",
+                "air_0001",
+                1,
+                "logs/agent_rounds/air_dual/air_0001_r01.json",
+                {
+                    "mode": common.MODE_AIR_DUAL_STEP,
+                    "batch_id": "air_0001",
+                    "round_index": 1,
+                    "candidate_pid": {
+                        "left": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+                    },
+                },
+            )
+
+    def test_record_round_result_rejects_payload_mismatch_against_call_arguments(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        start_pid = {
+            "left": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+            "right": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+        }
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                profile,
+                "ground_dual",
+                "ground_0001",
+                1,
+                "logs/agent_rounds/ground_dual/ground_0001_r01.json",
+                _make_round_result_payload(
+                    common.MODE_AIR_DUAL_STEP,
+                    "ground_0001",
+                    1,
+                    start_pid,
+                    start_pid,
+                    18.0,
+                ),
+            )
+
+        mismatched_path_payload = _make_round_result_payload(
+            common.MODE_AIR_DUAL_STEP,
+            "air_0001",
+            1,
+            start_pid,
+            start_pid,
+            18.0,
+        )
+        mismatched_path_payload["result_path"] = "logs/agent_rounds/ground_dual/air_0001_r01.json"
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                profile,
+                "air_dual",
+                "air_0001",
+                1,
+                "logs/agent_rounds/air_dual/air_0001_r01.json",
+                mismatched_path_payload,
+            )
+
+        mismatched_waveform_payload = _make_round_result_payload(
+            common.MODE_AIR_DUAL_STEP,
+            "air_0001",
+            1,
+            start_pid,
+            start_pid,
+            18.0,
+        )
+        mismatched_waveform_payload["waveform_path"] = "logs/agent_waveforms/ground_dual/air_0001_r01.jsonl"
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                profile,
+                "air_dual",
+                "air_0001",
+                1,
+                "logs/agent_rounds/air_dual/air_0001_r01.json",
+                mismatched_waveform_payload,
+            )
+
+    def test_record_round_result_rejects_stale_round_for_same_batch(self):
+        profile = agent_session.ensure_agent_profile_defaults({"meta": {"profile_version": 1}})
+        start_pid = {
+            "left": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+            "right": {"kp": 1.0, "ki": 2.0, "kd": 0.0},
+        }
+
+        updated = agent_session.start_batch(profile, "air_dual", "air_0001", start_pid)
+        updated = agent_session.record_round_result(
+            updated,
+            "air_dual",
+            "air_0001",
+            3,
+            "logs/agent_rounds/air_dual/air_0001_r03.json",
+            _make_round_result_payload(
+                common.MODE_AIR_DUAL_STEP,
+                "air_0001",
+                3,
+                start_pid,
+                start_pid,
+                12.5,
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                updated,
+                "air_dual",
+                "air_0001",
+                1,
+                "logs/agent_rounds/air_dual/air_0001_r01.json",
+                _make_round_result_payload(
+                    common.MODE_AIR_DUAL_STEP,
+                    "air_0001",
+                    1,
+                    start_pid,
+                    start_pid,
+                    18.0,
+                ),
+            )
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                profile,
+                "air_dual",
+                "air_0001",
+                1,
+                "logs/agent_rounds/air_dual/air_0001_r01.json",
+                _make_round_result_payload(
+                    common.MODE_AIR_DUAL_STEP,
+                    "air_0002",
+                    1,
+                    start_pid,
+                    start_pid,
+                    18.0,
+                ),
+            )
+
+        with self.assertRaises(ValueError):
+            agent_session.record_round_result(
+                profile,
+                "air_dual",
+                "air_0001",
+                1,
+                "logs/agent_rounds/air_dual/air_0001_r01.json",
+                _make_round_result_payload(
+                    common.MODE_AIR_DUAL_STEP,
+                    "air_0001",
+                    2,
+                    start_pid,
+                    start_pid,
+                    18.0,
+                ),
+            )
 
     def test_append_decision_trace_writes_jsonl_row(self):
         temp_dir = tempfile.TemporaryDirectory()
@@ -331,12 +714,12 @@ class StepWorkerTests(unittest.TestCase):
                 "2",
             ]
         )
-        args.autotune_sequence_explicit = False
-        args.autotune_verify_sequence_explicit = False
+        args.air_primary_sequence_explicit = False
+        args.air_verify_sequence_explicit = False
 
         original_resolve = air_dual.resolve_air_dual_profile_defaults
-        original_build_trial = air_dual.build_autotune_trial
-        original_build_verify = air_dual.build_autotune_verify_trial
+        original_build_trial = air_dual.build_air_primary_trial
+        original_build_verify = air_dual.build_air_verify_trial
         original_score_config = air_dual.build_score_config
         original_eval = getattr(air_dual, "_evaluate_air_dual_step_candidate", None)
 
@@ -344,17 +727,17 @@ class StepWorkerTests(unittest.TestCase):
             return {
                 "profile": {"shared_targets": {"bands": {"low": 15.0, "mid": 25.0, "high": 35.0, "top": 45.0}}},
                 "profile_path": pathlib.Path(temp_dir.name) / "current_tuning_profile.json",
-                "autotune_sequence": "15:500,25:500",
+                "air_primary_sequence": "15:500,25:500",
                 "verify_sequence": "15:300,25:300",
                 "initial_pair": common.wheel_pid_gains_from_dict(pid_pair),
                 "shared_targets": {"bands": {"low": 15.0, "mid": 25.0, "high": 35.0, "top": 45.0}},
             }
 
         def fake_build_trial(*_args, **_kwargs):
-            return common.GroundLoadTrial("air_primary", ((15.0, 500), (25.0, 500)), 1000)
+            return common.SpeedStageTrial("air_primary", ((15.0, 500), (25.0, 500)), 1000)
 
         def fake_build_verify(*_args, **_kwargs):
-            return common.GroundLoadTrial("air_verify", ((15.0, 300), (25.0, 300)), 600)
+            return common.SpeedStageTrial("air_verify", ((15.0, 300), (25.0, 300)), 600)
 
         def fake_eval(*_args, **_kwargs):
             return (
@@ -372,8 +755,8 @@ class StepWorkerTests(unittest.TestCase):
             )
 
         air_dual.resolve_air_dual_profile_defaults = fake_resolve
-        air_dual.build_autotune_trial = fake_build_trial
-        air_dual.build_autotune_verify_trial = fake_build_verify
+        air_dual.build_air_primary_trial = fake_build_trial
+        air_dual.build_air_verify_trial = fake_build_verify
         air_dual.build_score_config = lambda _args: common.DEFAULT_SCORE_CONFIG
         air_dual._evaluate_air_dual_step_candidate = fake_eval
 
@@ -381,8 +764,8 @@ class StepWorkerTests(unittest.TestCase):
             result = air_dual.run_air_dual_step(object(), args)
         finally:
             air_dual.resolve_air_dual_profile_defaults = original_resolve
-            air_dual.build_autotune_trial = original_build_trial
-            air_dual.build_autotune_verify_trial = original_build_verify
+            air_dual.build_air_primary_trial = original_build_trial
+            air_dual.build_air_verify_trial = original_build_verify
             air_dual.build_score_config = original_score_config
             if original_eval is None:
                 delattr(air_dual, "_evaluate_air_dual_step_candidate")
@@ -390,6 +773,7 @@ class StepWorkerTests(unittest.TestCase):
                 air_dual._evaluate_air_dual_step_candidate = original_eval
 
         self.assertEqual(result["mode"], common.MODE_AIR_DUAL_STEP)
+        llm_decision_contract.validate_round_result(result)
         self.assertIn("combined_score", result)
         self.assertIn("band_scores", result)
         self.assertIn("waveform_digest", result)
@@ -463,8 +847,8 @@ class StepWorkerTests(unittest.TestCase):
         )
 
         original_load = ground_dual.load_tuning_profile
-        original_build_trials = ground_dual.build_ground_load_trials
-        original_return_trial = ground_dual.build_ground_load_return_trial
+        original_build_trials = ground_dual.build_ground_step_trials
+        original_return_trial = ground_dual.build_ground_return_trial
         original_score_config = ground_dual.build_score_config
         original_eval = getattr(ground_dual, "_evaluate_ground_dual_step_candidate", None)
 
@@ -472,7 +856,7 @@ class StepWorkerTests(unittest.TestCase):
             return {"shared_targets": {"bands": {"low": 15.0, "mid": 25.0, "high": 35.0, "top": 45.0}}}
 
         def fake_trials(*_args, **_kwargs):
-            return [common.GroundLoadTrial("ground_forward", ((15.0, 200), (25.0, 200)), 400)]
+            return [common.SpeedStageTrial("ground_forward", ((15.0, 200), (25.0, 200)), 400)]
 
         def fake_eval(*_args, **_kwargs):
             return (
@@ -484,8 +868,8 @@ class StepWorkerTests(unittest.TestCase):
             )
 
         ground_dual.load_tuning_profile = fake_load
-        ground_dual.build_ground_load_trials = fake_trials
-        ground_dual.build_ground_load_return_trial = lambda *_args, **_kwargs: None
+        ground_dual.build_ground_step_trials = fake_trials
+        ground_dual.build_ground_return_trial = lambda *_args, **_kwargs: None
         ground_dual.build_score_config = lambda _args: common.DEFAULT_SCORE_CONFIG
         ground_dual._evaluate_ground_dual_step_candidate = fake_eval
 
@@ -493,8 +877,8 @@ class StepWorkerTests(unittest.TestCase):
             result = ground_dual.run_ground_dual_step(object(), args)
         finally:
             ground_dual.load_tuning_profile = original_load
-            ground_dual.build_ground_load_trials = original_build_trials
-            ground_dual.build_ground_load_return_trial = original_return_trial
+            ground_dual.build_ground_step_trials = original_build_trials
+            ground_dual.build_ground_return_trial = original_return_trial
             ground_dual.build_score_config = original_score_config
             if original_eval is None:
                 delattr(ground_dual, "_evaluate_ground_dual_step_candidate")
@@ -502,6 +886,7 @@ class StepWorkerTests(unittest.TestCase):
                 ground_dual._evaluate_ground_dual_step_candidate = original_eval
 
         self.assertEqual(result["mode"], common.MODE_GROUND_DUAL_STEP)
+        llm_decision_contract.validate_round_result(result)
         self.assertIn("combined_score", result)
         self.assertIn("band_scores", result)
         self.assertIn("waveform_digest", result)

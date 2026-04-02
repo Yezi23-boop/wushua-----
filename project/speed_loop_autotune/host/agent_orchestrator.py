@@ -1,14 +1,39 @@
 import copy
+import json
 import pathlib
 import time
 
-from . import air_dual, agent_session, common, ground_dual, pwm_identify, pwm_map
+from . import air_dual, agent_session, common, ground_dual, llm_decision_contract, pwm_identify, pwm_map
 
 
 DEFAULT_BATCH_SIZE = 10
 DEFAULT_TRACE_FILENAME = "agent_decision_trace.jsonl"
 DEFAULT_AIR_ACTIONS = ["continue_air", "enter_ground", "stop_air"]
 DEFAULT_GROUND_ACTIONS = ["continue_ground", "save", "stop_without_save"]
+DEFAULT_AIR_FAILURE_ACTIONS = ["continue_air", "stop_air"]
+DEFAULT_GROUND_FAILURE_ACTIONS = ["continue_ground", "stop_without_save"]
+DEFAULT_RUNTIME_GUARDRAILS = {
+    "absolute_pid_limits": {
+        "kp_min": 0.0,
+        "kp_max": 500.0,
+        "ki_min": 0.0,
+        "ki_max": 200.0,
+        "kd_min": 0.0,
+        "kd_max": 50.0,
+    },
+    "precision": {"kp_decimals": 2, "ki_decimals": 2, "kd_decimals": 2},
+    "allow_large_jump": True,
+    "single_candidate_only": True,
+    "worker_timeout_seconds": 20,
+    "decision_retry_budget": 2,
+    "timeout_retry_budget": 1,
+    "significant_regression_abs": 5.0,
+    "significant_regression_ratio": 0.03,
+    "plateau_abs_threshold": 2.0,
+    "plateau_rounds": 3,
+    "abnormal_persistent_rounds": 2,
+    "waveform_severe_flag_threshold": 2,
+}
 
 
 def _default_pair_from_args(args):
@@ -76,6 +101,17 @@ def _coerce_score(value):
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_request_id(request_id):
+    request_text = str(request_id or "")
+    if "_r" not in request_text:
+        return ("", 0)
+    prefix, round_text = request_text.rsplit("_r", 1)
+    try:
+        return (prefix, int(round_text))
+    except (TypeError, ValueError):
+        return ("", 0)
 
 
 def _load_profile(profile_path):
@@ -251,11 +287,24 @@ def _write_pid_json(path, pid_pair):
 
 def _load_round_history(profile_path, stage_name, batch_id, current_round_index):
     history = []
+    committed_request_id = agent_session.resume_session_state(_load_profile(profile_path)).get("last_committed_request_id", "")
+    committed_batch_id, committed_round_index = _parse_request_id(committed_request_id)
     round_index = 1
     while round_index <= int(current_round_index or 0):
         result_path = agent_session.build_round_result_path(profile_path.parent, stage_name, batch_id, round_index)
         if pathlib.Path(result_path).exists():
-            history.append(common.load_json_dict(str(result_path)))
+            result_payload = common.load_json_dict(str(result_path))
+            result_request_id = result_payload.get("request_id", "")
+            result_batch_id, result_round_index = _parse_request_id(result_request_id)
+            if (
+                committed_request_id
+                and result_request_id
+                and result_batch_id == committed_batch_id
+                and result_round_index > committed_round_index
+            ):
+                round_index += 1
+                continue
+            history.append(result_payload)
         round_index += 1
     return history
 
@@ -383,6 +432,411 @@ def _ensure_trace_path(profile, profile_path):
     trace_path = _trace_path_for_profile(profile_path)
     profile["agent_tuning"]["last_decision_trace_path"] = trace_path.as_posix()
     return trace_path
+
+
+def _ensure_request_state(profile):
+    agent_tuning = profile.get("agent_tuning", {})
+    if "pending_decision_request" not in agent_tuning:
+        agent_tuning["pending_decision_request"] = None
+    elif agent_tuning.get("pending_decision_request") is not None and not isinstance(agent_tuning.get("pending_decision_request"), dict):
+        raise ValueError("agent_tuning.pending_decision_request must be an object or null")
+    if "consumed_request_ids" not in agent_tuning:
+        agent_tuning["consumed_request_ids"] = []
+    elif not isinstance(agent_tuning.get("consumed_request_ids"), list):
+        raise ValueError("agent_tuning.consumed_request_ids must be an array")
+    else:
+        for request_id in agent_tuning.get("consumed_request_ids", []):
+            if not isinstance(request_id, str):
+                raise ValueError("agent_tuning.consumed_request_ids[] must be a string")
+    return agent_tuning
+
+
+def _copy_runtime_guardrails():
+    return copy.deepcopy(DEFAULT_RUNTIME_GUARDRAILS)
+
+
+def _last_batch_best_pid(stage_block):
+    last_batch_best = stage_block.get("last_batch_best")
+    if isinstance(last_batch_best, dict):
+        return last_batch_best.get("best_pid")
+    return None
+
+
+def _dominant_issue_from_result(result):
+    if int(result.get("overshoot_flag", 0) or 0):
+        return "overshoot"
+    if int(result.get("speed_drop_flag", 0) or 0):
+        return "slow_response"
+    if float(result.get("pwm_saturation_ratio", 0.0) or 0.0) >= 0.95:
+        return "saturation_limited"
+    return None
+
+
+def _waveform_summary_from_result(result):
+    digest = result.get("waveform_digest")
+    if not isinstance(digest, dict):
+        return {
+            "available": False,
+            "waveform_digest": {
+                "tail_jitter": None,
+                "peak_windows": None,
+                "settling_tail_shape": None,
+                "stop_tail_residual": None,
+                "oscillation_hint": None,
+            },
+            "waveform_flags": {
+                "looks_noisy": False,
+                "looks_underdamped": False,
+                "looks_saturated": False,
+                "looks_measurement_limited": False,
+            },
+        }
+
+    peak_windows = digest.get("peak_windows")
+    peak_window_count = None
+    if isinstance(peak_windows, list):
+        peak_window_count = float(len(peak_windows))
+
+    pwm_ratio = float(result.get("pwm_saturation_ratio", 0.0) or 0.0)
+    return {
+        "available": True,
+        "waveform_digest": {
+            "tail_jitter": _coerce_score(digest.get("tail_jitter")),
+            "peak_windows": peak_window_count,
+            "settling_tail_shape": None,
+            "stop_tail_residual": None,
+            "oscillation_hint": None,
+        },
+        "waveform_flags": {
+            "looks_noisy": bool((digest.get("tail_jitter") or 0.0) > 0.5),
+            "looks_underdamped": bool(result.get("persistent_overshoot_flag", 0)),
+            "looks_saturated": pwm_ratio >= 0.95,
+            "looks_measurement_limited": False,
+        },
+    }
+
+
+def _recent_round_row(result, previous_result, best_score, plateau_abs_threshold):
+    combined_score = _coerce_score(result.get("combined_score"))
+    left_score = _coerce_score(result.get("left_score"))
+    right_score = _coerce_score(result.get("right_score"))
+    if left_score is None:
+        left_score = combined_score
+    if right_score is None:
+        right_score = combined_score
+
+    delta_vs_previous = None
+    score_trend = None
+    plateau_detected = False
+    if previous_result is not None:
+        previous_score = _coerce_score(previous_result.get("combined_score"))
+        if combined_score is not None and previous_score is not None:
+            delta_vs_previous = combined_score - previous_score
+            if delta_vs_previous < -plateau_abs_threshold:
+                score_trend = "improving"
+            elif delta_vs_previous > plateau_abs_threshold:
+                score_trend = "worsening"
+            else:
+                score_trend = "flat"
+                plateau_detected = True
+
+    delta_vs_batch_best = None
+    if combined_score is not None and best_score is not None:
+        delta_vs_batch_best = combined_score - best_score
+
+    pwm_ratio = float(result.get("pwm_saturation_ratio", 0.0) or 0.0)
+    return {
+        "round_index": int(result.get("round_index", 0) or 0),
+        "candidate_pid": _copy_pid_pair(result.get("candidate_pid")),
+        "combined_score": combined_score,
+        "a_score": _coerce_score(result.get("a_score")),
+        "b_score": _coerce_score(result.get("b_score")),
+        "left_score": left_score,
+        "right_score": right_score,
+        "band_scores": common.normalize_band_scores(result.get("band_scores")),
+        "overshoot_flag": bool(result.get("overshoot_flag", 0)),
+        "persistent_overshoot_flag": bool(result.get("persistent_overshoot_flag", 0)),
+        "speed_drop_flag": bool(result.get("speed_drop_flag", 0)),
+        "stop_clean_flag": bool(result.get("stop_clean_flag", 0)),
+        "pwm_saturation_ratio": pwm_ratio,
+        "current_limit_or_headroom_flag": pwm_ratio >= 0.95,
+        "dominant_issue": _dominant_issue_from_result(result),
+        "delta_vs_previous_combined": delta_vs_previous,
+        "delta_vs_batch_best_combined": delta_vs_batch_best,
+        "left_right_gap": abs(float(left_score or 0.0) - float(right_score or 0.0)),
+        "score_trend": score_trend,
+        "plateau_detected": plateau_detected,
+        "decision_hints": [],
+        "advisory_only": True,
+        "result_path": result.get("result_path", ""),
+        "waveform_path": result.get("waveform_path"),
+    }
+
+
+def _build_decision_context(profile, profile_path, stage_name, batch_id, round_index, batch_size):
+    stage_block = profile.get(stage_name, {})
+    active_batch = stage_block.get("active_batch", {})
+    session_state = agent_session.resume_session_state(profile)
+    recovery_state = session_state.get("recovery_state", {})
+    if not isinstance(active_batch, dict):
+        active_batch = {}
+    last_summary = stage_block.get("last_summary")
+    if not isinstance(last_summary, dict):
+        last_summary = {}
+
+    round_history = _load_round_history(profile_path, stage_name, batch_id, int(round_index) - 1)
+    runtime_guardrails = _copy_runtime_guardrails()
+    best_score = None
+    if isinstance(active_batch, dict):
+        best_score = _coerce_score(active_batch.get("current_best_score"))
+    if best_score is None:
+        best_score = _coerce_score(last_summary.get("combined_score"))
+
+    recent_rounds = []
+    previous_result = None
+    for result in round_history[-5:]:
+        recent_rounds.append(
+            _recent_round_row(
+                result,
+                previous_result,
+                best_score,
+                runtime_guardrails["plateau_abs_threshold"],
+            )
+        )
+        previous_result = result
+
+    waveform_summary = _waveform_summary_from_result(round_history[-1]) if round_history else _waveform_summary_from_result({})
+    context = {
+        "schema_version": llm_decision_contract.SCHEMA_VERSION,
+        "stage_context": {
+            "stage_name": stage_name,
+            "batch_id": batch_id,
+            "round_index": int(round_index),
+            "batch_size": int(batch_size),
+            "current_status": "running",
+            "score_direction": "lower_is_better",
+            "waveform_role": "secondary_evidence",
+            "disallowed_actions": list(llm_decision_contract.DISALLOWED_ACTION_VALUES),
+        },
+        "pid_anchors": {
+            "batch_start_pid": _copy_pid_pair(active_batch.get("start_pid")),
+            "baseline_pid": _copy_pid_pair(stage_block.get("baseline_pid"), active_batch.get("start_pid")),
+            "current_batch_best_pid": _copy_pid_pair(active_batch.get("current_best_pid")),
+            "current_batch_best_score": _coerce_score(active_batch.get("current_best_score")),
+            "historical_stage_best_pid": _copy_pid_pair(stage_block.get("best_pid")),
+            "historical_stage_best_score": _coerce_score(last_summary.get("combined_score")),
+            "last_batch_best": _copy_pid_pair(_last_batch_best_pid(stage_block)),
+            "seed_pi": _copy_pid_pair(profile.get("pwm_identify", {}).get("seed_pi")),
+        },
+        "recent_rounds": recent_rounds,
+        "waveform_summary": waveform_summary,
+        "runtime_guardrails": runtime_guardrails,
+        "recovery_state": {
+            "must_recover": bool(recovery_state.get("must_recover", False)),
+            "high_risk_round_seen": bool(recovery_state.get("high_risk_round_seen", False)),
+            "recovery_reason": recovery_state.get("recovery_reason"),
+        },
+        "advisory_hints": {
+            "search_phase": _phase_from_round(round_index),
+            "advisory_only": True,
+        },
+    }
+    return llm_decision_contract.validate_decision_context(context)
+
+
+def _store_pending_request(profile, request_payload):
+    agent_tuning = _ensure_request_state(profile)
+    agent_tuning["pending_decision_request"] = json.loads(json.dumps(request_payload, ensure_ascii=False))
+    agent_tuning["workflow_status"] = "decision_required"
+    return agent_tuning["pending_decision_request"]
+
+
+def _pending_request(profile):
+    agent_tuning = _ensure_request_state(profile)
+    pending_request = agent_tuning.get("pending_decision_request")
+    if isinstance(pending_request, dict):
+        return pending_request
+    return None
+
+
+def _clear_pending_request(profile):
+    agent_tuning = _ensure_request_state(profile)
+    agent_tuning["pending_decision_request"] = None
+    return profile
+
+
+def _mark_request_consumed(profile, request_id):
+    agent_tuning = _ensure_request_state(profile)
+    consumed_ids = agent_tuning.get("consumed_request_ids", [])
+    if request_id not in consumed_ids:
+        consumed_ids.append(request_id)
+    agent_tuning["consumed_request_ids"] = consumed_ids
+    return consumed_ids
+
+
+def _build_decision_request(profile, profile_path, stage_name, batch_id, round_index, batch_size):
+    payload = {
+        "request_id": "{0}_r{1:02d}".format(batch_id, int(round_index)),
+        "context": _build_decision_context(profile, profile_path, stage_name, batch_id, round_index, batch_size),
+        "retry_counters": {
+            "decision_errors_used": 0,
+            "timeouts_used": 0,
+        },
+    }
+    return llm_decision_contract.validate_decision_request_payload(payload, batch_id, round_index)
+
+
+def _ensure_batch_for_stage(profile, profile_path, stage_name, args, batch_size):
+    state = agent_session.resume_session_state(profile)
+    stage_block = profile.get(stage_name, {})
+    active_batch = stage_block.get("active_batch")
+    batch_id = state.get("current_batch_id", "")
+    current_round_index = int(state.get("current_round_index", 0) or 0)
+
+    if (
+        state.get("workflow_stage") == stage_name
+        and isinstance(active_batch, dict)
+        and active_batch.get("batch_id") == batch_id
+        and current_round_index < int(batch_size)
+    ):
+        if stage_block.get("baseline_pid") is None:
+            stage_block["baseline_pid"] = _copy_pid_pair(active_batch.get("start_pid"))
+        return (profile, batch_id, current_round_index)
+
+    start_pid, baseline_pid = _resolve_stage_start_pair(profile, stage_name, args)
+    batch_id = _batch_id_for_stage(profile, stage_name)
+    profile = agent_session.start_batch(profile, stage_name, batch_id, start_pid)
+    stage_block = profile.get(stage_name, {})
+    stage_block["baseline_pid"] = _copy_pid_pair(baseline_pid)
+    profile["agent_tuning"]["workflow_stage"] = stage_name
+    profile["agent_tuning"]["workflow_status"] = "running"
+    return (profile, batch_id, 0)
+
+
+def _request_failure_boundary(profile, stage_name, batch_id, reason):
+    recommended_action = "stop_air"
+    allowed_actions = DEFAULT_AIR_FAILURE_ACTIONS
+    if stage_name == "ground_dual":
+        recommended_action = "stop_without_save"
+        allowed_actions = DEFAULT_GROUND_FAILURE_ACTIONS
+    profile = _clear_pending_request(profile)
+    profile = agent_session.set_pending_user_action(
+        profile,
+        stage_name,
+        batch_id,
+        recommended_action,
+        allowed_actions,
+        reason,
+    )
+    profile["agent_tuning"]["workflow_status"] = "waiting_user"
+    return profile
+
+
+def _is_failure_boundary_reason(reason):
+    reason_text = str(reason or "")
+    return (
+        reason_text.startswith("agent ")
+        or reason_text.startswith("post-execution persistence failed")
+        or reason_text.startswith("worker circuit break")
+    )
+
+
+def _decision_required_result(profile, profile_path, decision_request=None):
+    if decision_request is None:
+        decision_request = _pending_request(profile)
+    profile["agent_tuning"]["workflow_status"] = "decision_required"
+    return _build_workflow_result(profile, profile_path, decision_request=decision_request)
+
+
+def _restore_profile_state(profile, profile_path):
+    state = agent_session.resume_session_state(profile)
+    stage_name = state.get("workflow_stage") or "air_dual"
+    batch_id = state.get("current_batch_id", "")
+    current_round_index = int(state.get("current_round_index", 0) or 0)
+    restored_round_index = current_round_index
+    committed_request_id = state.get("last_committed_request_id", "")
+    failure_trace = state.get("failure_trace")
+    committed_batch_id, committed_round_index = _parse_request_id(committed_request_id)
+
+    if not batch_id or stage_name not in ("air_dual", "ground_dual"):
+        return profile
+    if committed_batch_id != batch_id or committed_round_index >= current_round_index:
+        if isinstance(failure_trace, dict) and failure_trace.get("request_consumed"):
+            failure_batch_id, failure_round_index = _parse_request_id(failure_trace.get("request_id"))
+            if failure_batch_id == batch_id and failure_round_index > current_round_index:
+                restored_round_index = failure_round_index
+            else:
+                return profile
+        else:
+            return profile
+    else:
+        restored_round_index = committed_round_index
+
+    stage_block = profile.get(stage_name, {})
+    active_batch = stage_block.get("active_batch")
+    if not isinstance(active_batch, dict) or active_batch.get("batch_id") != batch_id:
+        return profile
+
+    history = _load_round_history(profile_path, stage_name, batch_id, committed_round_index)
+    active_batch["rounds_completed"] = committed_round_index
+    active_batch["search_phase"] = _phase_from_round(committed_round_index or 1)
+    if history:
+        last_result = history[-1]
+        active_batch["last_round_pid"] = _copy_pid_pair(last_result.get("candidate_pid"))
+        active_batch["last_round_score"] = _coerce_score(last_result.get("combined_score"))
+        active_batch["last_round_result_path"] = pathlib.Path(
+            agent_session.build_round_result_path(profile_path.parent, stage_name, batch_id, committed_round_index)
+        ).as_posix()
+        best_result = history[0]
+        for row in history[1:]:
+            if _coerce_score(row.get("combined_score")) < _coerce_score(best_result.get("combined_score")):
+                best_result = row
+        active_batch["current_best_pid"] = _copy_pid_pair(best_result.get("candidate_pid"))
+        active_batch["current_best_score"] = _coerce_score(best_result.get("combined_score"))
+    else:
+        active_batch["last_round_pid"] = None
+        active_batch["last_round_score"] = None
+        active_batch["last_round_result_path"] = None
+        active_batch["current_best_pid"] = _copy_pid_pair(active_batch.get("start_pid"))
+        active_batch["current_best_score"] = None
+
+    profile["agent_tuning"]["current_round_index"] = restored_round_index
+    return profile
+
+
+def _retry_pending_request(profile, profile_path, request_payload, counter_key):
+    stage_context = request_payload["context"]["stage_context"]
+    runtime_guardrails = request_payload["context"]["runtime_guardrails"]
+    request_payload["retry_counters"][counter_key] = int(request_payload["retry_counters"].get(counter_key, 0) or 0) + 1
+    budget_key = "decision_retry_budget"
+    if counter_key == "timeouts_used":
+        budget_key = "timeout_retry_budget"
+    budget = int(runtime_guardrails.get(budget_key, 0) or 0)
+    if request_payload["retry_counters"][counter_key] <= budget:
+        request_payload = llm_decision_contract.validate_decision_request_payload(
+            request_payload,
+            stage_context["batch_id"],
+            stage_context["round_index"],
+        )
+        _store_pending_request(profile, request_payload)
+        return _decision_required_result(profile, profile_path, decision_request=request_payload)
+
+    failure_type = "decision_error_exhausted"
+    if counter_key == "timeouts_used":
+        failure_type = "decision_timeout_exhausted"
+    reason = "agent {0} budget exhausted for {1}".format(counter_key, request_payload["request_id"])
+    profile = agent_session.record_failure_trace(
+        profile,
+        failure_type,
+        request_id=request_payload["request_id"],
+        stage_name=stage_context["stage_name"],
+        batch_id=stage_context["batch_id"],
+        round_index=stage_context["round_index"],
+        message=reason,
+        request_consumed=False,
+    )
+    profile = _request_failure_boundary(profile, stage_context["stage_name"], stage_context["batch_id"], reason)
+    return _build_workflow_result(profile, profile_path)
 
 
 def _run_stage_batch(client, args, profile_path, profile, stage_name, stage_runner, decision_policy, batch_size):
@@ -527,18 +981,29 @@ def _apply_explicit_action(profile, explicit_action):
         raise RuntimeError("Unsupported action word: {0}".format(explicit_action))
 
     stage_name = pending.get("stage")
+    pending_batch_id = pending.get("batch_id", "")
+    pending_round_index = int(state.get("current_round_index", 0) or 0)
+    reason = pending.get("reason", "")
     summary = profile.get(stage_name, {}).get("last_batch_summary", {})
     best_pid = _best_pid_from_stage(profile, stage_name)
     profile = _clear_waiting_state(profile)
 
     if explicit_action == "continue_air":
+        if _is_failure_boundary_reason(reason):
+            profile = agent_session.mark_manual_resume(profile, failure_trace=reason)
         profile["agent_tuning"]["workflow_stage"] = "air_dual"
         profile["agent_tuning"]["workflow_status"] = "running"
+        profile["agent_tuning"]["current_batch_id"] = pending_batch_id
+        profile["agent_tuning"]["current_round_index"] = pending_round_index
         return profile
 
     if explicit_action == "continue_ground":
+        if _is_failure_boundary_reason(reason):
+            profile = agent_session.mark_manual_resume(profile, failure_trace=reason)
         profile["agent_tuning"]["workflow_stage"] = "ground_dual"
         profile["agent_tuning"]["workflow_status"] = "running"
+        profile["agent_tuning"]["current_batch_id"] = pending_batch_id
+        profile["agent_tuning"]["current_round_index"] = pending_round_index
         return profile
 
     if explicit_action == "enter_ground":
@@ -560,8 +1025,10 @@ def _apply_explicit_action(profile, explicit_action):
     return profile
 
 
-def _build_workflow_result(profile, profile_path, batch_summary=None):
+def _build_workflow_result(profile, profile_path, batch_summary=None, decision_request=None):
     state = agent_session.resume_session_state(profile)
+    if decision_request is None:
+        decision_request = _pending_request(profile)
     result = {
         "profile_path": pathlib.Path(profile_path).as_posix(),
         "workflow_stage": state.get("workflow_stage", ""),
@@ -575,27 +1042,150 @@ def _build_workflow_result(profile, profile_path, batch_summary=None):
     }
     if batch_summary is not None:
         result["batch_summary"] = batch_summary
+    if decision_request is not None:
+        result["decision_request"] = decision_request
     return result
 
 
-def run_agent_workflow(
+def _execute_decision_round(client, args, profile_path, profile, request_payload, decision, raw_agent_output, stage_runner, batch_size):
+    stage_context = request_payload["context"]["stage_context"]
+    stage_name = stage_context["stage_name"]
+    batch_id = stage_context["batch_id"]
+    round_index = int(stage_context["round_index"])
+    baseline_pid = request_payload["context"]["pid_anchors"]["baseline_pid"]
+    start_pid = request_payload["context"]["pid_anchors"]["batch_start_pid"]
+    trace_path = _ensure_trace_path(profile, profile_path)
+    paths = _build_round_paths(profile_path, stage_name, batch_id, round_index)
+    candidate_pid = _copy_pid_pair(decision.get("candidate_pid"), start_pid)
+    baseline_pid = _copy_pid_pair(baseline_pid, start_pid)
+    _write_pid_json(paths["candidate_path"], candidate_pid)
+    _write_pid_json(paths["baseline_path"], baseline_pid)
+
+    run_args = _copy_args(args)
+    run_args.profile_path = str(profile_path)
+    run_args.batch_id = batch_id
+    run_args.round_index = round_index
+    run_args.candidate_json = str(paths["candidate_path"])
+    run_args.baseline_json = str(paths["baseline_path"])
+    run_args.result_json = str(paths["result_path"])
+    run_args.waveform_path = str(paths["waveform_path"])
+    if stage_name == "ground_dual":
+        mode_name = common.MODE_GROUND_DUAL_STEP
+    else:
+        mode_name = common.MODE_AIR_DUAL_STEP
+    run_args.mode = mode_name
+
+    result = stage_runner(
+        client,
+        run_args,
+        mode_name,
+        {
+            "stage_name": stage_name,
+            "batch_id": batch_id,
+            "round_index": round_index,
+            "candidate_pid": candidate_pid,
+            "baseline_pid": baseline_pid,
+        },
+    )
+
+    _mark_request_consumed(profile, request_payload["request_id"])
+    _clear_pending_request(profile)
+    _save_profile(profile, profile_path)
+
+    try:
+        profile = agent_session.persist_round_transaction(
+            profile,
+            stage_name,
+            batch_id,
+            round_index,
+            request_payload["request_id"],
+            paths["result_path"],
+            result,
+            trace_path,
+            {
+                "stage_name": stage_name,
+                "batch_id": batch_id,
+                "round_index": round_index,
+                "request_id": request_payload["request_id"],
+                "candidate_pid": candidate_pid,
+                "combined_score": _coerce_score(result.get("combined_score")),
+                "decision_mode": decision.get("decision_mode", ""),
+                "base_reference": decision.get("base_reference", ""),
+                "risk_level": decision.get("risk_level", ""),
+                "reason": decision.get("primary_reason", ""),
+                "result_path": pathlib.Path(paths["result_path"]).as_posix(),
+                "raw_agent_output": raw_agent_output,
+            },
+        )
+        profile["agent_tuning"]["last_decision_trace_path"] = trace_path.as_posix()
+    except Exception:
+        profile = agent_session.record_failure_trace(
+            profile,
+            "worker_circuit_break",
+            request_id=request_payload["request_id"],
+            stage_name=stage_name,
+            batch_id=batch_id,
+            round_index=round_index,
+            message="post-execution persistence failed for {0}".format(request_payload["request_id"]),
+            request_consumed=True,
+        )
+        profile = _request_failure_boundary(
+            profile,
+            stage_name,
+            batch_id,
+            "post-execution persistence failed for {0}".format(request_payload["request_id"]),
+        )
+        _save_profile(profile, profile_path)
+        raise
+
+    if round_index >= int(batch_size):
+        round_history = _load_round_history(profile_path, stage_name, batch_id, round_index)
+        batch_summary = _summarize_batch(stage_name, batch_id, start_pid, round_history)
+        recommended_action, allowed_actions, reason = _recommend_batch_action(profile, stage_name, batch_summary, round_history)
+        profile = agent_session.finish_batch_summary(
+            profile,
+            stage_name,
+            batch_summary,
+            recommended_action,
+            allowed_actions,
+            reason,
+        )
+        profile["agent_tuning"]["last_decision_trace_path"] = trace_path.as_posix()
+        _save_profile(profile, profile_path)
+        return _build_workflow_result(profile, profile_path, batch_summary=batch_summary)
+
+    next_request = _build_decision_request(profile, profile_path, stage_name, batch_id, round_index + 1, batch_size)
+    _store_pending_request(profile, next_request)
+    _save_profile(profile, profile_path)
+    return _decision_required_result(profile, profile_path, decision_request=next_request)
+
+
+def start_or_resume_workflow(
     client,
     args,
     explicit_action="",
+    requested_stage="",
     stage_runner=None,
-    decision_policy=None,
     batch_size=DEFAULT_BATCH_SIZE,
 ):
     profile_path = common.resolve_profile_path(getattr(args, "profile_path", str(common.DEFAULT_TUNING_PROFILE_PATH)))
     stage_runner_fn = stage_runner or _default_stage_runner
-    decision_policy_fn = decision_policy or default_decision_policy
-    batch_summary = None
-
     profile = _load_profile(profile_path)
+    _ensure_request_state(profile)
+    profile = _restore_profile_state(profile, profile_path)
     _save_profile(profile, profile_path)
+    initial_state = agent_session.resume_session_state(profile)
+
+    if requested_stage and requested_stage not in ("air_dual", "ground_dual"):
+        raise ValueError("Unsupported requested_stage: {0}".format(requested_stage))
+
+    if requested_stage == "ground_dual" and explicit_action != "enter_ground":
+        if initial_state.get("workflow_stage") != "ground_dual":
+            raise RuntimeError("ground_dual requires enter_ground before starting")
 
     if explicit_action:
         profile = _apply_explicit_action(profile, explicit_action)
+        _clear_pending_request(profile)
         _save_profile(profile, profile_path)
         state = agent_session.resume_session_state(profile)
         if state.get("workflow_status") == "completed":
@@ -606,25 +1196,123 @@ def run_agent_workflow(
         return _build_workflow_result(profile, profile_path)
 
     profile = _run_prerequisites(client, args, profile_path, profile, stage_runner_fn)
+    _ensure_request_state(profile)
     state = agent_session.resume_session_state(profile)
-
     if state.get("workflow_status") == "waiting_user":
+        _save_profile(profile, profile_path)
         return _build_workflow_result(profile, profile_path)
     if state.get("workflow_status") == "completed":
+        _save_profile(profile, profile_path)
         return _build_workflow_result(profile, profile_path)
 
-    stage_name = state.get("workflow_stage") or "air_dual"
+    pending_request = _pending_request(profile)
+    if pending_request is not None:
+        stage_context = pending_request["context"]["stage_context"]
+        llm_decision_contract.validate_decision_request_payload(
+            pending_request,
+            stage_context["batch_id"],
+            stage_context["round_index"],
+        )
+        _save_profile(profile, profile_path)
+        return _decision_required_result(profile, profile_path, decision_request=pending_request)
+
+    stage_name = requested_stage or state.get("workflow_stage") or "air_dual"
     if stage_name not in ("air_dual", "ground_dual"):
         stage_name = "air_dual"
+    profile, batch_id, current_round_index = _ensure_batch_for_stage(profile, profile_path, stage_name, args, batch_size)
+    request_payload = _build_decision_request(profile, profile_path, stage_name, batch_id, current_round_index + 1, batch_size)
+    _store_pending_request(profile, request_payload)
+    _save_profile(profile, profile_path)
+    return _decision_required_result(profile, profile_path, decision_request=request_payload)
 
-    profile, batch_summary = _run_stage_batch(
+
+def submit_agent_response(
+    client,
+    args,
+    request_id,
+    response_status,
+    raw_agent_output,
+    stage_runner=None,
+    batch_size=DEFAULT_BATCH_SIZE,
+):
+    profile_path = common.resolve_profile_path(getattr(args, "profile_path", str(common.DEFAULT_TUNING_PROFILE_PATH)))
+    stage_runner_fn = stage_runner or _default_stage_runner
+    profile = _load_profile(profile_path)
+    agent_tuning = _ensure_request_state(profile)
+    pending_request = _pending_request(profile)
+    consumed_ids = set(agent_tuning.get("consumed_request_ids", []))
+
+    if request_id in consumed_ids and (pending_request is None or pending_request.get("request_id") != request_id):
+        raise RuntimeError("request_id has already been consumed")
+    if pending_request is None:
+        raise RuntimeError("No pending decision request to consume")
+    if pending_request.get("request_id") != request_id:
+        raise RuntimeError("request_id does not match the current pending request")
+
+    stage_context = pending_request["context"]["stage_context"]
+    llm_decision_contract.validate_decision_request_payload(
+        pending_request,
+        stage_context["batch_id"],
+        stage_context["round_index"],
+    )
+
+    if response_status == "timeout":
+        result = _retry_pending_request(profile, profile_path, pending_request, "timeouts_used")
+        _save_profile(profile, profile_path)
+        return result
+
+    if response_status != "ok":
+        raise ValueError("Unsupported response_status: {0}".format(response_status))
+
+    try:
+        decision = json.loads(raw_agent_output)
+    except (TypeError, ValueError):
+        result = _retry_pending_request(profile, profile_path, pending_request, "decision_errors_used")
+        _save_profile(profile, profile_path)
+        return result
+
+    if not isinstance(decision, dict):
+        result = _retry_pending_request(profile, profile_path, pending_request, "decision_errors_used")
+        _save_profile(profile, profile_path)
+        return result
+
+    try:
+        llm_decision_contract.validate_llm_decision(
+            decision,
+            pending_request["context"]["runtime_guardrails"],
+        )
+    except ValueError:
+        result = _retry_pending_request(profile, profile_path, pending_request, "decision_errors_used")
+        _save_profile(profile, profile_path)
+        return result
+
+    return _execute_decision_round(
         client,
         args,
         profile_path,
         profile,
-        stage_name,
+        pending_request,
+        decision,
+        raw_agent_output,
         stage_runner_fn,
-        decision_policy_fn,
         batch_size,
     )
-    return _build_workflow_result(profile, profile_path, batch_summary=batch_summary)
+
+
+def run_agent_workflow(
+    client,
+    args,
+    explicit_action="",
+    stage_runner=None,
+    decision_policy=None,
+    batch_size=DEFAULT_BATCH_SIZE,
+):
+    if decision_policy is not None and decision_policy is not default_decision_policy:
+        raise RuntimeError("run_agent_workflow no longer supports direct decision_policy batch execution")
+    return start_or_resume_workflow(
+        client,
+        args,
+        explicit_action=explicit_action,
+        stage_runner=stage_runner,
+        batch_size=batch_size,
+    )

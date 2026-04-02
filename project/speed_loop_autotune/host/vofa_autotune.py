@@ -47,13 +47,13 @@ def build_argument_parser():
         help="Worker mode. Use 'pwm-map', 'pwm-identify', 'air-dual-step', or 'ground-dual-step'.",
     )
     parser.add_argument(
-        "--autotune-sequence",
-        default=DEFAULT_AUTOTUNE_SEQUENCE,
-        help="Autotune multi-speed sequence as speed:duration_ms pairs separated by commas.",
+        "--air-primary-sequence",
+        default=DEFAULT_AIR_PRIMARY_SEQUENCE,
+        help="Primary air-dual-step sequence as speed:duration_ms pairs separated by commas.",
     )
     parser.add_argument(
-        "--autotune-verify-sequence",
-        default=DEFAULT_AUTOTUNE_VERIFY_SEQUENCE,
+        "--air-verify-sequence",
+        default=DEFAULT_AIR_VERIFY_SEQUENCE,
         help="Optional secondary verification sequence for air-dual-step worker runs.",
     )
     parser.add_argument("--target-speed", type=float, default=35.0, help="Step target for TEST_speed.")
@@ -169,15 +169,15 @@ def build_argument_parser():
         help="1-based round index attached to single step worker outputs.",
     )
     parser.add_argument(
-        "--autotune-tail-zero-ms",
+        "--air-tail-zero-ms",
         type=int,
-        default=DEFAULT_AUTOTUNE_TAIL_ZERO_MS,
+        default=DEFAULT_AIR_TAIL_ZERO_MS,
         help="Extra capture time after the final TEST_speed=0 command.",
     )
     parser.add_argument(
         "--repeat-each",
         type=int,
-        default=DEFAULT_AUTOTUNE_REPEAT_COUNT,
+        default=DEFAULT_AIR_REPEAT_COUNT,
         help="Repeat count for a single air-dual-step evaluation.",
     )
     parser.add_argument(
@@ -241,7 +241,7 @@ def build_argument_parser():
         "--score-min-target-speed",
         type=float,
         default=DEFAULT_MIN_SCORE_TARGET_SPEED,
-        help="Ignore ground-load segments whose absolute target speed is below this threshold.",
+        help="Ignore ground-dual-step segments whose absolute target speed is below this threshold.",
     )
     return parser
 
@@ -278,8 +278,8 @@ def main(argv=None):
         argv_items = list(argv_items)
 
     args = parser.parse_args(argv_items)
-    args.autotune_sequence_explicit = "--autotune-sequence" in argv_items
-    args.autotune_verify_sequence_explicit = "--autotune-verify-sequence" in argv_items
+    args.air_primary_sequence_explicit = "--air-primary-sequence" in argv_items
+    args.air_verify_sequence_explicit = "--air-verify-sequence" in argv_items
     args.mode = normalize_mode_name(args.mode)
 
     try:

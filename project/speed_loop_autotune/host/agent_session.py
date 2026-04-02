@@ -1,7 +1,8 @@
 import json
+import os
 import pathlib
 
-from . import common
+from . import common, llm_decision_contract
 
 
 def _copy_pid_pair(pid_pair):
@@ -47,6 +48,23 @@ def _default_stage_block():
     }
 
 
+def _default_recovery_state():
+    return {
+        "must_recover": False,
+        "high_risk_round_seen": False,
+        "recovery_reason": None,
+        "manual_resume": False,
+        "last_committed_request_id": "",
+        "failure_trace": "",
+    }
+
+
+def _validate_recovery_reason(recovery_reason):
+    if recovery_reason not in ("score_regression", "high_risk_failure"):
+        raise ValueError("Unsupported recovery_reason: {0}".format(recovery_reason))
+    return recovery_reason
+
+
 def _allowed_actions_for_stage(stage_name):
     _validate_stage_name(stage_name)
     if stage_name == "air_dual":
@@ -82,6 +100,20 @@ def _ensure_stage_block(profile, stage_name):
     return block
 
 
+def _ensure_recovery_state(agent_tuning):
+    recovery_state = agent_tuning.get("recovery_state")
+    default_state = _default_recovery_state()
+    if not isinstance(recovery_state, dict):
+        recovery_state = {}
+
+    for key in default_state:
+        if key not in recovery_state:
+            recovery_state[key] = default_state[key]
+
+    agent_tuning["recovery_state"] = recovery_state
+    return recovery_state
+
+
 def _phase_from_round_index(round_index):
     round_value = int(round_index or 0)
     if round_value <= 3:
@@ -104,6 +136,15 @@ def _copy_path_text(path_value):
     return pathlib.Path(path_value).as_posix()
 
 
+def _path_matches_stage_round(path_value, stage_name, batch_id, round_index, suffix):
+    path_text = _copy_path_text(path_value)
+    if not path_text:
+        return False
+    normalized = pathlib.PurePosixPath(path_text.replace("\\", "/"))
+    expected_name = "{0}_r{1:02d}.{2}".format(batch_id, int(round_index), suffix)
+    return normalized.name == expected_name and normalized.parent.name == stage_name
+
+
 def _extract_candidate_pid(result_payload):
     if not isinstance(result_payload, dict):
         return None
@@ -123,6 +164,12 @@ def _copy_summary(summary):
     if not isinstance(summary, dict):
         return {}
     return json.loads(json.dumps(summary, ensure_ascii=False))
+
+
+def _copy_failure_trace(failure_trace):
+    if not isinstance(failure_trace, dict):
+        return None
+    return json.loads(json.dumps(failure_trace, ensure_ascii=False))
 
 
 def _extract_batch_best(summary):
@@ -197,6 +244,11 @@ def ensure_agent_profile_defaults(profile):
         agent_tuning["last_result_path"] = ""
     if "last_decision_trace_path" not in agent_tuning:
         agent_tuning["last_decision_trace_path"] = ""
+    if "last_committed_request_id" not in agent_tuning:
+        agent_tuning["last_committed_request_id"] = ""
+    if "failure_trace" not in agent_tuning:
+        agent_tuning["failure_trace"] = None
+    _ensure_recovery_state(agent_tuning)
 
     profile["agent_tuning"] = agent_tuning
     _ensure_stage_block(profile, "air_dual")
@@ -210,6 +262,7 @@ def start_batch(profile, stage_name, batch_id, start_pid):
     stage_block = _ensure_stage_block(profile, stage_name)
     worker_mode = _stage_worker_mode(stage_name)
     copied_start_pid = _copy_pid_pair(start_pid)
+    recovery_state = _ensure_recovery_state(profile["agent_tuning"])
 
     stage_block["active_batch"] = {
         "batch_id": batch_id,
@@ -230,6 +283,7 @@ def start_batch(profile, stage_name, batch_id, start_pid):
     agent_tuning["current_round_index"] = 0
     agent_tuning["pending_user_action"] = None
     agent_tuning["last_worker_mode"] = worker_mode
+    recovery_state["high_risk_round_seen"] = False
 
     return profile
 
@@ -272,10 +326,108 @@ def build_waveform_path(log_root, stage_name, batch_id, round_index):
     )
 
 
-def record_round_result(profile, stage_name, batch_id, round_index, result_path, result_payload):
+def build_pending_round_result_path(result_path):
+    path = pathlib.Path(result_path)
+    stem = path.stem
+    if stem.endswith(".pending"):
+        return path
+    return path.with_name("{0}.pending{1}".format(stem, path.suffix))
+
+
+def mark_recovery_required(
+    profile,
+    recovery_reason,
+    last_committed_request_id="",
+    failure_trace="",
+):
+    profile = ensure_agent_profile_defaults(profile)
+    recovery_state = _ensure_recovery_state(profile["agent_tuning"])
+    recovery_reason = _validate_recovery_reason(recovery_reason)
+
+    recovery_state["must_recover"] = True
+    if recovery_reason == "high_risk_failure":
+        recovery_state["high_risk_round_seen"] = True
+    recovery_state["recovery_reason"] = recovery_reason
+    recovery_state["manual_resume"] = False
+    if last_committed_request_id:
+        recovery_state["last_committed_request_id"] = str(last_committed_request_id)
+    recovery_state["failure_trace"] = str(failure_trace or "")
+    return profile
+
+
+def mark_manual_resume(profile, last_committed_request_id="", failure_trace=""):
+    profile = ensure_agent_profile_defaults(profile)
+    recovery_state = _ensure_recovery_state(profile["agent_tuning"])
+
+    recovery_state["must_recover"] = True
+    recovery_state["recovery_reason"] = "manual_resume"
+    recovery_state["manual_resume"] = True
+    if last_committed_request_id:
+        recovery_state["last_committed_request_id"] = str(last_committed_request_id)
+    recovery_state["failure_trace"] = str(failure_trace or "")
+    return profile
+
+
+def finalize_successful_round(profile, request_id=""):
+    profile = ensure_agent_profile_defaults(profile)
+    agent_tuning = profile["agent_tuning"]
+    recovery_state = _ensure_recovery_state(profile["agent_tuning"])
+
+    recovery_state["must_recover"] = False
+    recovery_state["recovery_reason"] = None
+    recovery_state["manual_resume"] = False
+    recovery_state["failure_trace"] = ""
+    if request_id:
+        recovery_state["last_committed_request_id"] = str(request_id)
+        agent_tuning["last_committed_request_id"] = str(request_id)
+    agent_tuning["failure_trace"] = None
+    return profile
+
+
+def record_failure_trace(
+    profile,
+    failure_type,
+    request_id="",
+    stage_name="",
+    batch_id="",
+    round_index=0,
+    message="",
+    request_consumed=False,
+):
+    profile = ensure_agent_profile_defaults(profile)
+    agent_tuning = profile["agent_tuning"]
+    failure_trace = {
+        "type": str(failure_type or ""),
+        "request_id": str(request_id or ""),
+        "stage_name": str(stage_name or ""),
+        "batch_id": str(batch_id or ""),
+        "round_index": int(round_index or 0),
+        "message": str(message or ""),
+        "request_consumed": bool(request_consumed),
+    }
+    agent_tuning["failure_trace"] = failure_trace
+    return profile
+
+
+def record_round_result(profile, stage_name, batch_id, round_index, result_path, result_payload, request_id=""):
     profile = ensure_agent_profile_defaults(profile)
     stage_name = _validate_stage_name(stage_name)
     stage_block = _ensure_stage_block(profile, stage_name)
+    llm_decision_contract.validate_round_result(result_payload)
+    expected_mode = _stage_worker_mode(stage_name)
+    payload_batch_id = result_payload.get("batch_id")
+    payload_round_index = int(result_payload.get("round_index", 0) or 0)
+    payload_mode = result_payload.get("mode")
+    if payload_mode != expected_mode:
+        raise ValueError("round_result.mode does not match stage_name")
+    if payload_batch_id != batch_id:
+        raise ValueError("round_result.batch_id does not match record_round_result batch_id")
+    if payload_round_index != int(round_index or 0):
+        raise ValueError("round_result.round_index does not match record_round_result round_index")
+    if _copy_path_text(result_payload.get("result_path")) != _copy_path_text(result_path):
+        raise ValueError("round_result.result_path does not match record_round_result result_path")
+    if not _path_matches_stage_round(result_payload.get("waveform_path"), stage_name, batch_id, round_index, "jsonl"):
+        raise ValueError("round_result.waveform_path does not match stage_name/batch_id/round_index")
     round_value = int(round_index or 0)
     score_value = _coerce_score(getattr(result_payload, "get", lambda *_args, **_kwargs: None)("combined_score"))
     candidate_pid = _extract_candidate_pid(result_payload)
@@ -295,6 +447,8 @@ def record_round_result(profile, stage_name, batch_id, round_index, result_path,
             "last_round_result_path": None,
         }
         stage_block["active_batch"] = active_batch
+    elif round_value <= int(active_batch.get("rounds_completed", 0) or 0):
+        raise ValueError("round_result.round_index must advance active_batch.rounds_completed")
 
     active_batch["rounds_completed"] = max(int(active_batch.get("rounds_completed", 0) or 0), round_value)
     active_batch["search_phase"] = _phase_from_round_index(round_value)
@@ -317,6 +471,7 @@ def record_round_result(profile, stage_name, batch_id, round_index, result_path,
     agent_tuning["last_worker_mode"] = _stage_worker_mode(stage_name)
     agent_tuning["last_result_path"] = result_path_text
 
+    profile = finalize_successful_round(profile, request_id=request_id)
     return profile
 
 
@@ -327,6 +482,40 @@ def append_decision_trace(trace_path, trace_row):
         handle.write(json.dumps(trace_row, ensure_ascii=False, sort_keys=True))
         handle.write("\n")
     return trace_file
+
+
+def persist_round_transaction(
+    profile,
+    stage_name,
+    batch_id,
+    round_index,
+    request_id,
+    result_path,
+    result_payload,
+    trace_path,
+    trace_row,
+):
+    profile = ensure_agent_profile_defaults(profile)
+    result_path_text = _copy_path_text(result_path)
+    pending_path = build_pending_round_result_path(result_path_text)
+    pending_payload = _copy_summary(result_payload)
+    pending_payload["request_id"] = str(request_id)
+
+    common.write_json_file(str(pending_path), pending_payload)
+    append_decision_trace(trace_path, dict(_copy_summary(trace_row), status="pending"))
+    os.replace(str(pending_path), result_path_text)
+
+    profile = record_round_result(
+        profile,
+        stage_name,
+        batch_id,
+        round_index,
+        result_path_text,
+        result_payload,
+        request_id=request_id,
+    )
+    append_decision_trace(trace_path, dict(_copy_summary(trace_row), status="committed"))
+    return profile
 
 
 def resume_session_state(profile):
@@ -341,6 +530,9 @@ def resume_session_state(profile):
         "last_worker_mode": agent_tuning.get("last_worker_mode", ""),
         "last_result_path": agent_tuning.get("last_result_path", ""),
         "last_decision_trace_path": agent_tuning.get("last_decision_trace_path", ""),
+        "last_committed_request_id": agent_tuning.get("last_committed_request_id", ""),
+        "failure_trace": _copy_failure_trace(agent_tuning.get("failure_trace")),
+        "recovery_state": _copy_summary(agent_tuning.get("recovery_state")),
     }
 
 

@@ -12,9 +12,10 @@ This directory contains the autotune workflow, shared profile, protocol docs, an
 ## Current Workflow
 
 - The autotune skill is the only user-facing entry point.
+- The decision path is `skill -> speed_loop_tuning agent -> agent_orchestrator -> step worker`.
 - The skill reads `project/speed_loop_autotune/logs/current_tuning_profile.json` first.
 - If required profile fields are missing, the skill may auto-run `pwm_map` and `pwm_identify`.
-- `air_dual` and `ground_dual` both run as 10-round batches.
+- `air_dual` and `ground_dual` now run through the request/response orchestrator state machine, not the retired direct rule loop.
 - Boundary actions are only exposed after a batch completes.
 - `save` is only a `ground_dual` batch-boundary action.
 - Structured metrics are the primary evidence; waveforms are secondary evidence.
@@ -26,11 +27,26 @@ This directory contains the autotune workflow, shared profile, protocol docs, an
 - `pwm_identify`
   Open-loop step identification that produces the initial left/right `seed_pi`.
 - `air_dual`
-  Airborne dual-wheel batch tuning.
+  Airborne dual-wheel LLM-driven batch tuning.
 - `ground_dual`
-  Loaded dual-wheel batch verification and final convergence.
+  Loaded dual-wheel LLM-driven batch verification and final convergence.
 
 For the full batch flow, boundary actions, and log locations, see `docs/agent_autotune.md`.
+
+## Runtime States
+
+- `decision_required`
+  - orchestrator has prepared one round request for the decision agent
+- `waiting_user`
+  - orchestrator has stopped at a legal user boundary
+- `completed`
+  - the current workflow branch is done
+
+The current restore truth sources are:
+
+- `agent_tuning.last_committed_request_id`
+- `agent_tuning.failure_trace`
+- `agent_tuning.recovery_state`
 
 ## Profile Fallbacks
 

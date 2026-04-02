@@ -31,7 +31,7 @@
 
 ## 带负载双轮评分
 
-- 主评分入口：`_score_ground_load_trial()`
+- 主评分入口：`_score_ground_stage_trial()`
 - 重点看各段分数、停车状态、残余速度、残余 PWM
 - `stop_flag`、`trial_active`、冷却段残余速度在带负载试验里直接参与惩罚
 - 带负载双轮当前不复用架空双轮的“高 PWM 速度下坠”附加项描述，应按实车/带载逻辑单独分析

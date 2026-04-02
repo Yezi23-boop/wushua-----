@@ -47,8 +47,8 @@ TrialMetrics = collections.namedtuple(
         "tail_jitter",
     ],
 )
-GroundLoadTrial = collections.namedtuple(
-    "GroundLoadTrial",
+SpeedStageTrial = collections.namedtuple(
+    "SpeedStageTrial",
     ["name", "segments_ms", "trial_ms"],
 )
 RepeatScoreSummary = collections.namedtuple(
@@ -60,12 +60,12 @@ WheelCandidateEvaluation = collections.namedtuple(
     ["median_score", "scores", "overshoot_ratios", "persistent_overshoot"],
 )
 
-GROUND_LOAD_TARGET_TOLERANCE = 0.8
+STAGE_TARGET_TOLERANCE = 0.8
 DEFAULT_SCORE_CONFIG = ScoreConfig(1.0, 12.0, 2.6, 10.0, 0.08, 3.0)
 DEFAULT_MIN_SCORE_TARGET_SPEED = 10.0
 DEFAULT_MULTI_SPEED_WORST_WEIGHT = 0.7
 DEFAULT_KD_OVERSHOOT_RUNS = 3
-DEFAULT_AUTOTUNE_SEARCH_TOLERANCE = 1.0
+DEFAULT_PID_SEARCH_TOLERANCE = 1.0
 MODE_PWM_IDENTIFY = "pwm-identify"
 MODE_PWM_MAP = "pwm-map"
 MODE_AIR_DUAL_STEP = "air-dual-step"
@@ -677,7 +677,7 @@ def normalize_mode_name(mode_name):
     raise ValueError("Unsupported mode: {0}".format(mode_name))
 
 
-def twiddle_optimize(initial, deltas, evaluator, iterations=12, tolerance=DEFAULT_AUTOTUNE_SEARCH_TOLERANCE):
+def twiddle_optimize(initial, deltas, evaluator, iterations=12, tolerance=DEFAULT_PID_SEARCH_TOLERANCE):
     best = _make_gains([initial.kp, initial.ki, initial.kd])
     best_score = evaluator(best)
     working_deltas = [abs(deltas.kp), abs(deltas.ki), abs(deltas.kd)]
@@ -949,7 +949,7 @@ def _target_matches(actual, expected, tolerance):
     return abs(actual - expected) <= tolerance
 
 
-def _split_ground_load_segments(samples, trial, tolerance=GROUND_LOAD_TARGET_TOLERANCE):
+def _split_stage_segments(samples, trial, tolerance=STAGE_TARGET_TOLERANCE):
     targets = [segment[0] for segment in trial.segments_ms]
     if len(targets) <= 1:
         return [samples]
@@ -1013,7 +1013,7 @@ def score_multi_speed_trial(
     if not samples:
         return float("inf")
 
-    segment_groups = _split_ground_load_segments(samples, trial)
+    segment_groups = _split_stage_segments(samples, trial)
     segment_scores = []
     segment_index = 0
 
@@ -1084,7 +1084,7 @@ def _max_segment_overshoot_ratio(samples, trial, score_config=None, min_target_s
     if score_config is None:
         score_config = DEFAULT_SCORE_CONFIG
 
-    segment_groups = _split_ground_load_segments(samples, trial)
+    segment_groups = _split_stage_segments(samples, trial)
     overshoot_ratios = []
     segment_index = 0
 

@@ -1,31 +1,26 @@
-import csv
 import json
 import pathlib
-import sys
 import time
 
 from . import agent_session, common
 from .common import (
-    DEFAULT_AUTOTUNE_SEARCH_TOLERANCE,
     DEFAULT_KD_OVERSHOOT_RUNS,
     DEFAULT_MIN_SCORE_TARGET_SPEED,
     DEFAULT_SCORE_CONFIG,
     DEFAULT_TUNING_PROFILE_PATH,
     MODE_AIR_DUAL_STEP,
-    GroundLoadTrial,
+    SpeedStageTrial,
     PidGains,
     RepeatScoreSummary,
     TelemetrySample,
     TrialMetrics,
     WheelCandidateEvaluation,
     WheelPidGains,
-    ZERO_PID_GAINS,
     _median_value,
-    _clamp_non_negative,
     _max_pair_overshoot_ratio,
     _max_segment_overshoot_ratio,
     _project_samples_to_wheel,
-    _split_ground_load_segments,
+    _split_stage_segments,
     apply_speed_gains,
     analyze_trial,
     build_score_config,
@@ -39,115 +34,25 @@ from .common import (
     score_multi_speed_trial,
     score_wheel_multi_speed_trial,
     summarize_repeat_scores,
-    twiddle_optimize,
-    save_tuning_profile,
     write_json_file,
     wheel_pid_gains_from_dict,
     wheel_pid_gains_to_dict,
 )
 
 
-DEFAULT_AUTOTUNE_SEQUENCE = "15:500,25:500,35:500,45:500,35:500,25:500,15:500"
-DEFAULT_AUTOTUNE_VERIFY_SEQUENCE = "15:300,25:300,35:300,45:300,35:300,25:300,15:300"
-DEFAULT_AUTOTUNE_TAIL_ZERO_MS = 200
-DEFAULT_AUTOTUNE_REPEAT_COUNT = 3
+DEFAULT_AIR_PRIMARY_SEQUENCE = "15:500,25:500,35:500,45:500,35:500,25:500,15:500"
+DEFAULT_AIR_VERIFY_SEQUENCE = "15:300,25:300,35:300,45:300,35:300,25:300,15:300"
+DEFAULT_AIR_TAIL_ZERO_MS = 200
+DEFAULT_AIR_REPEAT_COUNT = 3
 DEFAULT_DUAL_REFINE_STEP = 2.0
 DEFAULT_DUAL_PWM_HIGH_THRESHOLD = 3300.0
 DEFAULT_DUAL_SPEED_RATIO_FLOOR = 0.88
 MAX_VALID_ENCODER_SPEED = 200.0
-DEFAULT_STAGE_CONFIRM_BATCHES = 2
-TUNING_PRESETS = (
-    {"name": "coarse", "kp_step": 10.0, "ki_step": 5.0, "repeat_each": 1},
-    {"name": "fine", "kp_step": 5.0, "ki_step": 2.0, "repeat_each": 2},
-    {"name": "micro", "kp_step": 2.0, "ki_step": 1.0, "repeat_each": 3},
-)
-SUMMARY_KEEP_COMBINED_RATIO = 0.90
-SUMMARY_KEEP_TRIAL_RATIO = 1.05
-SUMMARY_REJECT_COMBINED_RATIO = 1.15
-SUMMARY_REJECT_TRIAL_RATIO = 1.20
-SUMMARY_PRIMARY_TARGET_MIN = 15.0
-SUMMARY_PRIMARY_SCORE_REJECT_RATIO = 1.50
-SUMMARY_PRIMARY_SCORE_REJECT_DELTA = 3.0
-SUMMARY_PRIMARY_SPEED_DROP_RATIO = 0.08
-SUMMARY_PRIMARY_SPEED_DROP_MIN = 1.0
-SUMMARY_HISTORY_PATH = pathlib.Path(__file__).resolve().parents[1] / "logs" / "tuning_history_summary.csv"
-SEGMENT_HISTORY_PATH = pathlib.Path(__file__).resolve().parents[1] / "logs" / "tuning_history_segments.csv"
-DEFAULT_BATCH_HISTORY_LIMIT = 20
-
-SUMMARY_HISTORY_HEADERS = [
-    "timestamp",
-    "stage",
-    "pid_label",
-    "left_kp",
-    "left_ki",
-    "left_kd",
-    "right_kp",
-    "right_ki",
-    "right_kd",
-    "a_score",
-    "b_score",
-    "combined_score",
-    "decision",
-]
-SEGMENT_HISTORY_HEADERS = [
-    "timestamp",
-    "stage",
-    "pid_label",
-    "trial_label",
-    "wheel",
-    "target_speed",
-    "sample_count",
-    "mean_speed",
-    "segment_score",
-    "rise_ratio",
-    "settle_ratio",
-    "overshoot",
-    "steady_error",
-]
-
-
-class CandidateLimitReached(Exception):
-    def __init__(self, count, stage_name, best_pair, best_score):
-        Exception.__init__(self, "candidate limit reached")
-        self.count = count
-        self.stage_name = stage_name
-        self.best_pair = best_pair
-        self.best_score = best_score
-
-
-class CandidateLimitTracker(object):
-    def __init__(self, limit):
-        self.limit = int(limit or 0)
-        self.count = 0
-        self.current_stage_name = ""
-        self.best_pair = None
-        self.best_score = float("inf")
-
-    def observe(self, stage_name, reported_gains, combined_score):
-        if self.limit <= 0:
-            return
-
-        if self.current_stage_name != stage_name:
-            self.current_stage_name = stage_name
-            self.best_pair = reported_gains
-            self.best_score = combined_score
-        elif combined_score < self.best_score:
-            self.best_pair = reported_gains
-            self.best_score = combined_score
-
-        self.count += 1
-        if self.count >= self.limit:
-            raise CandidateLimitReached(
-                self.count,
-                self.current_stage_name,
-                self.best_pair,
-                self.best_score,
-            )
 
 def resolve_air_dual_profile_defaults(args):
     profile = load_tuning_profile(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)), required=False)
-    autotune_sequence = args.autotune_sequence
-    verify_sequence = args.autotune_verify_sequence
+    air_primary_sequence = args.air_primary_sequence
+    verify_sequence = args.air_verify_sequence
     initial_pair = WheelPidGains(
         PidGains(args.initial_kp, args.initial_ki, args.initial_kd),
         PidGains(args.initial_kp, args.initial_ki, args.initial_kd),
@@ -161,15 +66,15 @@ def resolve_air_dual_profile_defaults(args):
         default_sequences = shared_targets.get("default_sequences", {})
         custom_sequences = shared_targets.get("custom_sequences", {})
 
-    if not getattr(args, "autotune_sequence_explicit", 0):
+    if not getattr(args, "air_primary_sequence_explicit", 0):
         sequence_rows = custom_sequences.get("air_primary")
         if not sequence_rows:
             sequence_rows = default_sequences.get("air_primary")
         sequence_text = profile_rows_to_sequence_text(sequence_rows)
         if sequence_text:
-            autotune_sequence = sequence_text
+            air_primary_sequence = sequence_text
 
-    if not getattr(args, "autotune_verify_sequence_explicit", 0):
+    if not getattr(args, "air_verify_sequence_explicit", 0):
         verify_rows = custom_sequences.get("air_verify")
         if not verify_rows:
             verify_rows = default_sequences.get("air_verify")
@@ -188,7 +93,7 @@ def resolve_air_dual_profile_defaults(args):
     return {
         "profile": profile,
         "profile_path": resolve_profile_path(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH))),
-        "autotune_sequence": autotune_sequence,
+        "air_primary_sequence": air_primary_sequence,
         "verify_sequence": verify_sequence,
         "initial_pair": initial_pair,
         "shared_targets": shared_targets,
@@ -407,17 +312,17 @@ def _compute_overshoot_flag(display, overshoot_gate):
 def _evaluate_air_dual_step_candidate(client, args, trial, verify_trial, score_config, gains_pair):
     del verify_trial
     sample_runs = []
-    repeat_each = max(1, int(getattr(args, "repeat_each", DEFAULT_AUTOTUNE_REPEAT_COUNT) or 1))
+    repeat_each = max(1, int(getattr(args, "repeat_each", DEFAULT_AIR_REPEAT_COUNT) or 1))
 
     run_index = 0
     while run_index < repeat_each:
         sample_runs.append(
-            run_autotune_trial(
+            run_air_step_trial(
                 client,
                 gains_pair,
                 trial,
                 args.rest_seconds,
-                tail_zero_ms=args.autotune_tail_zero_ms,
+                tail_zero_ms=args.air_tail_zero_ms,
             )
         )
         run_index += 1
@@ -457,8 +362,8 @@ def _evaluate_air_dual_step_candidate(client, args, trial, verify_trial, score_c
 
 def run_air_dual_step(client, args):
     resolved = resolve_air_dual_profile_defaults(args)
-    trial = build_autotune_trial(resolved["autotune_sequence"])
-    verify_trial = build_autotune_verify_trial(resolved["verify_sequence"])
+    trial = build_air_primary_trial(resolved["air_primary_sequence"])
+    verify_trial = build_air_verify_trial(resolved["verify_sequence"])
     score_config = build_score_config(args)
     profile = resolved["profile"]
     default_pair = resolved["initial_pair"]
@@ -535,7 +440,7 @@ def _build_empty_segment_summary(target_speed):
 
 def _summarize_trial_for_wheel(samples, trial, wheel_name, score_config=None, min_target_speed=DEFAULT_MIN_SCORE_TARGET_SPEED):
     projected = _filter_projected_samples(_project_samples_to_wheel(samples, wheel_name))
-    groups = _split_ground_load_segments(projected, trial)
+    groups = _split_stage_segments(projected, trial)
     segment_summaries = []
     segment_scores = []
     segment_index = 0
@@ -696,41 +601,41 @@ def _parse_sequence_text(sequence_text):
     return tuple(segments)
 
 
-def build_autotune_trial(sequence_text=None):
+def build_air_primary_trial(sequence_text=None):
     if sequence_text is None:
-        sequence_text = DEFAULT_AUTOTUNE_SEQUENCE
+        sequence_text = DEFAULT_AIR_PRIMARY_SEQUENCE
 
     segments = _parse_sequence_text(sequence_text)
-    if sequence_text == DEFAULT_AUTOTUNE_SEQUENCE:
-        name = "autotune_15_25_35_45_35_25_15"
+    if sequence_text == DEFAULT_AIR_PRIMARY_SEQUENCE:
+        name = "air_primary_15_25_35_45_35_25_15"
     else:
-        name = "autotune_custom"
+        name = "air_primary_custom"
 
-    return GroundLoadTrial(
+    return SpeedStageTrial(
         name,
         segments,
         sum([segment[1] for segment in segments]),
     )
 
 
-def build_autotune_verify_trial(sequence_text=None):
+def build_air_verify_trial(sequence_text=None):
     if sequence_text is None:
-        sequence_text = DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+        sequence_text = DEFAULT_AIR_VERIFY_SEQUENCE
 
     segments = _parse_sequence_text(sequence_text)
-    if sequence_text == DEFAULT_AUTOTUNE_VERIFY_SEQUENCE:
-        name = "autotune_verify_15_25_35_45_35_25_15"
+    if sequence_text == DEFAULT_AIR_VERIFY_SEQUENCE:
+        name = "air_verify_15_25_35_45_35_25_15"
     else:
-        name = "autotune_verify_custom"
+        name = "air_verify_custom"
 
-    return GroundLoadTrial(
+    return SpeedStageTrial(
         name,
         segments,
         sum([segment[1] for segment in segments]),
     )
 
 
-def _build_autotune_capture_events(trial, tail_zero_ms):
+def _build_air_step_capture_events(trial, tail_zero_ms):
     events = []
     elapsed_ms = 0
     for target_speed, hold_ms in trial.segments_ms[:-1]:
@@ -747,12 +652,12 @@ def _build_autotune_capture_events(trial, tail_zero_ms):
     return events
 
 
-def run_autotune_trial(
+def run_air_step_trial(
     client,
     gains,
     trial,
     rest_seconds,
-    tail_zero_ms=DEFAULT_AUTOTUNE_TAIL_ZERO_MS,
+    tail_zero_ms=DEFAULT_AIR_TAIL_ZERO_MS,
     sleep_fn=time.sleep,
 ):
     client.send_command("TEST_speed=0")
@@ -763,7 +668,7 @@ def run_autotune_trial(
     client.send_command("TEST_speed={0}".format(format_gain(trial.segments_ms[0][0])))
     samples = client.capture_trial(
         float(trial.trial_ms + tail_zero_ms) / 1000.0,
-        events=_build_autotune_capture_events(trial, tail_zero_ms),
+        events=_build_air_step_capture_events(trial, tail_zero_ms),
     )
     client.send_command("TEST_speed=0")
     return samples

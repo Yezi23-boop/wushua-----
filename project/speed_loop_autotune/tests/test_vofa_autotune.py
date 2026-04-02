@@ -99,7 +99,7 @@ class ScoreTests(unittest.TestCase):
 
     def test_scores_left_and_right_wheels_independently(self):
         module = load_module()
-        trial = module.build_autotune_trial("20:200,40:200")
+        trial = module.build_air_primary_trial("20:200,40:200")
 
         samples = [
             module.TelemetrySample(20.0, 8.0, 18.0, 0.0, 0.0, 1.0, 0.0),
@@ -115,7 +115,7 @@ class ScoreTests(unittest.TestCase):
 
     def test_dual_score_penalizes_joint_high_pwm_with_speed_sag(self):
         module = load_module()
-        trial = module.build_autotune_trial("20:200,40:200")
+        trial = module.build_air_primary_trial("20:200,40:200")
 
         healthy = [
             module.TelemetrySample(20.0, 18.5, 18.2, 2200.0, 2250.0, 1.0, 0.0),
@@ -144,8 +144,8 @@ class ScoreConfigTests(unittest.TestCase):
         args = parser.parse_args([])
 
         self.assertEqual(args.mode, "pwm-map")
-        self.assertEqual(args.autotune_sequence, module.DEFAULT_AUTOTUNE_SEQUENCE)
-        self.assertEqual(args.autotune_verify_sequence, module.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE)
+        self.assertEqual(args.air_primary_sequence, module.DEFAULT_AIR_PRIMARY_SEQUENCE)
+        self.assertEqual(args.air_verify_sequence, module.DEFAULT_AIR_VERIFY_SEQUENCE)
         self.assertEqual(args.identify_pwm_step, 200)
         self.assertEqual(args.identify_pwm_max, 10000)
         self.assertEqual(args.identify_repeat, 2)
@@ -287,7 +287,7 @@ class ModuleSplitTests(unittest.TestCase):
         self.assertEqual(common.MODE_GROUND_DUAL_STEP, "ground-dual-step")
         self.assertEqual(common.MODE_PWM_IDENTIFY, "pwm-identify")
         self.assertEqual(common.MODE_PWM_MAP, "pwm-map")
-        self.assertEqual(air_dual.DEFAULT_AUTOTUNE_SEQUENCE.count(","), 6)
+        self.assertEqual(air_dual.DEFAULT_AIR_PRIMARY_SEQUENCE.count(","), 6)
         self.assertFalse(hasattr(air_dual, "run_air_dual_autotune"))
         self.assertFalse(hasattr(ground_dual, "run_ground_dual_autotune"))
         self.assertTrue(hasattr(pwm_identify, "run_pwm_identify"))
@@ -551,7 +551,7 @@ class GroundLoadTests(unittest.TestCase):
     def test_low_speed_segments_can_be_ignored_from_group_score(self):
         module = load_module()
 
-        trial = module.GroundLoadTrial(
+        trial = module.SpeedStageTrial(
             "mixed_8_20",
             ((8.0, 200), (20.0, 200)),
             400,
@@ -576,12 +576,12 @@ class GroundLoadTests(unittest.TestCase):
             ]
         ]
 
-        bad_score = module.score_ground_load_group(
+        bad_score = module.score_ground_stage_group(
             with_bad_low_speed,
             trials=[trial],
             min_target_speed=10.0,
         )
-        good_score = module.score_ground_load_group(
+        good_score = module.score_ground_stage_group(
             with_good_low_speed,
             trials=[trial],
             min_target_speed=10.0,
@@ -589,10 +589,10 @@ class GroundLoadTests(unittest.TestCase):
 
         self.assertAlmostEqual(bad_score, good_score, places=6)
 
-    def test_build_ground_load_trials_matches_small_track_plan(self):
+    def test_build_ground_step_trials_matches_small_track_plan(self):
         module = load_module()
 
-        trials = module.build_ground_load_trials()
+        trials = module.build_ground_step_trials()
 
         self.assertEqual(
             [(trial.name, trial.segments_ms, trial.trial_ms) for trial in trials],
@@ -611,16 +611,16 @@ class GroundLoadTests(unittest.TestCase):
             ],
         )
 
-    def test_build_ground_load_return_trial_mirrors_distance_conservatively(self):
+    def test_build_ground_return_trial_mirrors_distance_conservatively(self):
         module = load_module()
 
-        forward_trial = module.GroundLoadTrial(
+        forward_trial = module.SpeedStageTrial(
             "forward",
             ((25.0, 200), (35.0, 200), (45.0, 200)),
             600,
         )
 
-        return_trial = module.build_ground_load_return_trial(forward_trial, speed_scale=0.6, max_speed=30.0)
+        return_trial = module.build_ground_return_trial(forward_trial, speed_scale=0.6, max_speed=30.0)
 
         self.assertEqual(
             (return_trial.name, return_trial.segments_ms, return_trial.trial_ms),
@@ -666,26 +666,26 @@ class GroundLoadTests(unittest.TestCase):
         ]
 
         self.assertLess(
-            module.score_ground_load_group(healthy),
-            module.score_ground_load_group(unsafe),
+            module.score_ground_stage_group(healthy),
+            module.score_ground_stage_group(unsafe),
         )
 
-    def test_score_ground_load_group_rejects_missing_trial_groups(self):
+    def test_score_ground_stage_group_rejects_missing_trial_groups(self):
         module = load_module()
         trials = [
-            module.GroundLoadTrial("t1", ((25.0, 200),), 200),
-            module.GroundLoadTrial("t2", ((35.0, 200),), 200),
+            module.SpeedStageTrial("t1", ((25.0, 200),), 200),
+            module.SpeedStageTrial("t2", ((35.0, 200),), 200),
         ]
         groups = [
             [module.TelemetrySample(25.0, 24.5, 24.2, 2200.0, 2210.0, 0.0, 1.0)],
         ]
 
         self.assertEqual(
-            module.score_ground_load_group(groups, trials=trials),
+            module.score_ground_stage_group(groups, trials=trials),
             float("inf"),
         )
 
-    def test_run_ground_load_group_sends_expected_commands(self):
+    def test_run_ground_stage_group_sends_expected_commands(self):
         module = load_module()
 
         class FakeClient(object):
@@ -709,19 +709,16 @@ class GroundLoadTests(unittest.TestCase):
             [module.TelemetrySample(-15.0, -14.0, -14.2, 1800.0, 1790.0, 0.0, 1.0)],
         ]
         client = FakeClient(sample_batches)
-        prompts = []
         sleep_calls = []
-        return_trial = module.build_ground_load_return_trial(module.build_ground_load_trials()[0], speed_scale=0.6, max_speed=30.0)
+        return_trial = module.build_ground_return_trial(module.build_ground_step_trials()[0], speed_scale=0.6, max_speed=30.0)
 
-        score, results = module.run_ground_load_group(
+        score, results = module.run_ground_stage_group(
             client,
             module.PidGains(105.0, 20.0, 0.0),
-            wait_for_operator=lambda message: prompts.append(message),
             return_trial=return_trial,
             sleep_fn=lambda seconds: sleep_calls.append(seconds),
         )
 
-        self.assertEqual(len(prompts), 1)
         self.assertEqual(len(results), 1)
         self.assertLess(score, float("inf"))
         self.assertEqual(sleep_calls, [0.7])
@@ -765,15 +762,15 @@ class GroundLoadTests(unittest.TestCase):
 
 
 class AutotuneModeTests(unittest.TestCase):
-    def test_build_autotune_trial_matches_airborne_plan(self):
+    def test_build_air_primary_trial_matches_airborne_plan(self):
         module = load_module()
 
-        trial = module.build_autotune_trial()
+        trial = module.build_air_primary_trial()
 
         self.assertEqual(
             (trial.name, trial.segments_ms, trial.trial_ms),
             (
-                "autotune_15_25_35_45_35_25_15",
+                "air_primary_15_25_35_45_35_25_15",
                 (
                     (15.0, 500),
                     (25.0, 500),
@@ -787,15 +784,15 @@ class AutotuneModeTests(unittest.TestCase):
             ),
         )
 
-    def test_build_autotune_verify_trial_matches_fast_plan(self):
+    def test_build_air_verify_trial_matches_fast_plan(self):
         module = load_module()
 
-        trial = module.build_autotune_verify_trial()
+        trial = module.build_air_verify_trial()
 
         self.assertEqual(
             (trial.name, trial.segments_ms, trial.trial_ms),
             (
-                "autotune_verify_15_25_35_45_35_25_15",
+                "air_verify_15_25_35_45_35_25_15",
                 (
                     (15.0, 300),
                     (25.0, 300),
@@ -809,21 +806,21 @@ class AutotuneModeTests(unittest.TestCase):
             ),
         )
 
-    def test_build_autotune_trial_accepts_custom_sequence(self):
+    def test_build_air_primary_trial_accepts_custom_sequence(self):
         module = load_module()
 
-        trial = module.build_autotune_trial("20:120,35:80,50:150")
+        trial = module.build_air_primary_trial("20:120,35:80,50:150")
 
         self.assertEqual(
             (trial.name, trial.segments_ms, trial.trial_ms),
             (
-                "autotune_custom",
+                "air_primary_custom",
                 ((20.0, 120), (35.0, 80), (50.0, 150)),
                 350,
             ),
         )
 
-    def test_run_autotune_trial_sends_multi_speed_sequence(self):
+    def test_run_air_step_trial_sends_multi_speed_sequence(self):
         module = load_module()
 
         class FakeClient(object):
@@ -839,7 +836,7 @@ class AutotuneModeTests(unittest.TestCase):
                 self.capture_calls.append((duration_seconds, list(events or [])))
                 return list(self.sample_batch)
 
-        trial = module.build_autotune_trial("15:100,25:100,35:100")
+        trial = module.build_air_primary_trial("15:100,25:100,35:100")
         client = FakeClient(
             [
                 module.TelemetrySample(15.0, 12.0, 12.2, 0.0, 0.0, 1.0, 0.0),
@@ -850,7 +847,7 @@ class AutotuneModeTests(unittest.TestCase):
         )
         sleep_calls = []
 
-        samples = module.run_autotune_trial(
+        samples = module.run_air_step_trial(
             client,
             module.PidGains(105.0, 20.0, 0.0),
             trial,
@@ -909,7 +906,7 @@ class AutotuneModeTests(unittest.TestCase):
 
         self.assertFalse(summary.persistent_overshoot)
 
-    def test_run_autotune_trial_accepts_independent_left_right_gains(self):
+    def test_run_air_step_trial_accepts_independent_left_right_gains(self):
         module = load_module()
 
         class FakeClient(object):
@@ -925,7 +922,7 @@ class AutotuneModeTests(unittest.TestCase):
                 self.capture_calls.append((duration_seconds, list(events or [])))
                 return list(self.sample_batch)
 
-        trial = module.build_autotune_trial()
+        trial = module.build_air_primary_trial()
         client = FakeClient(
             [
                 module.TelemetrySample(15.0, 12.0, 12.2, 0.0, 0.0, 1.0, 0.0),
@@ -937,7 +934,7 @@ class AutotuneModeTests(unittest.TestCase):
             module.PidGains(109.0, 17.0, 0.5),
         )
 
-        module.run_autotune_trial(
+        module.run_air_step_trial(
             client,
             gains,
             trial,
@@ -1675,8 +1672,8 @@ class SearchTests(unittest.TestCase):
         common = load_host_package_module("common")
 
         class Args(object):
-            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
-            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            air_primary_sequence = air_dual.DEFAULT_AIR_PRIMARY_SEQUENCE
+            air_verify_sequence = air_dual.DEFAULT_AIR_VERIFY_SEQUENCE
             initial_kp = 100.0
             initial_ki = 20.0
             initial_kd = 0.0
@@ -1713,7 +1710,7 @@ class SearchTests(unittest.TestCase):
             args.profile_path = str(profile_path)
             resolved = air_dual.resolve_air_dual_profile_defaults(args)
 
-        self.assertEqual(resolved["autotune_sequence"], "10:500,20:500")
+        self.assertEqual(resolved["air_primary_sequence"], "10:500,20:500")
         self.assertEqual(resolved["verify_sequence"], "11:300,21:300")
         self.assertEqual(
             resolved["initial_pair"],
@@ -1724,8 +1721,8 @@ class SearchTests(unittest.TestCase):
         air_dual = load_host_package_module("air_dual")
 
         class Args(object):
-            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
-            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            air_primary_sequence = air_dual.DEFAULT_AIR_PRIMARY_SEQUENCE
+            air_verify_sequence = air_dual.DEFAULT_AIR_VERIFY_SEQUENCE
             initial_kp = 100.0
             initial_ki = 20.0
             initial_kd = 0.0
@@ -1764,15 +1761,15 @@ class SearchTests(unittest.TestCase):
             args.profile_path = str(profile_path)
             resolved = air_dual.resolve_air_dual_profile_defaults(args)
 
-        self.assertEqual(resolved["autotune_sequence"], "30:500,60:500")
+        self.assertEqual(resolved["air_primary_sequence"], "30:500,60:500")
         self.assertEqual(resolved["verify_sequence"], "31:300,61:300")
 
     def test_resolve_air_dual_profile_defaults_accepts_custom_sequence_text(self):
         air_dual = load_host_package_module("air_dual")
 
         class Args(object):
-            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
-            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            air_primary_sequence = air_dual.DEFAULT_AIR_PRIMARY_SEQUENCE
+            air_verify_sequence = air_dual.DEFAULT_AIR_VERIFY_SEQUENCE
             initial_kp = 100.0
             initial_ki = 20.0
             initial_kd = 0.0
@@ -1805,7 +1802,7 @@ class SearchTests(unittest.TestCase):
             args.profile_path = str(profile_path)
             resolved = air_dual.resolve_air_dual_profile_defaults(args)
 
-        self.assertEqual(resolved["autotune_sequence"], "30:500,60:500,90:500")
+        self.assertEqual(resolved["air_primary_sequence"], "30:500,60:500,90:500")
         self.assertEqual(resolved["verify_sequence"], "31:300,61:300,91:300")
 
     def test_resolve_air_dual_profile_defaults_prefers_air_best_over_seed_pi(self):
@@ -1813,8 +1810,8 @@ class SearchTests(unittest.TestCase):
         common = load_host_package_module("common")
 
         class Args(object):
-            autotune_sequence = air_dual.DEFAULT_AUTOTUNE_SEQUENCE
-            autotune_verify_sequence = air_dual.DEFAULT_AUTOTUNE_VERIFY_SEQUENCE
+            air_primary_sequence = air_dual.DEFAULT_AIR_PRIMARY_SEQUENCE
+            air_verify_sequence = air_dual.DEFAULT_AIR_VERIFY_SEQUENCE
             initial_kp = 100.0
             initial_ki = 20.0
             initial_kd = 0.0
@@ -1872,7 +1869,7 @@ class SearchTests(unittest.TestCase):
             }
         }
 
-        trials = ground_dual.build_ground_load_trials(profile)
+        trials = ground_dual.build_ground_step_trials(profile)
 
         self.assertEqual(trials[0].segments_ms, ((42.0, 250), (84.0, 250)))
 
@@ -1892,7 +1889,7 @@ class SearchTests(unittest.TestCase):
             }
         }
 
-        trials = ground_dual.build_ground_load_trials(profile)
+        trials = ground_dual.build_ground_step_trials(profile)
 
         self.assertEqual(trials[0].segments_ms, ((42.0, 250), (84.0, 250), (126.0, 250)))
 

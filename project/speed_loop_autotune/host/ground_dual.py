@@ -7,17 +7,16 @@ from .common import (
     DEFAULT_TUNING_PROFILE_PATH,
     DEFAULT_MIN_SCORE_TARGET_SPEED,
     DEFAULT_SCORE_CONFIG,
-    GroundLoadTrial,
+    SpeedStageTrial,
     PidGains,
     WheelPidGains,
     _build_trial_events,
     _segment_is_scored,
-    _split_ground_load_segments,
+    _split_stage_segments,
     analyze_trial,
     apply_speed_gains,
     build_score_config,
     combine_multi_speed_scores,
-    describe_gains,
     format_gain,
     load_wheel_pid_gains_json,
     load_tuning_profile,
@@ -32,7 +31,7 @@ from .common import (
 )
 
 
-def build_ground_load_trials(profile=None):
+def build_ground_step_trials(profile=None):
     default_sequences = {}
     custom_sequences = {}
     forward_segments = ()
@@ -46,7 +45,7 @@ def build_ground_load_trials(profile=None):
 
     if forward_segments:
         return [
-            GroundLoadTrial(
+            SpeedStageTrial(
                 "profile_ground_forward",
                 forward_segments,
                 sum([segment[1] for segment in forward_segments]),
@@ -54,7 +53,7 @@ def build_ground_load_trials(profile=None):
         ]
 
     return [
-        GroundLoadTrial(
+        SpeedStageTrial(
             "sequence_25_35_45_35_25",
             ((25.0, 200), (35.0, 200), (45.0, 200), (35.0, 200), (25.0, 200)),
             1000,
@@ -133,7 +132,7 @@ def _build_ground_segment_display(group_results, trials, score_config=None, min_
         score_config = DEFAULT_SCORE_CONFIG
 
     for trial, samples in zip(trials, group_results):
-        segment_groups = _split_ground_load_segments(samples, trial)
+        segment_groups = _split_stage_segments(samples, trial)
         segment_index = 0
         while segment_index < len(trial.segments_ms):
             target_speed = trial.segments_ms[segment_index][0]
@@ -300,10 +299,9 @@ def _compute_pwm_saturation_ratio(group_results, threshold=3300.0):
 
 
 def _evaluate_ground_dual_step_candidate(client, args, trials, return_trial, score_config, gains):
-    score, group_results = run_ground_load_group(
+    score, group_results = run_ground_stage_group(
         client,
         gains,
-        wait_for_operator=lambda _message: None,
         fuya_pwm=args.fuya_pwm,
         cooldown_ms=args.ground_cooldown_ms,
         precharge_ms=args.ground_precharge_ms,
@@ -319,7 +317,7 @@ def _evaluate_ground_dual_step_candidate(client, args, trials, return_trial, sco
         group_results,
     )
 
-def build_ground_load_return_trial(forward_trial, speed_scale=0.6, max_speed=30.0):
+def build_ground_return_trial(forward_trial, speed_scale=0.6, max_speed=30.0):
     if speed_scale <= 0.0:
         return None
 
@@ -344,14 +342,14 @@ def build_ground_load_return_trial(forward_trial, speed_scale=0.6, max_speed=30.
 
         segments.append((return_speed, return_hold_ms))
 
-    return GroundLoadTrial(
+    return SpeedStageTrial(
         "{0}_return".format(forward_trial.name),
         tuple(segments),
         sum([segment[1] for segment in segments]),
     )
 
 
-def _score_ground_load_trial(
+def _score_ground_stage_trial(
     samples,
     trial,
     score_config=None,
@@ -363,7 +361,7 @@ def _score_ground_load_trial(
     if not samples:
         return float("inf")
 
-    segment_groups = _split_ground_load_segments(samples, trial)
+    segment_groups = _split_stage_segments(samples, trial)
     segment_scores = []
     segment_index = 0
 
@@ -402,7 +400,7 @@ def _score_ground_load_trial(
     return total_score
 
 
-def summarize_ground_load_trial(
+def summarize_ground_stage_trial(
     samples,
     trial,
     score_config=None,
@@ -415,7 +413,7 @@ def summarize_ground_load_trial(
         return "{0} samples=0".format(trial.name)
 
     parts = [trial.name]
-    segment_groups = _split_ground_load_segments(samples, trial)
+    segment_groups = _split_stage_segments(samples, trial)
     segment_index = 0
 
     for target_speed, hold_ms in trial.segments_ms:
@@ -440,7 +438,7 @@ def summarize_ground_load_trial(
     return " ".join(parts)
 
 
-def score_ground_load_group(
+def score_ground_stage_group(
     trial_sample_groups,
     trials=None,
     score_config=None,
@@ -450,7 +448,7 @@ def score_ground_load_group(
         return float("inf")
 
     if trials is None:
-        trials = build_ground_load_trials()
+        trials = build_ground_step_trials()
 
     if len(trial_sample_groups) != len(trials):
         return float("inf")
@@ -460,7 +458,7 @@ def score_ground_load_group(
     for trial, samples in zip(trials, trial_sample_groups):
         if not samples:
             return float("inf")
-        total_score += _score_ground_load_trial(
+        total_score += _score_ground_stage_trial(
             samples,
             trial,
             score_config=score_config,
@@ -470,10 +468,9 @@ def score_ground_load_group(
     return total_score
 
 
-def run_ground_load_group(
+def run_ground_stage_group(
     client,
     gains,
-    wait_for_operator=None,
     fuya_pwm=2000,
     cooldown_ms=450,
     precharge_ms=700,
@@ -484,15 +481,7 @@ def run_ground_load_group(
     sleep_fn=time.sleep,
 ):
     if trials is None:
-        trials = build_ground_load_trials()
-
-    if wait_for_operator is None:
-        def wait_for_operator(message):
-            input(message)
-
-    wait_for_operator(
-        "澶嶄綅鍒拌捣鐐瑰悗鎸夊洖杞︼細{0}".format(describe_gains(gains))
-    )
+        trials = build_ground_step_trials()
 
     client.send_command("AT_FUYA={0}".format(int(fuya_pwm)))
     client.send_command("AT_COOLDOWN_MS={0}".format(int(cooldown_ms)))
@@ -524,7 +513,7 @@ def run_ground_load_group(
         client.capture_trial(capture_seconds, events=_build_trial_events(return_trial))
 
     return (
-        score_ground_load_group(
+        score_ground_stage_group(
             group_results,
             trials=trials,
             score_config=score_config,
@@ -543,12 +532,12 @@ def _average_group_overshoot(
         return 0.0
 
     if trials is None:
-        trials = build_ground_load_trials()
+        trials = build_ground_step_trials()
 
     overshoot_sum = 0.0
     overshoot_count = 0
     for trial, samples in zip(trials, group_results):
-        segment_groups = _split_ground_load_segments(samples, trial)
+        segment_groups = _split_stage_segments(samples, trial)
         segment_index = 0
         while segment_index < len(trial.segments_ms):
             target_speed = trial.segments_ms[segment_index][0]
@@ -570,7 +559,7 @@ def _average_group_overshoot(
 def run_ground_dual_step(client, args):
     profile = load_tuning_profile(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)), required=False)
     profile_path = resolve_profile_path(getattr(args, "profile_path", str(DEFAULT_TUNING_PROFILE_PATH)))
-    trials = build_ground_load_trials(profile)
+    trials = build_ground_step_trials(profile)
     score_config = build_score_config(args)
     default_pair = _ensure_wheel_pair(
         WheelPidGains(
@@ -588,7 +577,7 @@ def run_ground_dual_step(client, args):
 
     return_trial = None
     if args.ground_return_scale > 0.0:
-        return_trial = build_ground_load_return_trial(
+        return_trial = build_ground_return_trial(
             trials[-1],
             speed_scale=args.ground_return_scale,
             max_speed=args.ground_return_max_speed,
