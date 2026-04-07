@@ -494,33 +494,22 @@ class UserIsrSwitchTests(unittest.TestCase):
         self.assertIn("run_time_2();", isr_source)
 
 
-class MainSpeedDeadzoneCompTests(unittest.TestCase):
-    def test_deadzone_comp_macros_and_helper_live_in_motor_layer(self):
+class MainSpeedOutputPathTests(unittest.TestCase):
+    def test_motor_layer_does_not_keep_main_deadzone_comp_entry(self):
         service_dir = MODULE_PATH.parents[2] / "service"
         motor_header = (service_dir / "motor.h").read_text(encoding="utf-8")
         motor_source = (service_dir / "motor.c").read_text(encoding="utf-8")
 
-        self.assertIn("#define MAIN_ENABLE_SPEED_DEADZONE_COMP 1", motor_header)
-        self.assertIn("#define MAIN_LEFT_DEADZONE_PWM 1900", motor_header)
-        self.assertIn("#define MAIN_RIGHT_DEADZONE_PWM 2000", motor_header)
-        self.assertIn("#define MAIN_DEADZONE_BAND_PWM 300", motor_header)
-        self.assertIn("#define MAIN_DEADZONE_EXIT_SPEED 8.0f", motor_header)
-        self.assertIn("#define MAIN_DEADZONE_TARGET_SPEED_MIN", motor_header)
-        self.assertIn(
-            "int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm);",
-            motor_header,
-        )
-        self.assertIn(
-            "int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm)",
-            motor_source,
-        )
-        self.assertIn("abs_target_speed", motor_source)
-        self.assertIn("if (abs_target_speed < MAIN_DEADZONE_TARGET_SPEED_MIN)", motor_source)
-        self.assertIn("if (target_speed > 0.0f && raw_pwm < 0)", motor_source)
-        self.assertIn("if (target_speed < 0.0f && raw_pwm > 0)", motor_source)
-        self.assertNotIn("motor_apply_speed_deadzone_comp", motor_source.split("void motor_output", 1)[1])
+        self.assertNotIn("MAIN_ENABLE_SPEED_DEADZONE_COMP", motor_header)
+        self.assertNotIn("MAIN_LEFT_DEADZONE_PWM", motor_header)
+        self.assertNotIn("MAIN_RIGHT_DEADZONE_PWM", motor_header)
+        self.assertNotIn("MAIN_DEADZONE_BAND_PWM", motor_header)
+        self.assertNotIn("MAIN_DEADZONE_EXIT_SPEED", motor_header)
+        self.assertNotIn("MAIN_DEADZONE_TARGET_SPEED_MIN", motor_header)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", motor_header)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", motor_source)
 
-    def test_deadzone_comp_only_hooks_into_main_control_paths(self):
+    def test_main_control_paths_output_speed_loop_result_directly(self):
         service_dir = MODULE_PATH.parents[2] / "service"
         user_dir = MODULE_PATH.parents[2] / "user"
         autotune_dir = MODULE_PATH.parents[1]
@@ -529,7 +518,9 @@ class MainSpeedDeadzoneCompTests(unittest.TestCase):
         vofa_source = (service_dir / "vofa.c").read_text(encoding="utf-8")
         adapter_source = (service_dir / "speed_loop_autotune_adapter.c").read_text(encoding="utf-8")
 
-        self.assertEqual(a_run_source.count("motor_apply_speed_deadzone_comp("), 4)
+        self.assertEqual(a_run_source.count("left_pwm = (int32)PID.left_speed.output;"), 2)
+        self.assertEqual(a_run_source.count("right_pwm = (int32)PID.right_speed.output;"), 2)
+        self.assertNotIn("motor_apply_speed_deadzone_comp", a_run_source)
         self.assertNotIn("motor_apply_speed_deadzone_comp", test_source)
         self.assertNotIn("motor_apply_speed_deadzone_comp", vofa_source)
         self.assertNotIn("motor_apply_speed_deadzone_comp", adapter_source)

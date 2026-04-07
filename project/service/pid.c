@@ -8,10 +8,8 @@ LowPassFilter_t encoder_l;
 LowPassFilter_t encoder_r;
 
 /* 内部中间变量 */
-float delta_output = 0;   /* 增量式 PID 计算出的输出增量 */
 float speed_l = 0;        /* 左轮当前平滑速度 */
 float speed_r = 0;        /* 右轮当前平滑速度 */
-float max_integral = 0;   /* 预留：积分限幅（当前增量式未直接使用） */
 
 /**
  * @brief 速度环初始化（增量式）
@@ -100,30 +98,47 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
  */
 void pid_speed_update(PID_Speed *pid, float target, float actual)
 {
-    /* 计算当前偏差 */
+    int32 error_i;
+    int32 prev_error_i;
+    int32 prev2_error_i;
+    int32 kp_i;
+    int32 ki_i;
+    int32 kd_i;
+    int32 delta_i;
+    int32 output_i;
+    int32 max_output_i;
+
+    /* 先求误差，再统一直接截断成整数参与计算 */
     pid->error = target - actual;
+    error_i = (int32)(pid->error);
+    prev_error_i = (int32)(pid->prev_error);
+    prev2_error_i = (int32)(pid->prev2_error);
 
-    /* 增量式 PID 公式计算输出增量 */
-    delta_output = pid->Kp * (pid->error - pid->prev_error) + 
-                   pid->Ki * pid->error + 
-                   pid->Kd * (pid->error - 2.0f * pid->prev_error + pid->prev2_error);
+    kp_i = (int32)(pid->Kp);
+    ki_i = (int32)(pid->Ki);
+    kd_i = (int32)(pid->Kd);
 
-    /* 累加增量到当前输出值 */
-    pid->output += delta_output;
+    delta_i = kp_i * (error_i - prev_error_i);
+    delta_i += ki_i * error_i;
+    delta_i += kd_i * (error_i - prev_error_i - prev_error_i + prev2_error_i);
 
-    /* 输出限幅保护 */
-    if (pid->output > pid->max_output)
+    output_i = (int32)(pid->output);
+    output_i += delta_i;
+
+    max_output_i = (int32)(pid->max_output);
+    if (output_i > max_output_i)
     {
-        pid->output = pid->max_output;
+        output_i = max_output_i;
     }
-    else if (pid->output < -pid->max_output)
+    else if (output_i < -max_output_i)
     {
-        pid->output = -pid->max_output;
+        output_i = -max_output_i;
     }
 
-    /* 更新误差历史，供下一周期使用 */
-    pid->prev2_error = pid->prev_error;
-    pid->prev_error = pid->error;
+    pid->output = (float)output_i;
+    pid->prev2_error = (float)prev_error_i;
+    pid->prev_error = (float)error_i;
+    pid->error = (float)error_i;
 }
 
 /**

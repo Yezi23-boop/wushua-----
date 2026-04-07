@@ -4,7 +4,7 @@
 #include "zf_common_headfile.h"
 
 /* --- 主链死区补偿编译期配置 --- */
-#define MAIN_ENABLE_SPEED_DEADZONE_COMP 1
+#define MAIN_ENABLE_SPEED_DEADZONE_COMP 0
 #define MAIN_LEFT_DEADZONE_PWM 1900
 #define MAIN_RIGHT_DEADZONE_PWM 2000
 #define MAIN_DEADZONE_BAND_PWM 300
