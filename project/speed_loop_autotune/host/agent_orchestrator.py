@@ -1118,6 +1118,9 @@ def _execute_decision_round(client, args, profile_path, profile, request_payload
             },
         )
         profile["agent_tuning"]["last_decision_trace_path"] = trace_path.as_posix()
+        # Persist the newly committed request id before building the next
+        # decision context. Recent-round loading consults the on-disk profile.
+        _save_profile(profile, profile_path)
     except Exception:
         profile = agent_session.record_failure_trace(
             profile,

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "candidate_pid": {
+    "left": {
+      "kp": 90.0,
+      "ki": 18.0,
+      "kd": 0.0
+    },
+    "right": {
+      "kp": 94.56,
+      "ki": 18.0,
+      "kd": 0.0
+    }
+  },
+  "decision_summary": "左右轮存在持续响应差异，本轮继续只修正较弱侧Kp，先缩小轮间差。",
+  "primary_reason": "left_right_mismatch",
+  "supporting_signals": [
+    "recent structured scores显示左右轮持续分裂",
+    "当前没有超调、掉速或饱和证据，优先沿Kp单侧补偿响应"
+  ],
+  "decision_mode": "rebalance_right",
+  "base_reference": "current_batch_best",
+  "expected_outcome": "fix_left_right_gap",
+  "confidence": "medium",
+  "risk_level": "medium",
+  "needs_waveform_review": false,
+  "batch_end_recommendation_if_no_improve": "continue_air"
+}

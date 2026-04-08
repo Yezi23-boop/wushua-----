@@ -1,0 +1,472 @@
+{
+  "shared_targets": {
+    "bands": {
+      "low": 32.69388416666666,
+      "mid": 54.48980694444443,
+      "high": 76.28572972222221,
+      "top": 98.0816525
+    },
+    "default_sequences": {
+      "air_primary": [
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 500
+        },
+        {
+          "target_speed": 54.48980694444443,
+          "hold_ms": 500
+        },
+        {
+          "target_speed": 54.48980694444443,
+          "hold_ms": 500
+        },
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 500
+        },
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 500
+        }
+      ],
+      "air_verify": [
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 300
+        },
+        {
+          "target_speed": 54.48980694444443,
+          "hold_ms": 300
+        },
+        {
+          "target_speed": 54.48980694444443,
+          "hold_ms": 300
+        },
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 300
+        },
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 300
+        }
+      ],
+      "ground_forward": [
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 200
+        },
+        {
+          "target_speed": 54.48980694444443,
+          "hold_ms": 200
+        },
+        {
+          "target_speed": 32.69388416666666,
+          "hold_ms": 200
+        }
+      ]
+    },
+    "policy": "min_wheel_max",
+    "shared_max_encoder": 98.08165249999999
+  },
+  "meta": {
+    "profile_version": 1,
+    "created_at": "2026-04-07 20:59:33",
+    "updated_at": "2026-04-07 21:01:44"
+  },
+  "agent_tuning": {
+    "session_id": "20260407_205933",
+    "workflow_stage": "air_dual",
+    "workflow_status": "running",
+    "current_batch_id": "",
+    "current_round_index": 0,
+    "auto_completed_stages": [
+      "pwm-map"
+    ],
+    "pending_user_action": null,
+    "last_worker_mode": "air-dual-step",
+    "last_result_path": "",
+    "last_decision_trace_path": "",
+    "last_committed_request_id": "",
+    "failure_trace": null,
+    "recovery_state": {
+      "must_recover": false,
+      "high_risk_round_seen": false,
+      "recovery_reason": null,
+      "manual_resume": false,
+      "last_committed_request_id": "",
+      "failure_trace": ""
+    },
+    "pending_decision_request": null,
+    "consumed_request_ids": []
+  },
+  "pwm_map": {
+    "raw_csv_path": "C:\\Users\\ye\\Desktop\\龙丘电机\\project\\speed_loop_autotune\\logs\\pwm_encoder_map_20260407_205933.csv",
+    "left": {
+      "deadzone_break_pwm": 2000,
+      "max_steady_encoder": 98.08165249999999,
+      "map_rows": [
+        {
+          "pwm_command": 0,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 500,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 1000,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 17,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 1500,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.006466,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 2000,
+          "steady_encoder": 21.029795,
+          "peak_encoder": 21.840455,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 2500,
+          "steady_encoder": 26.42838875,
+          "peak_encoder": 27.829275000000003,
+          "sample_count": 12,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 3000,
+          "steady_encoder": 31.749761666666668,
+          "peak_encoder": 33.551245,
+          "sample_count": 12,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 3500,
+          "steady_encoder": 37.29227,
+          "peak_encoder": 38.43902,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 4000,
+          "steady_encoder": 43.096067500000004,
+          "peak_encoder": 44.154579999999996,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 4500,
+          "steady_encoder": 48.6128675,
+          "peak_encoder": 48.944445,
+          "sample_count": 11,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 5000,
+          "steady_encoder": 54.14931,
+          "peak_encoder": 54.462995,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 5500,
+          "steady_encoder": 59.503350999999995,
+          "peak_encoder": 60.918459999999996,
+          "sample_count": 15,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 6000,
+          "steady_encoder": 64.62774928571429,
+          "peak_encoder": 66.224305,
+          "sample_count": 20,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 6500,
+          "steady_encoder": 69.78433916666667,
+          "peak_encoder": 71.4901,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 7000,
+          "steady_encoder": 74.02170000000001,
+          "peak_encoder": 75.94762499999999,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 7500,
+          "steady_encoder": 78.9541375,
+          "peak_encoder": 80.460415,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 8000,
+          "steady_encoder": 84.32319333333334,
+          "peak_encoder": 85.14768,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 8500,
+          "steady_encoder": 88.61463988888889,
+          "peak_encoder": 90.220275,
+          "sample_count": 34,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 9000,
+          "steady_encoder": 92.95962750000001,
+          "peak_encoder": 94.617535,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 9500,
+          "steady_encoder": 96.91704833333334,
+          "peak_encoder": 97.578505,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 10000,
+          "steady_encoder": 98.08165249999999,
+          "peak_encoder": 99.16745,
+          "sample_count": 8,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        }
+      ]
+    },
+    "right": {
+      "deadzone_break_pwm": 2000,
+      "max_steady_encoder": 109.47749999999999,
+      "map_rows": [
+        {
+          "pwm_command": 0,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 9,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 500,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 1000,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 9,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 1500,
+          "steady_encoder": 0.0,
+          "peak_encoder": 0.0,
+          "sample_count": 12,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 2000,
+          "steady_encoder": 18.418301666666665,
+          "peak_encoder": 18.998275,
+          "sample_count": 12,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 2500,
+          "steady_encoder": 24.477275,
+          "peak_encoder": 25.13073,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 3000,
+          "steady_encoder": 30.90318,
+          "peak_encoder": 31.580734999999997,
+          "sample_count": 19,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 3500,
+          "steady_encoder": 36.45749357142857,
+          "peak_encoder": 37.32493,
+          "sample_count": 22,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 4000,
+          "steady_encoder": 42.1005425,
+          "peak_encoder": 43.21728,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 4500,
+          "steady_encoder": 48.723256250000006,
+          "peak_encoder": 49.911265,
+          "sample_count": 23,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 5000,
+          "steady_encoder": 54.447723124999996,
+          "peak_encoder": 55.787565,
+          "sample_count": 24,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 5500,
+          "steady_encoder": 60.13211916666667,
+          "peak_encoder": 61.53948,
+          "sample_count": 12,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 6000,
+          "steady_encoder": 66.3328525,
+          "peak_encoder": 67.46025,
+          "sample_count": 16,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 6500,
+          "steady_encoder": 72.047725,
+          "peak_encoder": 74.02481499999999,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 7000,
+          "steady_encoder": 78.02181875,
+          "peak_encoder": 79.30291,
+          "sample_count": 13,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 7500,
+          "steady_encoder": 83.03688,
+          "peak_encoder": 84.469575,
+          "sample_count": 12,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 8000,
+          "steady_encoder": 88.9997175,
+          "peak_encoder": 89.81441000000001,
+          "sample_count": 10,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 8500,
+          "steady_encoder": 93.32722428571427,
+          "peak_encoder": 94.28810999999999,
+          "sample_count": 20,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 9000,
+          "steady_encoder": 97.213885,
+          "peak_encoder": 97.22740999999999,
+          "sample_count": 6,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 9500,
+          "steady_encoder": 103.45272857142857,
+          "peak_encoder": 104.82175000000001,
+          "sample_count": 20,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        },
+        {
+          "pwm_command": 10000,
+          "steady_encoder": 109.47749999999999,
+          "peak_encoder": 111.05385,
+          "sample_count": 9,
+          "repeat_count": 2,
+          "stop_flag_seen": 0
+        }
+      ]
+    }
+  },
+  "air_dual": {
+    "baseline_pid": null,
+    "best_pid": null,
+    "last_summary": null,
+    "last_batch_best": null,
+    "batch_round": 0,
+    "last_batch_summary": null,
+    "active_batch": null
+  },
+  "ground_dual": {
+    "baseline_pid": null,
+    "best_pid": null,
+    "last_summary": null,
+    "last_batch_best": null,
+    "batch_round": 0,
+    "last_batch_summary": null,
+    "active_batch": null
+  }
+}

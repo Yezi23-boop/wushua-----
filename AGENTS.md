@@ -18,6 +18,7 @@
 - 在保证性能的前提下，保持模块清晰、注释必要、便于调试。
 
 ## 编码与工具约束
+先梳理一遍当前项目
 - 每一次修改都要检测有没有修改到位
 - 所有代码必须符合 C89 标准。
 - 禁止使用 C99、C11 或更新标准中的语法与特性。
@@ -65,3 +66,10 @@ git提交信息要求中文
   - 路径：`.codex/agents/speed-loop-tuning.toml`
 - 当任务集中在 `project/speed_loop_autotune/` 的 profile、日志、批次结果、波形摘要和下一步调参建议时，优先使用这个 agent。
 - 这个 agent 只负责调参分析和建议，不默认改固件实时控制逻辑，也不绕过 `enter_ground`、`save` 这类显式用户边界。
+- 对 `project/speed_loop_autotune/` 的后续修改，默认遵守以下用户要求：
+  - 调参默认必须走 agent 分析模式，而不是本地 heuristic 自动决策模式。
+  - 每一轮填写 PID 之前，都必须先基于当前 `decision_request` 做一次新的 agent 分析。
+  - 正常情况下按“分析一轮、执行一轮”往返 10 轮后，再统一向用户汇报。
+  - 中途只有失败边界、非法 agent 输出、串口/硬件异常或 orchestrator 拒绝消费请求时，才允许提前打断并汇报。
+  - 不要在未获得用户明确动作的情况下，自动跨到下一批、自动 `enter_ground` 或自动 `save`。
+  - `decision_heuristic.py` 只作为显式 fallback / 调试路径，不能静默替代 `speed_loop_tuning` 成为默认主决策源。

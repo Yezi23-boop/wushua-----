@@ -3,7 +3,7 @@
 #include "../service/speed_loop_autotune_adapter.h"
 
 /* 定时器中断周期定义（单位：ms） */
-#define TIME_0 5  /* 核心控制环周期 */
+#define TIME_0 2  /* 核心控制环周期 */
 #define TIME_1 10 /* 辅助管理环周期 */
 
 /* 内部私有初始化函数声明 */

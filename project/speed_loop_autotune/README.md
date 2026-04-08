@@ -13,6 +13,7 @@ This directory contains the autotune workflow, shared profile, protocol docs, an
 
 - The autotune skill is the only user-facing entry point.
 - The decision path is `skill -> speed_loop_tuning agent -> agent_orchestrator -> step worker`.
+- The default decision owner must remain `speed_loop_tuning` agent or the current Codex session acting as that agent. Repo-local heuristic code is fallback only and must not silently replace the agent as the primary decision brain.
 - The skill reads `project/speed_loop_autotune/logs/current_tuning_profile.json` first.
 - If required profile fields are missing, the skill may auto-run `pwm_map` and `pwm_identify`.
 - `air_dual` and `ground_dual` now run through the request/response orchestrator state machine, not the retired direct rule loop.
@@ -41,6 +42,16 @@ For the full batch flow, boundary actions, and log locations, see `docs/agent_au
   - orchestrator has stopped at a legal user boundary
 - `completed`
   - the current workflow branch is done
+
+## Locked User Requirement
+
+- Speed-loop tuning must run in agent-analysis mode by default.
+- Every PID fill must come only after one fresh agent analysis of the current `decision_request`.
+- The loop is: `decision_request -> agent analysis -> submit raw agent JSON -> execute one round`.
+- A normal batch should run 10 rounds in this pattern before reporting back to the user.
+- During those 10 rounds, normal progress should stay quiet; only failure boundaries, invalid agent output, serial or hardware faults, or orchestrator rejection may interrupt early.
+- After the 10th round or an earlier failure stop, the system should report a batch summary instead of switching stage automatically.
+- Do not silently downgrade this default to local heuristics, direct rule loops, or autonomous stage switching.
 
 The current restore truth sources are:
 

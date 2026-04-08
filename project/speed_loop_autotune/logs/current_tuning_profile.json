@@ -1,90 +1,148 @@
 {
   "shared_targets": {
     "bands": {
-      "low": 41.058375000000005,
-      "mid": 68.430625,
-      "high": 95.80287500000001,
-      "top": 123.17512500000001
+      "low": 33.26820083333333,
+      "mid": 55.44700138888889,
+      "high": 77.62580194444445,
+      "top": 99.8046025
     },
     "default_sequences": {
       "air_primary": [
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 500
         },
         {
-          "target_speed": 68.430625,
+          "target_speed": 55.44700138888889,
           "hold_ms": 500
         },
         {
-          "target_speed": 68.430625,
+          "target_speed": 55.44700138888889,
           "hold_ms": 500
         },
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 500
         },
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 500
         }
       ],
       "air_verify": [
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 300
         },
         {
-          "target_speed": 68.430625,
+          "target_speed": 55.44700138888889,
           "hold_ms": 300
         },
         {
-          "target_speed": 68.430625,
+          "target_speed": 55.44700138888889,
           "hold_ms": 300
         },
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 300
         },
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 300
         }
       ],
       "ground_forward": [
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 200
         },
         {
-          "target_speed": 68.430625,
+          "target_speed": 55.44700138888889,
           "hold_ms": 200
         },
         {
-          "target_speed": 41.058375000000005,
+          "target_speed": 33.26820083333333,
           "hold_ms": 200
         }
       ]
     },
     "policy": "min_wheel_max",
-    "shared_max_encoder": 123.17512500000001
+    "shared_max_encoder": 99.8046025
   },
   "meta": {
     "profile_version": 1,
-    "created_at": "2026-03-26 18:44:33",
-    "updated_at": "2026-03-26 19:02:40"
+    "created_at": "2026-04-07 21:02:30",
+    "updated_at": "2026-04-07 21:23:06"
+  },
+  "agent_tuning": {
+    "session_id": "20260407_210230",
+    "workflow_stage": "air_dual",
+    "workflow_status": "waiting_user",
+    "current_batch_id": "air_0002",
+    "current_round_index": 10,
+    "auto_completed_stages": [
+      "pwm-map",
+      "pwm-identify"
+    ],
+    "pending_user_action": {
+      "stage": "air_dual",
+      "batch_id": "air_0002",
+      "recommended_action": "continue_air",
+      "allowed_actions": [
+        "continue_air",
+        "enter_ground",
+        "stop_air"
+      ],
+      "reason": "recent rounds still improved, keep refining in air stage"
+    },
+    "last_worker_mode": "air-dual-step",
+    "last_result_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_rounds/air_dual/air_0002_r10.json",
+    "last_decision_trace_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_decision_trace.jsonl",
+    "last_committed_request_id": "air_0002_r10",
+    "failure_trace": null,
+    "recovery_state": {
+      "must_recover": false,
+      "high_risk_round_seen": false,
+      "recovery_reason": null,
+      "manual_resume": false,
+      "last_committed_request_id": "air_0002_r10",
+      "failure_trace": ""
+    },
+    "pending_decision_request": null,
+    "consumed_request_ids": [
+      "air_0001_r01",
+      "air_0001_r02",
+      "air_0001_r03",
+      "air_0001_r04",
+      "air_0001_r05",
+      "air_0001_r06",
+      "air_0001_r07",
+      "air_0001_r08",
+      "air_0001_r09",
+      "air_0001_r10",
+      "air_0002_r01",
+      "air_0002_r02",
+      "air_0002_r03",
+      "air_0002_r04",
+      "air_0002_r05",
+      "air_0002_r06",
+      "air_0002_r07",
+      "air_0002_r08",
+      "air_0002_r09",
+      "air_0002_r10"
+    ]
   },
   "pwm_map": {
-    "raw_csv_path": "C:\\Users\\ye\\Desktop\\龙丘电机\\project\\speed_loop_autotune\\logs\\pwm_encoder_map_20260326_184231.csv",
+    "raw_csv_path": "C:\\Users\\ye\\Desktop\\龙丘电机\\project\\speed_loop_autotune\\logs\\pwm_encoder_map_20260407_210230.csv",
     "left": {
-      "deadzone_break_pwm": 2000,
-      "max_steady_encoder": 123.17512500000001,
+      "deadzone_break_pwm": 1500,
+      "max_steady_encoder": 99.8046025,
       "map_rows": [
         {
           "pwm_command": 0,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 6,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
@@ -92,7 +150,7 @@
           "pwm_command": 500,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 7,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
@@ -100,151 +158,151 @@
           "pwm_command": 1000,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 7,
+          "sample_count": 9,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 1500,
-          "steady_encoder": 0.0,
-          "peak_encoder": 0.0,
-          "sample_count": 6,
+          "steady_encoder": 15.7321025,
+          "peak_encoder": 16.64031,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 2000,
-          "steady_encoder": 25.3550525,
-          "peak_encoder": 25.71165,
-          "sample_count": 6,
+          "steady_encoder": 21.28754125,
+          "peak_encoder": 22.74738,
+          "sample_count": 14,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 2500,
-          "steady_encoder": 32.533035,
-          "peak_encoder": 33.0305,
-          "sample_count": 6,
+          "steady_encoder": 27.262270833333332,
+          "peak_encoder": 28.42277,
+          "sample_count": 9,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 3000,
-          "steady_encoder": 38.663575,
-          "peak_encoder": 39.57113,
-          "sample_count": 6,
+          "steady_encoder": 32.31191,
+          "peak_encoder": 33.944715,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 3500,
-          "steady_encoder": 44.1938825,
-          "peak_encoder": 45.39989,
-          "sample_count": 7,
+          "steady_encoder": 38.61445916666666,
+          "peak_encoder": 39.542085,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 4000,
-          "steady_encoder": 51.813835,
-          "peak_encoder": 51.983180000000004,
-          "sample_count": 7,
+          "steady_encoder": 43.3769,
+          "peak_encoder": 44.672295000000005,
+          "sample_count": 8,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 4500,
-          "steady_encoder": 58.734355,
-          "peak_encoder": 59.410765,
-          "sample_count": 7,
+          "steady_encoder": 48.1652325,
+          "peak_encoder": 49.995345,
+          "sample_count": 8,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 5000,
-          "steady_encoder": 65.74564,
-          "peak_encoder": 66.56219999999999,
-          "sample_count": 6,
+          "steady_encoder": 53.9900375,
+          "peak_encoder": 55.670064999999994,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 5500,
-          "steady_encoder": 72.7523875,
-          "peak_encoder": 73.763835,
+          "steady_encoder": 59.89123,
+          "peak_encoder": 60.8377,
           "sample_count": 8,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 6000,
-          "steady_encoder": 79.1827925,
-          "peak_encoder": 80.18525,
-          "sample_count": 7,
+          "steady_encoder": 65.7659775,
+          "peak_encoder": 66.42729,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 6500,
-          "steady_encoder": 85.85427250000001,
-          "peak_encoder": 86.81841499999999,
-          "sample_count": 7,
+          "steady_encoder": 69.565735,
+          "peak_encoder": 70.55841000000001,
+          "sample_count": 9,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 7000,
-          "steady_encoder": 92.35381,
-          "peak_encoder": 93.309895,
-          "sample_count": 7,
+          "steady_encoder": 74.9246875,
+          "peak_encoder": 76.012445,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 7500,
-          "steady_encoder": 97.16354749999999,
-          "peak_encoder": 98.61601,
-          "sample_count": 6,
+          "steady_encoder": 78.98375250000001,
+          "peak_encoder": 80.364765,
+          "sample_count": 8,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 8000,
-          "steady_encoder": 102.98124999999999,
-          "peak_encoder": 103.80054999999999,
-          "sample_count": 7,
+          "steady_encoder": 82.91175125000001,
+          "peak_encoder": 84.734185,
+          "sample_count": 15,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 8500,
-          "steady_encoder": 107.62275,
-          "peak_encoder": 110.2578,
-          "sample_count": 7,
+          "steady_encoder": 88.1061069047619,
+          "peak_encoder": 89.456975,
+          "sample_count": 22,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 9000,
-          "steady_encoder": 114.096175,
-          "peak_encoder": 115.25295,
-          "sample_count": 6,
+          "steady_encoder": 93.13908749999999,
+          "peak_encoder": 94.10734,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 9500,
-          "steady_encoder": 118.73962499999999,
-          "peak_encoder": 120.05305,
-          "sample_count": 6,
+          "steady_encoder": 94.0531875,
+          "peak_encoder": 96.817575,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 10000,
-          "steady_encoder": 123.17512500000001,
-          "peak_encoder": 124.59800000000001,
-          "sample_count": 6,
+          "steady_encoder": 99.8046025,
+          "peak_encoder": 100.649435,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         }
@@ -252,13 +310,13 @@
     },
     "right": {
       "deadzone_break_pwm": 2000,
-      "max_steady_encoder": 136.11225,
+      "max_steady_encoder": 110.15290833333333,
       "map_rows": [
         {
           "pwm_command": 0,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 7,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
@@ -266,7 +324,7 @@
           "pwm_command": 500,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 7,
+          "sample_count": 15,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
@@ -274,7 +332,7 @@
           "pwm_command": 1000,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 7,
+          "sample_count": 25,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
@@ -282,143 +340,143 @@
           "pwm_command": 1500,
           "steady_encoder": 0.0,
           "peak_encoder": 0.0,
-          "sample_count": 6,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 2000,
-          "steady_encoder": 11.6057925,
-          "peak_encoder": 11.67032,
-          "sample_count": 7,
+          "steady_encoder": 20.392310000000002,
+          "peak_encoder": 20.781109999999998,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 2500,
-          "steady_encoder": 30.583165,
-          "peak_encoder": 30.853745,
-          "sample_count": 7,
+          "steady_encoder": 26.195475,
+          "peak_encoder": 26.661839999999998,
+          "sample_count": 9,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 3000,
-          "steady_encoder": 38.5950175,
-          "peak_encoder": 39.17187,
-          "sample_count": 7,
+          "steady_encoder": 31.46426,
+          "peak_encoder": 32.196105,
+          "sample_count": 8,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 3500,
-          "steady_encoder": 45.7280225,
-          "peak_encoder": 46.634715,
-          "sample_count": 7,
+          "steady_encoder": 36.87511,
+          "peak_encoder": 37.626785,
+          "sample_count": 8,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 4000,
-          "steady_encoder": 52.9284425,
-          "peak_encoder": 53.343835,
-          "sample_count": 7,
+          "steady_encoder": 43.169812500000006,
+          "peak_encoder": 43.871695,
+          "sample_count": 20,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 4500,
-          "steady_encoder": 59.90163749999999,
-          "peak_encoder": 61.17275,
-          "sample_count": 7,
+          "steady_encoder": 48.802905,
+          "peak_encoder": 50.15342,
+          "sample_count": 18,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 5000,
-          "steady_encoder": 67.242255,
-          "peak_encoder": 67.71218999999999,
-          "sample_count": 7,
+          "steady_encoder": 54.96839416666667,
+          "peak_encoder": 55.848614999999995,
+          "sample_count": 12,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 5500,
-          "steady_encoder": 74.954465,
-          "peak_encoder": 75.32126,
-          "sample_count": 6,
+          "steady_encoder": 60.3617,
+          "peak_encoder": 61.50132,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 6000,
-          "steady_encoder": 82.431115,
-          "peak_encoder": 83.14022,
-          "sample_count": 7,
+          "steady_encoder": 65.99650333333334,
+          "peak_encoder": 67.060795,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 6500,
-          "steady_encoder": 89.5306975,
-          "peak_encoder": 90.139605,
-          "sample_count": 6,
+          "steady_encoder": 71.91947975,
+          "peak_encoder": 74.02782,
+          "sample_count": 20,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 7000,
-          "steady_encoder": 97.22674,
-          "peak_encoder": 97.40392,
-          "sample_count": 7,
+          "steady_encoder": 76.142945,
+          "peak_encoder": 78.210555,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 7500,
-          "steady_encoder": 103.18135000000001,
-          "peak_encoder": 103.25805,
-          "sample_count": 6,
+          "steady_encoder": 82.1685325,
+          "peak_encoder": 83.419835,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 8000,
-          "steady_encoder": 108.982825,
-          "peak_encoder": 110.3726,
-          "sample_count": 7,
+          "steady_encoder": 86.9205425,
+          "peak_encoder": 88.71582000000001,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 8500,
-          "steady_encoder": 116.63085,
-          "peak_encoder": 117.39365,
-          "sample_count": 7,
+          "steady_encoder": 92.4161725,
+          "peak_encoder": 93.16799,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 9000,
-          "steady_encoder": 123.100925,
-          "peak_encoder": 123.70495,
-          "sample_count": 8,
+          "steady_encoder": 99.00754749999999,
+          "peak_encoder": 99.88993500000001,
+          "sample_count": 13,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 9500,
-          "steady_encoder": 129.35595,
-          "peak_encoder": 130.1107,
-          "sample_count": 6,
+          "steady_encoder": 103.21086666666667,
+          "peak_encoder": 103.5921,
+          "sample_count": 10,
           "repeat_count": 2,
           "stop_flag_seen": 0
         },
         {
           "pwm_command": 10000,
-          "steady_encoder": 136.11225,
-          "peak_encoder": 136.38965,
-          "sample_count": 8,
+          "steady_encoder": 110.15290833333333,
+          "peak_encoder": 110.6541,
+          "sample_count": 11,
           "repeat_count": 2,
           "stop_flag_seen": 0
         }
@@ -428,60 +486,60 @@
   "pwm_identify": {
     "seed_pi": {
       "left": {
-        "kp": 37.4279138379481,
-        "ki": 18.71395691897405,
+        "kp": 87.00206385208347,
+        "ki": 10.875257981510433,
         "kd": 0.0
       },
       "right": {
-        "kp": 16.837501831078324,
-        "ki": 8.418750915539162,
+        "kp": 99.16423760767753,
+        "ki": 12.395529700959692,
         "kd": 0.0
       }
     },
     "source_levels": {
       "left": [
         {
-          "pwm_command": 2500.0,
-          "steady_speed": 33.596175,
-          "theta_s": 0.01,
-          "tau_s": 0.01,
+          "pwm_command": 1600.0,
+          "steady_speed": 17.081299166666668,
+          "theta_s": 0.04,
+          "tau_s": 0.03,
           "valid": 1
         },
         {
-          "pwm_command": 3000.0,
-          "steady_speed": 40.21077833333334,
-          "theta_s": 0.01,
-          "tau_s": 0.01,
+          "pwm_command": 1800.0,
+          "steady_speed": 19.08363625,
+          "theta_s": 0.02,
+          "tau_s": 0.04,
           "valid": 1
         },
         {
-          "pwm_command": 3500.0,
-          "steady_speed": 46.95518833333334,
-          "theta_s": 0.01,
-          "tau_s": 0.01,
+          "pwm_command": 2000.0,
+          "steady_speed": 21.67889125,
+          "theta_s": 0.02,
+          "tau_s": 0.04,
           "valid": 1
         }
       ],
       "right": [
         {
-          "pwm_command": 2500.0,
-          "steady_speed": 33.38249166666667,
-          "theta_s": 0.02,
-          "tau_s": 0.01,
+          "pwm_command": 2200.0,
+          "steady_speed": 23.421183999999997,
+          "theta_s": 0.03,
+          "tau_s": 0.04,
           "valid": 1
         },
         {
-          "pwm_command": 3000.0,
-          "steady_speed": 40.68615333333334,
+          "pwm_command": 2400.0,
+          "steady_speed": 25.4012825,
           "theta_s": 0.02,
-          "tau_s": 0.01,
+          "tau_s": 0.04,
           "valid": 1
         },
         {
-          "pwm_command": 3500.0,
-          "steady_speed": 48.2303,
-          "theta_s": 0.01,
-          "tau_s": 0.01,
+          "pwm_command": 2600.0,
+          "steady_speed": 27.45489625,
+          "theta_s": 0.02,
+          "tau_s": 0.04,
           "valid": 1
         }
       ]
@@ -490,93 +548,216 @@
   "air_dual": {
     "baseline_pid": {
       "left": {
-        "kp": 87.4279138379481,
-        "ki": 18.71395691897405,
+        "kp": 87.00206385208347,
+        "ki": 10.875257981510433,
         "kd": 0.0
       },
       "right": {
-        "kp": 66.83750183107833,
-        "ki": 8.418750915539162,
+        "kp": 99.16423760767753,
+        "ki": 12.395529700959692,
         "kd": 0.0
       }
     },
     "best_pid": {
       "left": {
-        "kp": 87.4279138379481,
-        "ki": 18.71395691897405,
+        "kp": 87.0,
+        "ki": 10.88,
         "kd": 0.0
       },
       "right": {
-        "kp": 66.83750183107833,
-        "ki": 8.418750915539162,
+        "kp": 99.16,
+        "ki": 12.4,
         "kd": 0.0
       }
     },
     "last_summary": {
-      "left_score": 43.028078548634674,
-      "right_score": 43.422508634865686,
-      "score": 702.2008573364934,
-      "combined_score": 702.2008573364934,
-      "autotune_sequence": "41.058375:500,68.430625:500,68.430625:500,41.058375:500,41.058375:500"
-    },
-    "last_batch_best": {
-      "batch_round": 1,
-      "stage_stopped": "batch-1-coarse-kp",
-      "preset_name": "coarse",
-      "field_name": "kp",
-      "step": 10.0,
-      "repeat_each": 1,
-      "best_label": "KP-repeat",
-      "best_step_multiplier": 0,
-      "best_is_edge": 0,
-      "best_pid": {
+      "batch_id": "air_0002",
+      "evaluated_groups": 10,
+      "start_pid": {
         "left": {
-          "kp": 87.4279138379481,
-          "ki": 18.71395691897405,
+          "kp": 87.0,
+          "ki": 10.88,
           "kd": 0.0
         },
         "right": {
-          "kp": 66.83750183107833,
-          "ki": 8.418750915539162,
+          "kp": 99.16,
+          "ki": 12.4,
           "kd": 0.0
         }
       },
-      "left_score": 43.028078548634674,
-      "right_score": 43.422508634865686,
-      "score": 702.2008573364934,
-      "combined_score": 702.2008573364934,
-      "decision": "batch-best"
-    },
-    "batch_round": 1,
-    "batch_history": [
-      {
-        "batch_round": 1,
-        "stage_stopped": "batch-1-coarse-kp",
-        "preset_name": "coarse",
-        "field_name": "kp",
-        "step": 10.0,
-        "repeat_each": 1,
-        "best_label": "KP-repeat",
-        "best_step_multiplier": 0,
-        "best_is_edge": 0,
-        "best_pid": {
-          "left": {
-            "kp": 87.4279138379481,
-            "ki": 18.71395691897405,
-            "kd": 0.0
-          },
-          "right": {
-            "kp": 66.83750183107833,
-            "ki": 8.418750915539162,
-            "kd": 0.0
-          }
+      "best_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
         },
-        "left_score": 43.028078548634674,
-        "right_score": 43.422508634865686,
-        "score": 702.2008573364934,
-        "combined_score": 702.2008573364934,
-        "decision": "batch-best"
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "next_start_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "combined_score": 1523.3682603860834,
+      "a_score": 1523.3682603860834,
+      "b_score": 1523.3682603860834,
+      "best_combined_score": 1523.3682603860834,
+      "best_a_score": 1523.3682603860834,
+      "best_b_score": 1523.3682603860834,
+      "band_scores": {
+        "low": 25.801755225520882,
+        "mid": 2.4816997351888967,
+        "high": 2.4816997351888967,
+        "top": 2.4816997351888967
+      },
+      "stage_reached": "step_completed",
+      "waveform_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_waveforms/air_dual/air_0002_r08.jsonl",
+      "result_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_rounds/air_dual/air_0002_r08.json",
+      "stage_name": "air_dual"
+    },
+    "last_batch_best": {
+      "best_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "combined_score": 1523.3682603860834,
+      "a_score": 1523.3682603860834,
+      "b_score": 1523.3682603860834,
+      "band_scores": {
+        "low": 25.801755225520882,
+        "mid": 2.4816997351888967,
+        "high": 2.4816997351888967,
+        "top": 2.4816997351888967
       }
-    ]
+    },
+    "batch_round": 2,
+    "last_batch_summary": {
+      "batch_id": "air_0002",
+      "evaluated_groups": 10,
+      "start_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "best_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "next_start_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "combined_score": 1523.3682603860834,
+      "a_score": 1523.3682603860834,
+      "b_score": 1523.3682603860834,
+      "best_combined_score": 1523.3682603860834,
+      "best_a_score": 1523.3682603860834,
+      "best_b_score": 1523.3682603860834,
+      "band_scores": {
+        "low": 25.801755225520882,
+        "mid": 2.4816997351888967,
+        "high": 2.4816997351888967,
+        "top": 2.4816997351888967
+      },
+      "stage_reached": "step_completed",
+      "waveform_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_waveforms/air_dual/air_0002_r08.jsonl",
+      "result_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_rounds/air_dual/air_0002_r08.json",
+      "stage_name": "air_dual"
+    },
+    "active_batch": {
+      "batch_id": "air_0002",
+      "start_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "current_best_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "current_best_score": 1523.3682603860834,
+      "rounds_completed": 10,
+      "search_phase": "confirm",
+      "last_round_pid": {
+        "left": {
+          "kp": 87.0,
+          "ki": 10.88,
+          "kd": 0.0
+        },
+        "right": {
+          "kp": 99.16,
+          "ki": 12.4,
+          "kd": 0.0
+        }
+      },
+      "last_round_score": 1970.4187159766968,
+      "last_round_result_path": "C:/Users/ye/Desktop/龙丘电机/project/speed_loop_autotune/logs/agent_rounds/air_dual/air_0002_r10.json"
+    }
+  },
+  "ground_dual": {
+    "baseline_pid": null,
+    "best_pid": null,
+    "last_summary": null,
+    "last_batch_best": null,
+    "batch_round": 0,
+    "last_batch_summary": null,
+    "active_batch": null
   }
 }

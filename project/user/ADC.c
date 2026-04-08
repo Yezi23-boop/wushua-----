@@ -32,29 +32,36 @@ volatile float Err = 0.0f;
 /* 内部私有函数声明 */
 static void adc_read_channels(uint16 *raw_buffer);
 static uint16 adc_normalize_value(uint16 raw_value, uint16 min_value, uint16 max_value);
-static void dispose(void);
+static void dispose(uint16 ad1, uint16 ad2, uint16 ad3, uint16 ad4);
 
 /**
  * @brief 处理电感偏差计算
  * @details 采用四路电感的差比和算法，并支持参数 A_1, B_1, C_l 的加权修正
  */
-static void dispose(void)
+static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 {
-    float denom = 0.0f;
+    float denom;
+    int16 diff14;
+    int16 diff23;
+    uint16 sum14;
 
-    /* 计算分母：加权和项 + 非线性偏差补偿项 */
-    denom = app.angle.A_1 * (float)(ad1 + ad4) +
-            app.angle.C_l * (float)func_abs((int)ad2 - (int)ad3);
+    diff14 = (int16)ad11 - (int16)ad44;
+    diff23 = (int16)ad22 - (int16)ad33;
+    sum14 = ad11 + ad44;
 
-    /* 防除零保护 */
+    denom = app.angle.A_1 * (float)sum14 +
+            app.angle.C_l * (float)func_abs(diff23);
+
     if (denom < 1.0f)
     {
         Err = 0.0f;
         return;
     }
 
-    /* 差比和计算公式：Err = limit * (加权差) / 加权项 */
-    Err = (float)limit * (app.angle.A_1 * (float)((int)ad1 - (int)ad4) + app.angle.B_1 * (float)((int)ad2 - (int)ad3)) / denom;
+    Err = (float)limit *
+          (app.angle.A_1 * (float)diff14 +
+           app.angle.B_1 * (float)diff23) /
+          denom;
 }
 
 /**
@@ -152,7 +159,7 @@ void read_AD(void)
     ad4 = AD_ONE[3];
 
     /* 6. 执行偏差解算 */
-    dispose();
+    dispose(ad1, ad2, ad3, ad4);
 }
 
 /**
@@ -181,10 +188,10 @@ void adc_measure_reset(void)
  */
 static void adc_read_channels(uint16 *raw_buffer)
 {
-    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左前电感 */
-    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左后电感 */
-    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右前电感 */
-    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右后电感 */
+    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左横电感 */
+    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
+    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
+    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
 }
 
 /**

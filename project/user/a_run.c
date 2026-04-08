@@ -8,11 +8,11 @@ volatile int flat_statr = 0; /* 运行状态镜像：0-停止，1-预启动，2-
 volatile int flat_fly = 0;   /* 飞坡状态标志位 */
 
 /* --- 周期任务内部变量 --- */
-static int time_1 = 0;       /* 5ms 分频计数器，用于每 10ms 更新一次转向环 */
+static int steer_div = 0;    /* 2ms 主环分频：用于每 4ms 更新一次转向环 */
 static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 
 /**
- * @brief 5ms 主控制任务
+ * @brief 2ms 主控制任务
  * @details 按“采样 -> 解算 -> PID -> 输出”的顺序完成一轮核心控制
  */
 void run_time_1(void)
@@ -26,16 +26,16 @@ void run_time_1(void)
     a_run_apply_iap_guard();
 
     /* 2. 采集传感器与编码器数据 */
-    read_AD();                                      /* 采集四路电感 ADC */
     Prepare_Data();                                 /* 更新 IMU 滤波结果与姿态相关量 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
 
-    /* 3. 转向环按 10ms 频率更新一次 */
-    time_1++;
-    if (time_1 >= 2)
+    /* 3. 转向环按 4ms 更新一次，角速度环和速度环继续保持 2ms */
+    steer_div++;
+    if (steer_div >= 2)
     {
+        read_AD();                         /* 采集四路电感 ADC */
         pid_steer_update(&PID.steer, Err); /* 根据赛道偏差更新转向环 */
-        time_1 = 0;
+        steer_div = 0;
     }
 
     /* 4. 根据飞坡/赛道状态修正当前目标速度 */

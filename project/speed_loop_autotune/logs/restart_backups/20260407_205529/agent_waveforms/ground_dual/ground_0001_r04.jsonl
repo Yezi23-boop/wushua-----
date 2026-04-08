@@ -1,0 +1,3 @@
+{"target": 25.0, "left_speed": 18.0, "right_speed": 17.5, "left_pwm": 3100.0, "right_pwm": 3090.0, "trial_active": 1.0, "stop_flag": 0.0, "mode_id": 0.0, "left_cmd_pwm": 3100.0, "right_cmd_pwm": 3090.0, "run_index": 1, "sample_index": 0}
+{"target": 25.0, "left_speed": 24.5, "right_speed": 24.0, "left_pwm": 2600.0, "right_pwm": 2580.0, "trial_active": 1.0, "stop_flag": 0.0, "mode_id": 0.0, "left_cmd_pwm": 2600.0, "right_cmd_pwm": 2580.0, "run_index": 1, "sample_index": 1}
+{"target": 0.0, "left_speed": 1.0, "right_speed": 0.8, "left_pwm": 100.0, "right_pwm": 80.0, "trial_active": 0.0, "stop_flag": 1.0, "mode_id": 0.0, "left_cmd_pwm": 100.0, "right_cmd_pwm": 80.0, "run_index": 1, "sample_index": 2}

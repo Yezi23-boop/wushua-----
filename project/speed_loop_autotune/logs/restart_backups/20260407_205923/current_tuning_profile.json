@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "profile_version": 1,
+    "created_at": "2026-04-07 20:55:41",
+    "updated_at": "2026-04-07 20:56:24"
+  },
+  "agent_tuning": {
+    "session_id": "20260407_205541",
+    "workflow_stage": "air_dual",
+    "workflow_status": "running",
+    "current_batch_id": "",
+    "current_round_index": 0,
+    "auto_completed_stages": [],
+    "pending_user_action": null,
+    "last_worker_mode": "air-dual-step",
+    "last_result_path": "",
+    "last_decision_trace_path": "",
+    "last_committed_request_id": "",
+    "failure_trace": null,
+    "recovery_state": {
+      "must_recover": false,
+      "high_risk_round_seen": false,
+      "recovery_reason": null,
+      "manual_resume": false,
+      "last_committed_request_id": "",
+      "failure_trace": ""
+    },
+    "pending_decision_request": null,
+    "consumed_request_ids": []
+  },
+  "air_dual": {
+    "baseline_pid": null,
+    "best_pid": null,
+    "last_summary": null,
+    "last_batch_best": null,
+    "batch_round": 0,
+    "last_batch_summary": null,
+    "active_batch": null
+  },
+  "ground_dual": {
+    "baseline_pid": null,
+    "best_pid": null,
+    "last_summary": null,
+    "last_batch_best": null,
+    "batch_round": 0,
+    "last_batch_summary": null,
+    "active_batch": null
+  }
+}

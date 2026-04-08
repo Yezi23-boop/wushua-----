@@ -1,15 +1,15 @@
 #include "pid.h"
 
 /* 实例化全局控制器聚合结构 */
-PID_Controllers PID; 
+PID_Controllers PID;
 
 /* 编码器低通滤波器实例 */
 LowPassFilter_t encoder_l;
 LowPassFilter_t encoder_r;
 
 /* 内部中间变量 */
-float speed_l = 0;        /* 左轮当前平滑速度 */
-float speed_r = 0;        /* 右轮当前平滑速度 */
+float speed_l = 0; /* 左轮当前平滑速度 */
+float speed_r = 0; /* 右轮当前平滑速度 */
 
 /**
  * @brief 速度环初始化（增量式）
@@ -72,13 +72,13 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-    /* 
-     * 读取硬件编码器计数值 
+    /*
+     * 读取硬件编码器计数值
      * 乘以 0.2f 是将原始计数值转换为实际速度单位的缩放因子
      * 注意：左轮和右轮可能因为安装方向不同而需要取反
      */
-    right->speed = encoder_get_count(TIM4_ENCOEDER) * 0.2f; /* 右电机编码器 */
-    left->speed = -encoder_get_count(TIM3_ENCOEDER) * 0.2f;    /* 左电机编码器 */
+    right->speed = encoder_get_count(TIM4_ENCOEDER) * 0.4f; /* 右电机编码器 */
+    left->speed = -encoder_get_count(TIM3_ENCOEDER) * 0.4f; /* 左电机编码器 */
 
     /* 对原始速度进行一阶低通滤波，减小编码器噪声对速度环的影响 */
     low_pass_filter_mt(&encoder_l, &left->speed, 0.8f); /* alpha=1.0 代表暂不滤波，可根据需要调整 */
@@ -151,13 +151,13 @@ void pid_steer_update(PID_Steer *pid, float error)
 {
     pid->error = error;
 
-    /* 
+    /*
      * 位置式 PID 计算：
      * 包含比例项、非线性项（error * |error|）和微分项
      * 非线性项用于在误差较大时提供更强的回归力
      */
-    pid->output = pid->Kp * pid->error + 
-                  pid->Kp2 * error * func_abs(error) + 
+    pid->output = pid->Kp * pid->error +
+                  pid->Kp2 * error * func_abs(error) +
                   pid->Kd * (pid->error - pid->prev_error);
 
     /* 输出限幅 */
@@ -215,25 +215,28 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
     float k;
     float delta = PID.angle.output; /* 获取角度环/转向环的控制输出 */
 
-    /* 基础防错：防止除零 */
-    if (Scope < 0.001f) Scope = 100.0f;
+    /* Scope 作为教程版 eleOut->k 的归一化范围，默认按 -100~100 处理 */
+    if (Scope < 0.001f)
+        Scope = 100.0f;
 
-    if (delta >= 0.0f) /* 控制输出为正，通常代表需要向左转 */
+    k = delta / Scope;
+
+    /* 教程版差速限幅：将 k 限制在 -0.65 ~ 0.65，避免转向过猛 */
+    if (k > 0.65f)
+        k = 0.65f;
+    else if (k < -0.65f)
+        k = -0.65f;
+
+    if (k >= 0.0f) /* 左转：左轮减速更多，右轮只做小幅补偿 */
     {
-        /* 计算归一化差速系数 k */
-        k = delta / Scope;
-        if (k > 1.0f) k = 1.0f; /* 限幅：最大差速不超过基础速度 */
-
-        /* 差速策略：内侧轮减速，外侧轮适当加速以补偿转弯半径 */
         *left_target = speed_run * (1.0f - k);
-        *right_target = speed_run * (1.0f + k * 0.5f);
+        *right_target = speed_run * (1.0f + k * 0.2f);
     }
-    else /* 控制输出为负，代表需要向右转 */
+    else /* 右转：右轮减速更多，左轮只做小幅补偿 */
     {
-        k = -delta / Scope;
-        if (k > 1.0f) k = 1.0f;
+        k = -k;
 
-        *left_target = speed_run * (1.0f + k * 0.5f);
+        *left_target = speed_run * (1.0f + k * 0.2f);
         *right_target = speed_run * (1.0f - k);
     }
 }
@@ -245,7 +248,7 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
 
 /**
  * @brief 纯追踪 + 陀螺仪闭环混合控制 (Pure Pursuit + Gyro Loop)
- * @details 
+ * @details
  * 1. 利用纯追踪模型计算理论目标曲率和角速度
  * 2. 利用陀螺仪角速度作为反馈，进行内环闭环控制
  * 3. 实现更平滑的高速循迹和抗干扰能力
@@ -269,8 +272,10 @@ void Pure_Pursuit_Gyro_Control(float speed_ref, float norm_error, float gyro_z, 
     curvature = (2.0f * norm_error) / look_ahead_L;
 
     /* 曲率限幅，防止计算出的转向过于剧烈 */
-    if (curvature > 0.1f)  curvature = 0.1f;
-    if (curvature < -0.1f) curvature = -0.1f;
+    if (curvature > 0.1f)
+        curvature = 0.1f;
+    if (curvature < -0.1f)
+        curvature = -0.1f;
 
     /* 3. 将曲率换算成目标转向角速度 */
     /* 保留 57.3f 系数，维持当前工程已有的控制公式量纲 */

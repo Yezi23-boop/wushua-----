@@ -9,6 +9,27 @@ The current runtime is:
 
 The orchestrator lives in [project/speed_loop_autotune/host/agent_orchestrator.py](C:\Users\ye\Desktop\龙丘电机\project\speed_loop_autotune\host\agent_orchestrator.py).
 
+The repo-side workflow CLI now lives at [tools/agent_autotune.py](C:\Users\ye\Desktop\龙丘电机\tools\agent_autotune.py). Its default role is a bridge for the current session or skill layer:
+
+- start or resume the orchestrator
+- stop at `decision_required`
+- surface the raw `decision_request`
+- accept raw agent JSON back through `submit_agent_response(...)`
+
+The repo heuristic module in [project/speed_loop_autotune/host/decision_heuristic.py](C:\Users\ye\Desktop\龙丘电机\project\speed_loop_autotune\host\decision_heuristic.py) remains available only as an explicit fallback path.
+
+## Locked Requirement
+
+The following requirement is intentional and should not be loosened by later refactors unless the user explicitly changes it:
+
+- default runtime mode is agent-analysis mode, not heuristic-autoplay mode
+- every round must wait for a fresh `speed_loop_tuning`-style agent decision before PID is filled
+- one raw agent decision may advance only one round
+- a normal run should continue in this round-by-round pattern for 10 rounds, then report a summary to the user
+- normal rounds should stay quiet; only failure-stop boundaries, invalid agent JSON, serial faults, hardware faults, or orchestrator rejection may interrupt early
+- batch boundaries must not auto-cross into `enter_ground`, `save`, or the next batch without an explicit user action
+- the local heuristic path may exist only as an explicit fallback and must never silently become the default execution path
+
 ## Current Runtime API
 
 Use these two orchestrator calls for the real workflow:
@@ -62,6 +83,21 @@ When the orchestrator returns `decision_required`:
 2. pass `decision_request.context` to the decision agent
 3. keep `decision_request.request_id` unchanged
 4. submit the raw model output through `submit_agent_response(...)`
+
+Typical bridge commands:
+
+```bash
+python tools/agent_autotune.py continue_air
+python tools/agent_autotune.py --submit-raw-file decision.json
+python tools/agent_autotune.py --submit-raw-json "{\"schema_version\":1,...}"
+```
+
+Behavior notes:
+
+- if the workflow is at `waiting_user`, the CLI prints only allowed action words by default
+- if the workflow is at `decision_required`, the CLI prints JSON including `decision_request`
+- submitting raw agent JSON advances exactly one round and returns the next orchestrator state
+- a normal operator loop is therefore: start or resume -> collect `decision_request` -> let the agent analyze once -> submit one raw agent JSON -> repeat until 10 rounds complete or the orchestrator stops early
 
 The skill must not:
 
