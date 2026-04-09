@@ -2,8 +2,8 @@
 #include "debug_view.h"
 
 /* --- 功能模块开关控制 --- */
-#define MAIN_ENABLE_VOFA 1       /* 是否使能 VOFA+ 上位机串口交互 */
-#define MAIN_ENABLE_MENU 0       /* 是否使能 IPS 屏幕菜单交互系统 */
+#define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
+#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 /* TM0/TM1 中断任务链的分函数开关统一定义在 isr.h，并由 zf_common_headfile.h 传入 */
 
@@ -23,6 +23,7 @@ void main()
 
         /* 4. 调用用户层总初始化 (包含所有硬件、控制环、PID 的初始化) */
         int_user();
+        Menu_Set_Service_Enable((uint8)MAIN_ENABLE_MENU);
 
         /* 5. 主循环任务分发 */
         while (1)

@@ -1,5 +1,7 @@
 #include "zf_common_headfile.h"
 #include "int_user.h"
+#include "../service/key.h"
+#include "../service/menu.h"
 #include "../service/speed_loop_autotune_adapter.h"
 
 /* 定时器中断周期定义（单位：ms） */
@@ -11,6 +13,7 @@ static void hardware_init(void);
 static void control_init(void);
 static void app_init(void);
 static void clamp_steer_output(PID_Steer *pid);
+static void timer1_service_10ms(void);
 
 /**
  * @brief 系统初始化总函数
@@ -36,6 +39,7 @@ static void hardware_init(void)
     /* 定时器 PIT 初始化 */
     pit_ms_init(TIM0_PIT, TIME_0);
     pit_ms_init(TIM1_PIT, TIME_1);
+    tim1_irq_handler = timer1_service_10ms;
 
     /* 编码器正交解码初始化 */
     encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04);
@@ -52,6 +56,15 @@ static void hardware_init(void)
     motor_Init();         /* 电机驱动 PWM 及方向 */
     fuya_Init();          /* 负压风扇 PWM */
     wireless_uart_init(); /* 无线串口（用于调试/下载） */
+}
+
+static void timer1_service_10ms(void)
+{
+    if (!Menu_Is_Service_Enabled())
+        return;
+
+    Keystroke_Scan_10ms();
+    Menu_Tick_10ms();
 }
 
 /**

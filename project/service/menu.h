@@ -3,124 +3,85 @@
 
 #include "zf_common_typedef.h"
 
+typedef enum
+{
+    MENU_PAGE_HOME = 0,
+    MENU_PAGE_LIST = 1,
+    MENU_PAGE_SENSOR = 2
+} menu_page_type_t;
+
+typedef enum
+{
+    MENU_ITEM_SUBMENU = 0,
+    MENU_ITEM_INT = 1,
+    MENU_ITEM_INT16 = 2,
+    MENU_ITEM_FLOAT = 3,
+    MENU_ITEM_SPECIAL = 4
+} menu_item_type_t;
+
+typedef struct
+{
+    uint8 title_x;
+    uint8 title_y;
+    uint8 first_row_y;
+    uint8 row_height;
+    uint8 label_x;
+    uint8 value_x;
+    uint8 max_visible_rows;
+} menu_layout_t;
+
+typedef struct
+{
+    const char *label;
+    menu_item_type_t type;
+    void *data_ptr;
+    float step;
+    int child_page;
+    uint8 value_width;
+    uint8 value_decimals;
+} menu_item_t;
+
+typedef struct
+{
+    int page_id;
+    int parent_page_id;
+    const char *title;
+    menu_page_type_t page_type;
+    uint16 refresh_period_ms;
+    menu_layout_t layout;
+    const menu_item_t *items;
+    uint8 item_count;
+    void (*draw_static_hook)(void);
+    void (*draw_dynamic_hook)(void);
+} menu_page_t;
+
 /**
- * @brief 菜单系统状态变量
- * @details display_codename 表示当前所处的菜单页面 ID，用于页面切换和渲染
+ * @brief 当前显示页面 ID
+ * @details 0 为 HOME；普通目录页使用根页面 ID；参数编辑页使用项表中定义的 child_page
  */
 extern int display_codename;
 
-/* --- 核心控制函数 --- */
-
 /**
- * @brief 处理菜单光标移动
+ * @brief 设置菜单服务使能状态
+ * @details 关闭时，中断节拍不再执行扫键和 UI tick，主循环入口也直接返回
  */
-void Cursor(void);
+void Menu_Set_Service_Enable(uint8 enabled);
 
 /**
- * @brief 执行菜单页面跳转逻辑
+ * @brief 查询菜单服务是否使能
  */
-void Menu_Next_Back(void);
+uint8 Menu_Is_Service_Enabled(void);
 
 /**
- * @brief 检查指定的页面 ID 是否包含子菜单
+ * @brief 菜单 10ms 节拍入口
+ * @details 在 TM1 10ms 中断中调用，只累计 UI 时基，不直接刷屏
  */
-int Have_Sub_Menu(int menu_id);
+void Menu_Tick_10ms(void);
 
 /**
- * @brief 通用按键处理函数（用于步进倍数切换等）
- */
-void HandleKeystroke(int keystroke_label);
-
-/* --- 参数修改交互函数 --- */
-
-/**
- * @brief 修改二值型参数（如 1 或 -1）
- */
-void Keystroke_Special_Value(int16 *parameter);
-
-/**
- * @brief 修改整型参数，支持动态步进倍数
- */
-void Keystroke_int(int *parameter, int change_unit_MIN);
-
-/**
- * @brief 修改浮点型参数，支持动态步进倍数
- */
-void Keystroke_float(float *parameter, float change_unit_MIN);
-
-/* --- 页面显示与处理主函数 --- */
-
-/**
- * @brief 菜单系统顶层调度函数
- * @details 在主循环中调用，根据 display_codename 分发到各页面处理函数
+ * @brief 菜单主循环服务函数
+ * @details 消费按键事件、推进状态、按需刷新，然后立即返回
  */
 void Keystroke_Menu(void);
-
-/**
- * @brief 主界面（HOME）渲染与处理
- */
-void Keystroke_Menu_HOME(void);
-
-/* --- 各子页面渲染与处理函数 --- */
-
-/**
- * @brief 启动设置页面渲染
- */
-void Menu_Start_Show(uint8 control_line);
-
-/**
- * @brief 启动设置页面逻辑处理
- */
-void Menu_Start_Process(void);
-
-/**
- * @brief 速度环 PID 参数页面渲染
- */
-void Menu_Speed_Show(uint8 control_line);
-
-/**
- * @brief 速度环 PID 参数页面逻辑处理
- */
-void Menu_Speed_Process(void);
-
-/**
- * @brief 角度环 PID 参数页面渲染
- */
-void Menu_Angle_Show(uint8 control_line);
-
-/**
- * @brief 角度环 PID 参数页面逻辑处理
- */
-void Menu_Angle_Process(void);
-
-/**
- * @brief 圆环控制参数页面渲染
- */
-void Menu_Circle_Show(uint8 control_line);
-
-/**
- * @brief 圆环控制参数页面逻辑处理
- */
-void Menu_Circle_Process(void);
-
-/**
- * @brief 飞坡控制参数页面渲染
- */
-void Menu_Fly_Show(uint8 control_line);
-
-/**
- * @brief 飞坡控制参数页面逻辑处理
- */
-void Menu_Fly_Process(void);
-
-/**
- * @brief 传感器实时数值页面渲染
- */
-void Menu_Sensor_Show(void);
-
-/**
- * @brief 传感器实时数值页面逻辑处理
- */
-void Menu_Sensor_Process(void);
 
 #endif /* _MENU_H_ */
