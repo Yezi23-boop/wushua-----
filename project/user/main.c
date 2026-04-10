@@ -3,8 +3,8 @@
 
 /* --- 功能模块开关控制 --- */
 #define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
-#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
-#define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
+#define MAIN_ENABLE_MENU 0       /* 是否使能 IPS 屏幕菜单交互系统 */
+#define MAIN_ENABLE_SPEED_TEST 1 /* 是否使能串口打印速度环测试数据 */
 /* TM0/TM1 中断任务链的分函数开关统一定义在 isr.h，并由 zf_common_headfile.h 传入 */
 
 /**
@@ -40,7 +40,7 @@ void main()
 
                 /* C. 处理速度测试数据的定时打印 */
 #if MAIN_ENABLE_SPEED_TEST
-                printf_speed_test();
+                printf_imu();
 #endif
         }
 }

@@ -37,7 +37,7 @@
 #define __HEADFILE_H_
 
 #pragma warning disable = 115
-
+#pragma warning disable = 188
 #include "isr.h"
 #include <string.h>
 #include <stdio.h>
@@ -71,6 +71,7 @@
 #include "zf_device_type.h"
 
 #include "zf_device_imu660ra.h"
+#include "zf_device_imu660rc.h"
 
 #include "zf_device_ips114.h"
 

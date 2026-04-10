@@ -38,6 +38,22 @@
 #include "zf_common_typedef.h"
 #include "zf_driver_uart.h"
 
+#ifndef SOFT_IIC
+#define SOFT_IIC        (0)
+#endif
+
+#ifndef SOFT_SPI
+#define SOFT_SPI        (1)
+#endif
+
+#ifndef HARDWARE_IIC
+#define HARDWARE_IIC    (2)
+#endif
+
+#ifndef HARDWARE_SPI
+#define HARDWARE_SPI    (3)
+#endif
+
 typedef enum
 {
     NO_WIRELESS = 0,                                                            // Œﬁ…Ë±∏

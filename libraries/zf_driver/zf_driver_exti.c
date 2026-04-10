@@ -36,5 +36,84 @@
 
 #include "zf_driver_exti.h"
 
+void exti_all_close(void)
+{
+    EX0 = 0;
+    EX1 = 0;
+    EX2 = 0;
+    EX3 = 0;
+    EX4 = 0;
+}
 
-// TO DO
+void exti_enable(exti_pin_enum eru_pin)
+{
+    switch (eru_pin)
+    {
+    case INT0_P32:
+        EX0 = 1;
+        break;
+    case INT1_P33:
+        EX1 = 1;
+        break;
+    case INT2_P36:
+        EX2 = 1;
+        break;
+    case INT3_P37:
+        EX3 = 1;
+        break;
+    case INT4_P30:
+        EX4 = 1;
+        break;
+    default:
+        break;
+    }
+}
+
+void exti_disable(exti_pin_enum eru_pin)
+{
+    switch (eru_pin)
+    {
+    case INT0_P32:
+        EX0 = 0;
+        break;
+    case INT1_P33:
+        EX1 = 0;
+        break;
+    case INT2_P36:
+        EX2 = 0;
+        break;
+    case INT3_P37:
+        EX3 = 0;
+        break;
+    case INT4_P30:
+        EX4 = 0;
+        break;
+    default:
+        break;
+    }
+}
+
+void exti_init(exti_pin_enum eru_pin, exti_trigger_enum trigger)
+{
+    gpio_init((gpio_pin_enum)(eru_pin & 0xFF), GPIO, 1, GPIO_NO_PULL);
+
+    switch (eru_pin)
+    {
+    case INT0_P32:
+        IT0 = trigger;
+        break;
+    case INT1_P33:
+        IT1 = trigger;
+        break;
+    case INT2_P36:
+        break;
+    case INT3_P37:
+        break;
+    case INT4_P30:
+        break;
+    default:
+        break;
+    }
+
+    exti_enable(eru_pin);
+}

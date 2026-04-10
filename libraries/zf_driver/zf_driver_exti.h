@@ -37,8 +37,32 @@
 #ifndef __ZF_DRIVER_EXTI_H
 #define __ZF_DRIVER_EXTI_H
 #include "zf_common_typedef.h"
+#include "zf_driver_gpio.h"
 
+typedef enum
+{
+    INT0_P32 = 0x0100 | IO_P32,
+    INT1_P33 = 0x0200 | IO_P33,
+    INT2_P36 = 0x0300 | IO_P36,
+    INT3_P37 = 0x0400 | IO_P37,
+    INT4_P30 = 0x0500 | IO_P30
+} exti_pin_enum;
 
-// TO DO
+typedef enum
+{
+    EXTI_TRIGGER_BOTH = 0,
+    EXTI_TRIGGER_FALLING = 1
+} exti_trigger_enum;
+
+#define INT0_CLEAR_FLAG (TCON &= (~(0x01 << 1)))
+#define INT1_CLEAR_FLAG (TCON &= (~(0x01 << 3)))
+#define INT2_CLEAR_FLAG (AUXINTIF &= (~(0x10 << 0)))
+#define INT3_CLEAR_FLAG (AUXINTIF &= (~(0x10 << 1)))
+#define INT4_CLEAR_FLAG (AUXINTIF &= (~(0x10 << 2)))
+
+void exti_all_close(void);
+void exti_enable(exti_pin_enum eru_pin);
+void exti_disable(exti_pin_enum eru_pin);
+void exti_init(exti_pin_enum eru_pin, exti_trigger_enum trigger);
 
 #endif

@@ -70,22 +70,27 @@ void printf_adc(void)
  */
 void printf_imu(void)
 {
+
     /* 显示滤波后的角速度（陀螺仪） */
-    ips114_show_float(4 * 24, 18 * 0, Gyr_filt.X, 4, 2);
-    ips114_show_float(4 * 24, 18 * 1, Gyr_filt.Y, 4, 2);
-    ips114_show_float(4 * 24, 18 * 2, Gyr_filt.Z, 4, 2);
+//    ips114_show_float(4 * 24, 18 * 0, Gyr_filt.X, 4, 2);
+//    ips114_show_float(4 * 24, 18 * 1, Gyr_filt.Y, 4, 2);
+//    ips114_show_float(4 * 24, 18 * 2, Gyr_filt.Z, 4, 2);
 
-    /* 显示滤波后的加速度 */
-    ips114_show_float(4 * 24, 18 * 4, Acc_filt.X, 4, 2);
-    ips114_show_float(4 * 24, 18 * 5, Acc_filt.Y, 4, 2);
-    ips114_show_float(4 * 24, 18 * 6, Acc_filt.Z, 4, 2);
+//    /* 显示滤波后的加速度 */
+//    ips114_show_float(4 * 24, 18 * 4, Acc_filt.X, 4, 2);
+//    ips114_show_float(4 * 24, 18 * 5, Acc_filt.Y, 4, 2);
+//    ips114_show_float(4 * 24, 18 * 6, Acc_filt.Z, 4, 2);
 
-    /* 显示计算出的速度与负压风扇状态 */
-    ips114_show_float(7 * 24, 18 * 0, vx, 4, 2);
-    ips114_show_float(7 * 24, 18 * 1, vy, 4, 2);
-    ips114_show_float(7 * 24, 18 * 2, vz, 4, 2);
-    ips114_show_int32(7 * 24, 18 * 4, fuya_date, 4);
-    ips114_show_int32(7 * 24, 18 * 5, phase, 4);
+//    /* 显示计算出的速度与负压风扇状态 */
+//    ips114_show_float(7 * 24, 18 * 0, vx, 4, 2);
+//    ips114_show_float(7 * 24, 18 * 1, vy, 4, 2);
+//    ips114_show_float(7 * 24, 18 * 2, vz, 4, 2);
+//    ips114_show_int32(7 * 24, 18 * 4, fuya_date, 4);
+//    ips114_show_int32(7 * 24, 18 * 5, phase, 4);
+
+    ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
+    ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
+    ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
 }
 
 /**
@@ -105,15 +110,26 @@ void printf_speed_test(void)
 }
 
 /**
- * @brief 按键物理状态测试显示
- * @details 检查各按键引脚（P33-P37）的实时电平，方便排查硬件按键故障
+ * @brief 按键与 IMU 中断脚状态测试显示
+ * @details 四个按键改到 P26/P35/P34/P37，P33 单独作为 IMU660RC 的 INT1 观察
  */
 void printf_butten_test(void)
 {
-    ips114_show_int32(4 * 24, 18 * 0, P33, 1);
-    ips114_show_int32(4 * 24, 18 * 1, P34, 1);
-    ips114_show_int32(4 * 24, 18 * 2, P35, 1);
-    ips114_show_int32(4 * 24, 18 * 4, P36, 1);
-    ips114_show_int32(4 * 24, 18 * 5, P37, 1);
-    ips114_show_int32(4 * 24, 18 * 6, flat_statr, 2);
+    ips114_show_string(0, 18 * 0, "K1 P26");
+    ips114_show_int32(7 * 24, 18 * 0, P26, 1);
+
+    ips114_show_string(0, 18 * 1, "K2 P35");
+    ips114_show_int32(7 * 24, 18 * 1, P35, 1);
+
+    ips114_show_string(0, 18 * 2, "K3 P34");
+    ips114_show_int32(7 * 24, 18 * 2, P34, 1);
+
+    ips114_show_string(0, 18 * 3, "K4 P37");
+    ips114_show_int32(7 * 24, 18 * 3, P37, 1);
+
+    ips114_show_string(0, 18 * 5, "INT P33");
+    ips114_show_int32(7 * 24, 18 * 5, P33, 1);
+
+    ips114_show_string(0, 18 * 6, "FLAG");
+    ips114_show_int32(7 * 24, 18 * 6, flat_statr, 2);
 }

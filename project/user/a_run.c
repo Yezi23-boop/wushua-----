@@ -3,17 +3,17 @@
 #include "a_run_mode.h"
 #include "../service/soft_timer.h"
 
-/* --- è¿è¡ŒçŠ¶æ€å˜é‡ --- */
-volatile int flat_statr = 0; /* è¿è¡ŒçŠ¶æ€é•œåƒï¼š0-åœæ­¢ï¼Œ1-é¢„å¯åŠ¨ï¼Œ2-è¿è¡Œä¸­ï¼Œ3-å¤–éƒ¨å¼ºåˆ¶å¯åŠ¨è¯·æ±‚ */
-volatile int flat_fly = 0;   /* é£å¡çŠ¶æ€æ ‡å¿—ä½ */
+/* --- ÔËĞĞ×´Ì¬±äÁ¿ --- */
+volatile int flat_statr = 0; /* ÔËĞĞ×´Ì¬¾µÏñ£º0-Í£Ö¹£¬1-Ô¤Æô¶¯£¬2-ÔËĞĞÖĞ£¬3-Íâ²¿Ç¿ÖÆÆô¶¯ÇëÇó */
+volatile int flat_fly = 0;   /* ·ÉÆÂ×´Ì¬±êÖ¾Î» */
 
-/* --- å‘¨æœŸä»»åŠ¡å†…éƒ¨å˜é‡ --- */
-static int steer_div = 0;    /* 2ms ä¸»ç¯åˆ†é¢‘ï¼šç”¨äºæ¯ 4ms æ›´æ–°ä¸€æ¬¡è½¬å‘ç¯ */
-static int speed_active = 0; /* å½“å‰å‚ä¸é€Ÿåº¦ç¯è®¡ç®—çš„ç›®æ ‡é€Ÿåº¦ */
+/* --- ÖÜÆÚÈÎÎñÄÚ²¿±äÁ¿ --- */
+static int steer_div = 0;    /* 2ms Ö÷»··ÖÆµ£ºÓÃÓÚÃ¿ 4ms ¸üĞÂÒ»´Î×ªÏò»· */
+static int speed_active = 0; /* µ±Ç°²ÎÓëËÙ¶È»·¼ÆËãµÄÄ¿±êËÙ¶È */
 
 /**
- * @brief 2ms ä¸»æ§åˆ¶ä»»åŠ¡
- * @details æŒ‰â€œé‡‡æ · -> è§£ç®— -> PID -> è¾“å‡ºâ€çš„é¡ºåºå®Œæˆä¸€è½®æ ¸å¿ƒæ§åˆ¶
+ * @brief 2ms Ö÷¿ØÖÆÈÎÎñ
+ * @details °´¡°²ÉÑù -> ½âËã -> PID -> Êä³ö¡±µÄË³ĞòÍê³ÉÒ»ÂÖºËĞÄ¿ØÖÆ
  */
 void run_time_1(void)
 {
@@ -22,36 +22,35 @@ void run_time_1(void)
     int32 left_pwm;
     int32 right_pwm;
 
-    /* 1. æ‰§è¡Œ IAP ä¿æŠ¤ï¼Œé¿å…å¤ä½è„šå¼‚å¸¸æ—¶è¿›å…¥é”™è¯¯çŠ¶æ€ */
+    /* 1. Ö´ĞĞ IAP ±£»¤£¬±ÜÃâ¸´Î»½ÅÒì³£Ê±½øÈë´íÎó×´Ì¬ */
     a_run_apply_iap_guard();
 
-    /* 2. é‡‡é›†ä¼ æ„Ÿå™¨ä¸ç¼–ç å™¨æ•°æ® */
-    Prepare_Data();                                 /* æ›´æ–° IMU æ»¤æ³¢ç»“æœä¸å§¿æ€ç›¸å…³é‡ */
-    Encoder_get(&PID.left_speed, &PID.right_speed); /* è¯»å–å·¦å³è½®ç¼–ç å™¨é€Ÿåº¦ */
+    /* 2. ²É¼¯±àÂëÆ÷Êı¾İ */
+    Encoder_get(&PID.left_speed, &PID.right_speed); /* ¶ÁÈ¡×óÓÒÂÖ±àÂëÆ÷ËÙ¶È */
 
-    /* 3. è½¬å‘ç¯æŒ‰ 4ms æ›´æ–°ä¸€æ¬¡ï¼Œè§’é€Ÿåº¦ç¯å’Œé€Ÿåº¦ç¯ç»§ç»­ä¿æŒ 2ms */
+    /* 3. ×ªÏò»·°´ 4ms ¸üĞÂÒ»´Î£¬½ÇËÙ¶È»·ºÍËÙ¶È»·¼ÌĞø±£³Ö 2ms */
     steer_div++;
     if (steer_div >= 2)
     {
-        read_AD();                         /* é‡‡é›†å››è·¯ç”µæ„Ÿ ADC */
-        pid_steer_update(&PID.steer, Err); /* æ ¹æ®èµ›é“åå·®æ›´æ–°è½¬å‘ç¯ */
+        read_AD();                         /* ²É¼¯ËÄÂ·µç¸Ğ ADC */
+        pid_steer_update(&PID.steer, Err); /* ¸ù¾İÈüµÀÆ«²î¸üĞÂ×ªÏò»· */
         steer_div = 0;
     }
 
-    /* 4. æ ¹æ®é£å¡/èµ›é“çŠ¶æ€ä¿®æ­£å½“å‰ç›®æ ‡é€Ÿåº¦ */
+    /* 4. ¸ù¾İ·ÉÆÂ/ÈüµÀ×´Ì¬ĞŞÕıµ±Ç°Ä¿±êËÙ¶È */
     a_run_mode_update_fly_speed(&speed_active);
 
-    /* 5. ä¸²è”è§’åº¦ç¯ä¸é€Ÿåº¦ç¯ */
-    /* è½¬å‘åé¦ˆç¯ä½¿ç”¨æ ¡å‡†åçš„ gyro_z */
+    /* 5. ´®Áª½Ç¶È»·ÓëËÙ¶È»· */
+    /* ×ªÏò·´À¡»·Ê¹ÓÃĞ£×¼ºóµÄ gyro_z */
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
-    run_mode_update_angle_output(&PID.angle.output); /* ç¯å²›é˜¶æ®µå¯è¦†ç›–è§’åº¦ç¯è¾“å‡º */
-    /* å·¦å³è½®é€Ÿåº¦ç¯ç›®æ ‡ = åŸºç¡€é€Ÿåº¦ Â± å§¿æ€è¡¥å¿ */
+    run_mode_update_angle_output(&PID.angle.output); /* »·µº½×¶Î¿É¸²¸Ç½Ç¶È»·Êä³ö */
+    /* ×óÓÒÂÖËÙ¶È»·Ä¿±ê = »ù´¡ËÙ¶È ¡À ×ËÌ¬²¹³¥ */
     left_target = (float)speed_active - PID.angle.output;
     right_target = (float)speed_active + PID.angle.output;
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
 
-    /* 6. ä»…åœ¨è¿è¡Œæ€æ—¶å…è®¸ç”µæœºè¾“å‡º */
+    /* 6. ½öÔÚÔËĞĞÌ¬Ê±ÔÊĞíµç»úÊä³ö */
     if (a_run_mode_get_start_state() == 2)
     {
         left_pwm = motor_apply_speed_deadzone_comp(
@@ -69,34 +68,31 @@ void run_time_1(void)
 }
 
 /**
- * @brief 10ms çŠ¶æ€ç®¡ç†ä»»åŠ¡
- * @details å®Œæˆèµ›é“æ£€æµ‹ã€å§¿æ€è§£ç®—ã€å¯åœçŠ¶æ€æ›´æ–°å’Œè½¯ä»¶å®šæ—¶å™¨ç»´æŠ¤
+ * @brief 10ms ×´Ì¬¹ÜÀíÈÎÎñ
+ * @details Íê³ÉÈüµÀ¼ì²â¡¢ÆôÍ£×´Ì¬¸üĞÂºÍÈí¼ş¶¨Ê±Æ÷Î¬»¤
  */
 void run_time_2(void)
 {
-    /* 1. æ›´æ–°ç”µæ„ŸåŠ¨æ€æœ€å¤§å€¼ï¼Œç”¨äºå½’ä¸€åŒ–ä¸æ ‡å®š */
+    /* 1. ¸üĞÂµç¸Ğ¶¯Ì¬×î´óÖµ£¬ÓÃÓÚ¹éÒ»»¯Óë±ê¶¨ */
     scan_track_max_value();
 
-    /* 2. æ‰§è¡Œå„ç±»ä¿æŠ¤æ£€æµ‹ */
-    lost_lines();    /* ä¸¢çº¿ä¿æŠ¤ */
-    dianya_jiance(); /* ç”µæ± ç”µå‹æ£€æµ‹ */
+    /* 2. Ö´ĞĞ¸÷Àà±£»¤¼ì²â */
+    lost_lines();    /* ¶ªÏß±£»¤ */
+    dianya_jiance(); /* µç³ØµçÑ¹¼ì²â */
 
-    /* 3. æ›´æ–° Mahony å§¿æ€è§£ç®— */
-    IMUupdate(&Gyr_filt, &Acc_filt, &Att_Angle);
-
-    /* 4. æ›´æ–°å¯åœçŠ¶æ€ä¸è´Ÿå‹æ§åˆ¶ */
-    a_run_mode_update_start_state(); /* æŒ‰é”®/å¤–éƒ¨å‘½ä»¤çŠ¶æ€æœºï¼Œæ¯ 10ms åˆ·æ–°ä¸€æ¬¡ */
-    // åŒæ­¥å¯¹å¤–çŠ¶æ€é•œåƒ
+    /* 3. ¸üĞÂÆôÍ£×´Ì¬Óë¸ºÑ¹¿ØÖÆ */
+    a_run_mode_update_start_state(); /* °´¼ü/Íâ²¿ÃüÁî×´Ì¬»ú£¬Ã¿ 10ms Ë¢ĞÂÒ»´Î */
+    // Í¬²½¶ÔÍâ×´Ì¬¾µÏñ
     flat_statr = a_run_mode_get_start_state();
-    a_run_mode_update_fuya_state(); /* æ ¹æ®å½“å‰çŠ¶æ€å†³å®šæ˜¯å¦å¯ç”¨è´Ÿå‹ */
+    a_run_mode_update_fuya_state(); /* ¸ù¾İµ±Ç°×´Ì¬¾ö¶¨ÊÇ·ñÆôÓÃ¸ºÑ¹ */
 
-    /* 5. æ›´æ–°è½¯ä»¶å®šæ—¶å™¨ */
+    /* 4. ¸üĞÂÈí¼ş¶¨Ê±Æ÷ */
     soft_timer_update_10ms();
 }
 
 /**
- * @brief çº¯è¿½è¸ªå®éªŒä»»åŠ¡
- * @details ä½¿ç”¨ Pure Pursuit ç”Ÿæˆå·¦å³è½®ç›®æ ‡é€Ÿåº¦ï¼Œå¹¶é€šè¿‡é€Ÿåº¦ç¯å®Œæˆé—­ç¯è¾“å‡º
+ * @brief ´¿×·×ÙÊµÑéÈÎÎñ
+ * @details Ê¹ÓÃ Pure Pursuit Éú³É×óÓÒÂÖÄ¿±êËÙ¶È£¬²¢Í¨¹ıËÙ¶È»·Íê³É±Õ»·Êä³ö
  */
 void run_time_3(void)
 {
@@ -107,20 +103,19 @@ void run_time_3(void)
 
     a_run_apply_iap_guard();
     read_AD();
-    Prepare_Data();
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* æ›´æ–°è½¬å‘ç¯ PD è¾“å‡º */
+    /* ¸üĞÂ×ªÏò»· PD Êä³ö */
     pid_steer_update(&PID.steer, Err);
 
-    /* ç”±çº¯è¿½è¸ªç®—æ³•ç”Ÿæˆå·¦å³è½®ç›®æ ‡é€Ÿåº¦ */
+    /* ÓÉ´¿×·×ÙËã·¨Éú³É×óÓÒÂÖÄ¿±êËÙ¶È */
     {
-        float norm_err = Err / 100.0f; /* å°†åå·®ç¼©æ”¾åˆ°ç®—æ³•æ‰€éœ€é‡çº§ */
-        /* è¯¥å®éªŒè·¯å¾„åŒæ ·ä½¿ç”¨æ ¡å‡†åçš„ gyro_z */
+        float norm_err = Err / 100.0f; /* ½«Æ«²îËõ·Åµ½Ëã·¨ËùĞèÁ¿¼¶ */
+        /* ¸ÃÊµÑéÂ·¾¶Í¬ÑùÊ¹ÓÃĞ£×¼ºóµÄ gyro_z */
         Pure_Pursuit_Gyro_Control(app.speed.speed_run, norm_err, gyro_z, &left_target, &right_target);
     }
 
-    /* å°†ç›®æ ‡è½®é€Ÿé€å…¥å·¦å³é€Ÿåº¦ç¯ */
+    /* ½«Ä¿±êÂÖËÙËÍÈë×óÓÒËÙ¶È»· */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
 
@@ -150,21 +145,19 @@ void run_test_angle(void)
 void run_test_motor(int speed_l, int speed_r)
 {
     a_run_apply_iap_guard();
-    /* 1. æ›´æ–°å§¿æ€ä¸æ»¤æ³¢æ•°æ® */
-    Prepare_Data();
-    /* 2. è¯»å–ç¼–ç å™¨é€Ÿåº¦åé¦ˆ */
+    /* 1. ¶ÁÈ¡±àÂëÆ÷ËÙ¶È·´À¡ */
     Encoder_get(&PID.left_speed, &PID.right_speed);
     motor_output(speed_l, speed_r);
 }
 
 /**
- * @brief IAP ä¿æŠ¤å¤„ç†
- * @details å½“ P32 è¢«æ‹‰ä½æ—¶ï¼Œå†™å…¥ STC çº¦å®šå€¼ï¼Œç¡®ä¿ ISP/IAP æ§åˆ¶çŠ¶æ€æ­£ç¡®åˆ‡æ¢
+ * @brief IAP ±£»¤´¦Àí
+ * @details µ± P32 ±»À­µÍÊ±£¬Ğ´Èë STC Ô¼¶¨Öµ£¬È·±£ ISP/IAP ¿ØÖÆ×´Ì¬ÕıÈ·ÇĞ»»
  */
 void a_run_apply_iap_guard(void)
 {
     if (!P32)
     {
-        IAP_CONTR = 0x60; /* STC çº¦å®šå€¼ï¼šå…è®¸åˆ‡æ¢åˆ° ISP/IAP æ§åˆ¶æ¨¡å¼ */
+        IAP_CONTR = 0x60; /* STC Ô¼¶¨Öµ£ºÔÊĞíÇĞ»»µ½ ISP/IAP ¿ØÖÆÄ£Ê½ */
     }
 }

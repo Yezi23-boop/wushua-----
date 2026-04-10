@@ -2,18 +2,18 @@
 #include "../speed_loop_autotune/firmware/speed_loop_trial.h"
 
 /**
- * @brief UART1 DMA æ¥æ”¶ä¸­æ–­
- * @details è´Ÿè´£ç¨‹åºè‡ªåŠ¨ä¸‹è½½é€»è¾‘æ£€æµ‹åŠ UART1 åŸå§‹æ•°æ®åˆ†å‘
+ * @brief UART1 DMA ½ÓÊÕÖĞ¶Ï
+ * @details ¸ºÔğ³ÌĞò×Ô¶¯ÏÂÔØÂß¼­¼ì²â¼° UART1 Ô­Ê¼Êı¾İ·Ö·¢
  */
 void DMA_UART1_IRQHandler(void) interrupt 4
 {
     static vuint8 dwon_count = 0;
-    if (DMA_UR1R_STA & 0x01) /* æ¥æ”¶å®Œæˆæ ‡å¿— */
+    if (DMA_UR1R_STA & 0x01) /* ½ÓÊÕÍê³É±êÖ¾ */
     {
         DMA_UR1R_STA &= ~0x01;
-        uart_rx_start_buff(UART_1); /* å‡†å¤‡ä¸‹ä¸€æ¬¡æ¥æ”¶ */
+        uart_rx_start_buff(UART_1); /* ×¼±¸ÏÂÒ»´Î½ÓÊÕ */
 
-        /* ç¨‹åºè‡ªåŠ¨ä¸‹è½½é€»è¾‘ï¼šæ£€æµ‹è¿ç»­çš„ 0x7F ç‰¹å¾ç  */
+        /* ³ÌĞò×Ô¶¯ÏÂÔØÂß¼­£º¼ì²âÁ¬ĞøµÄ 0x7F ÌØÕ÷Âë */
         if (uart_rx_buff[UART_1][0] == 0x7F)
         {
             if (dwon_count++ > 20)
@@ -22,12 +22,12 @@ void DMA_UART1_IRQHandler(void) interrupt 4
         else
             dwon_count = 0;
 
-        /* è°ƒç”¨ç”¨æˆ·è‡ªå®šä¹‰ä¸²å£å›è°ƒ */
+        /* µ÷ÓÃÓÃ»§×Ô¶¨Òå´®¿Ú»Øµ÷ */
         if (uart1_irq_handler != NULL)
             uart1_irq_handler(uart_rx_buff[UART_1][0]);
     }
 
-    if (DMA_UR1R_STA & 0x02) /* æ•°æ®æº¢å‡ºä¸¢å¼ƒæ ‡å¿— */
+    if (DMA_UR1R_STA & 0x02) /* Êı¾İÒç³ö¶ªÆú±êÖ¾ */
     {
         DMA_UR1R_STA &= ~0x02;
         uart_rx_start_buff(UART_1);
@@ -35,7 +35,7 @@ void DMA_UART1_IRQHandler(void) interrupt 4
 }
 
 /**
- * @brief UART2 DMA æ¥æ”¶ä¸­æ–­
+ * @brief UART2 DMA ½ÓÊÕÖĞ¶Ï
  */
 void DMA_UART2_IRQHandler(void) interrupt 8
 {
@@ -54,7 +54,7 @@ void DMA_UART2_IRQHandler(void) interrupt 8
 }
 
 /**
- * @brief UART3 DMA æ¥æ”¶ä¸­æ–­
+ * @brief UART3 DMA ½ÓÊÕÖĞ¶Ï
  */
 void DMA_UART3_IRQHandler(void) interrupt 17
 {
@@ -73,7 +73,7 @@ void DMA_UART3_IRQHandler(void) interrupt 17
 }
 
 /**
- * @brief UART4 DMA æ¥æ”¶ä¸­æ–­
+ * @brief UART4 DMA ½ÓÊÕÖĞ¶Ï
  */
 void DMA_UART4_IRQHandler(void) interrupt 18
 {
@@ -92,8 +92,19 @@ void DMA_UART4_IRQHandler(void) interrupt 18
 }
 
 /**
- * @brief PIT0 å®šæ—¶å™¨ä¸­æ–­ (5ms)
- * @details è§¦å‘æ ¸å¿ƒæ§åˆ¶ç¯ä»»åŠ¡ run_time_1
+ * @brief Íâ²¿ÖĞ¶Ï1
+ * @details ¹© IMU660RC µÄ INT1(P33) »Øµ÷Ê¹ÓÃ
+ */
+void INT1_IRQHandler(void) interrupt 2
+{
+    INT1_CLEAR_FLAG;
+    if (int1_irq_handler != NULL)
+        int1_irq_handler();
+}
+
+/**
+ * @brief PIT0 ¶¨Ê±Æ÷ÖĞ¶Ï (5ms)
+ * @details ´¥·¢ºËĞÄ¿ØÖÆ»·ÈÎÎñ run_time_1
  */
 void TM0_IRQHandler() interrupt 1
 {
@@ -108,28 +119,28 @@ void TM0_IRQHandler() interrupt 1
     test_speed_func();
 #endif
 #if MAIN_ENABLE_ISR_RUN_TIME_1
-    run_time_1(); /* æ‰§è¡Œæ ¸å¿ƒæ§åˆ¶é€»è¾‘ */
+    run_time_1(); /* Ö´ĞĞºËĞÄ¿ØÖÆÂß¼­ */
 #endif
     if (tim0_irq_handler != NULL)
         tim0_irq_handler();
 }
 
 /**
- * @brief PIT1 å®šæ—¶å™¨ä¸­æ–­ (10ms)
- * @details è§¦å‘ç³»ç»Ÿç®¡ç†ä»»åŠ¡ run_time_2
+ * @brief PIT1 ¶¨Ê±Æ÷ÖĞ¶Ï (10ms)
+ * @details ´¥·¢ÏµÍ³¹ÜÀíÈÎÎñ run_time_2
  */
 void TM1_IRQHandler() interrupt 3
 {
     TIM1_CLEAR_FLAG;
 #if MAIN_ENABLE_ISR_RUN_TIME_2
-    run_time_2(); /* æ‰§è¡Œç³»ç»ŸçŠ¶æ€ç®¡ç†é€»è¾‘ */
+    run_time_2(); /* Ö´ĞĞÏµÍ³×´Ì¬¹ÜÀíÂß¼­ */
 #endif
     if (tim1_irq_handler != NULL)
         tim1_irq_handler();
 }
 
 /**
- * @brief PIT2 å®šæ—¶å™¨ä¸­æ–­
+ * @brief PIT2 ¶¨Ê±Æ÷ÖĞ¶Ï
  */
 void TM2_IRQHandler() interrupt 12
 {
@@ -139,7 +150,7 @@ void TM2_IRQHandler() interrupt 12
 }
 
 /**
- * @brief PIT3 å®šæ—¶å™¨ä¸­æ–­
+ * @brief PIT3 ¶¨Ê±Æ÷ÖĞ¶Ï
  */
 void TM3_IRQHandler() interrupt 19
 {
@@ -149,7 +160,7 @@ void TM3_IRQHandler() interrupt 19
 }
 
 /**
- * @brief PIT4 å®šæ—¶å™¨ä¸­æ–­
+ * @brief PIT4 ¶¨Ê±Æ÷ÖĞ¶Ï
  */
 void TM4_IRQHandler() interrupt 20
 {
@@ -159,7 +170,7 @@ void TM4_IRQHandler() interrupt 20
 }
 
 /**
- * @brief PIT11 å®šæ—¶å™¨ä¸­æ–­
+ * @brief PIT11 ¶¨Ê±Æ÷ÖĞ¶Ï
  */
 void TM11_IRQHandler() interrupt 24
 {
