@@ -341,7 +341,6 @@ uint8 imu660rc_service(void)
     if (imu660rc_quarternion_updated)
     {
         imu660rc_quarternion_updated = 0;
-        imu660rc_get_quarternion();
         quarternion_to_euler(imu660rc_quarternion, &imu660rc_roll, &imu660rc_pitch, &imu660rc_yaw);
         updated = 1;
     }
@@ -353,6 +352,7 @@ void imu660rc_callback(void)
 {
     if (gpio_get_level((gpio_pin_enum)(IMU660RC_INT2_PIN & 0xFF)))
     {
+        imu660rc_get_quarternion();
         imu660rc_quarternion_updated = 1;
     }
 }
@@ -476,12 +476,12 @@ uint8 imu660rc_init(imu660rc_quarternion_rate_config quarternion_rate)
             case INT0_P32:
                 int0_irq_handler = imu660rc_callback;
                 exti_init(IMU660RC_INT2_PIN, EXTI_TRIGGER_BOTH);
-                interrupt_set_priority(INT0_IRQn, 2);
+                interrupt_set_priority(INT0_IRQn, 3);
                 break;
             case INT1_P33:
                 int1_irq_handler = imu660rc_callback;
                 exti_init(IMU660RC_INT2_PIN, EXTI_TRIGGER_BOTH);
-                interrupt_set_priority(INT1_IRQn, 2);
+                interrupt_set_priority(INT1_IRQn, 3);
                 break;
             default:
                 break;

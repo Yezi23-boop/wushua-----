@@ -1,36 +1,36 @@
 /*********************************************************************************************************************
-* AI8051U Opensourec Library ����AI8051U ��Դ�⣩��һ�����ڹٷ� SDK �ӿڵĵ�������Դ��
-* Copyright (c) 2022 SEEKFREE ��ɿƼ�
+* AI8051U Opensourec Library 即（AI8051U 开源库）是一个基于官方 SDK 接口的第三方开源库
+* Copyright (c) 2022 SEEKFREE 逐飞科技
 *
-* ���ļ���STC ��Դ���һ����
+* 本文件是STC 开源库的一部分
 *
-* AI8051U ��Դ�� ���������
-* �����Ը���������������ᷢ���� GPL��GNU General Public License���� GNUͨ�ù�������֤��������
-* �� GPL �ĵ�3�棨�� GPL3.0������ѡ��ģ��κκ����İ汾�����·�����/���޸���
+* AI8051U 开源库 是免费软件
+* 您可以根据自由软件基金会发布的 GPL（GNU General Public License，即 GNU通用公共许可证）的条款
+* 即 GPL 的第3版（即 GPL3.0）或（您选择的）任何后来的版本，重新发布和/或修改它
 *
-* ����Դ��ķ�����ϣ�����ܷ������ã�����δ�������κεı�֤
-* ����û�������������Ի��ʺ��ض���;�ı�֤
-* ����ϸ����μ� GPL
+* 本开源库的发布是希望它能发挥作用，但并未对其作任何的保证
+* 甚至没有隐含的适销性或适合特定用途的保证
+* 更多细节请参见 GPL
 *
-* ��Ӧ�����յ�����Դ���ͬʱ�յ�һ�� GPL �ĸ���
-* ���û�У������<https://www.gnu.org/licenses/>
+* 您应该在收到本开源库的同时收到一份 GPL 的副本
+* 如果没有，请参阅<https://www.gnu.org/licenses/>
 *
-* ����ע����
-* ����Դ��ʹ�� GPL3.0 ��Դ����֤Э�� ������������Ϊ���İ汾
-* ��������Ӣ�İ��� libraries/doc �ļ����µ� GPL3_permission_statement.txt �ļ���
-* ����֤������ libraries �ļ����� �����ļ����µ� LICENSE �ļ�
-* ��ӭ��λʹ�ò����������� ���޸�����ʱ���뱣����ɿƼ��İ�Ȩ����������������
+* 额外注明：
+* 本开源库使用 GPL3.0 开源许可证协议 以上许可申明为译文版本
+* 许可申明英文版在 libraries/doc 文件夹下的 GPL3_permission_statement.txt 文件中
+* 许可证副本在 libraries 文件夹下 即该文件夹下的 LICENSE 文件
+* 欢迎各位使用并传播本程序 但修改内容时必须保留逐飞科技的版权声明（即本声明）
 *
-* �ļ�����          
-* ��˾����          �ɶ���ɿƼ����޹�˾
-* �汾��Ϣ          �鿴 libraries/doc �ļ����� version �ļ� �汾˵��
-* ��������          MDK FOR C251
-* ����ƽ̨          AI8051U
-* ��������          https://seekfree.taobao.com/
+* 文件名称          
+* 公司名称          成都逐飞科技有限公司
+* 版本信息          查看 libraries/doc 文件夹内 version 文件 版本说明
+* 开发环境          MDK FOR C251
+* 适用平台          AI8051U
+* 店铺链接          https://seekfree.taobao.com/
 *
-* �޸ļ�¼
-* ����              ����           ��ע
-* 2024-08-01        ��W            first version
+* 修改记录
+* 日期              作者           备注
+* 2024-08-01        大W            first version
 ********************************************************************************************************************/
 
 #include "zf_common_clock.h"
@@ -40,12 +40,12 @@
 #pragma warning disable = 177
 
 //-------------------------------------------------------------------------------------------------------------------
-//  @brief      ��ʱ�������ж�
-//  @param      pit_n      ��ʱ��ͨ����
-//  @param      time_ms    ʱ��(ms)
+//  @brief      定时器周期中断
+//  @param      pit_n      定时器通道号
+//  @param      time_ms    时间(ms)
 //  @return     void
 //  Sample usage:          pit_timer_ms(TIM_0, 10)
-//						   ʹ�ö�ʱ��0�������жϣ�ʱ��10msһ�Ρ�
+//						   使用定时器0做周期中断，时间10ms一次。
 //-------------------------------------------------------------------------------------------------------------------
 void pit_init(pit_index_enum pit_n, uint32 period)
 {
@@ -56,7 +56,7 @@ void pit_init(pit_index_enum pit_n, uint32 period)
 
 	if(period > (255*65535))
 	{
-		// ���ö�ʱ��Ϊ12Tģʽ��ֹ���
+		// 设置定时器为12T模式防止溢出
 		period = period / 12;
 		
 		if(TIM0_PIT == pit_n)
@@ -87,7 +87,7 @@ void pit_init(pit_index_enum pit_n, uint32 period)
 	}
 	else
 	{
-		// ����Ϊ1Tģʽ
+		// 设置为1T模式
 		if(TIM0_PIT == pit_n)
 		{
 			AUXR |= 0x80;		
@@ -115,59 +115,59 @@ void pit_init(pit_index_enum pit_n, uint32 period)
 	}
 		
 	
-	freq_div = ((period) >> 15);                   // ����Ԥ��Ƶ
-	period_temp = ((period) / (freq_div+1));       // �����Զ���װ��ֵ
+	freq_div = ((period) >> 15);                   // 计算预分频
+	period_temp = ((period) / (freq_div+1));       // 计算自动重装载值
 
 	temp = (uint16)65536 - period_temp;
 
     if(TIM0_PIT == pit_n)
     {
-		TM0PS = freq_div;	// ���÷�Ƶֵ
-        TMOD |= 0x00; 		// ģʽ 0
+		TM0PS = freq_div;	// 设置分频值
+        TMOD |= 0x00; 		// 模式 0
         TL0 = temp;
         TH0 = temp >> 8;
-        TR0 = 1; 			// ������ʱ��
-        ET0 = 1; 			// ʹ�ܶ�ʱ���ж�
+        TR0 = 1; 			// 启动定时器
+        ET0 = 1; 			// 使能定时器中断
     }
     else if(TIM1_PIT == pit_n)
     {
-		TM1PS = freq_div;	// ���÷�Ƶֵ
-        TMOD |= 0x00; // ģʽ 0
+		TM1PS = freq_div;	// 设置分频值
+        TMOD |= 0x00; // 模式 0
         TL1 = temp;
         TH1 = temp >> 8;
-        TR1 = 1; // ������ʱ��
-        ET1 = 1; // ʹ�ܶ�ʱ���ж�
+        TR1 = 1; // 启动定时器
+        ET1 = 1; // 使能定时器中断
     }
     else if(TIM2_PIT == pit_n)
     {
-		TM2PS = freq_div;	// ���÷�Ƶֵ
+		TM2PS = freq_div;	// 设置分频值
         T2L = temp;
         T2H = temp >> 8;
-        AUXR |= 0x10; // ������ʱ��
-        IE2 |= 0x04; // ʹ�ܶ�ʱ���ж�
+        AUXR |= 0x10; // 启动定时器
+        IE2 |= 0x04; // 使能定时器中断
     }
     else if(TIM3_PIT == pit_n)
     {
-		TM3PS = freq_div;	// ���÷�Ƶֵ
+		TM3PS = freq_div;	// 设置分频值
         T3L = temp;
         T3H = temp >> 8;
-        T4T3M |= 0x08; // ������ʱ��
-        IE2 |= 0x20; // ʹ�ܶ�ʱ���ж�
+        T4T3M |= 0x08; // 启动定时器
+        IE2 |= 0x20; // 使能定时器中断
     }
     else if(TIM4_PIT == pit_n)
     {
-		TM4PS = freq_div;	// ���÷�Ƶֵ
+		TM4PS = freq_div;	// 设置分频值
         T4L = temp;
         T4H = temp >> 8;
-        T4T3M |= 0x80; // ������ʱ��
-        IE2 |= 0x40; // ʹ�ܶ�ʱ���ж�
+        T4T3M |= 0x80; // 启动定时器
+        IE2 |= 0x40; // 使能定时器中断
     }
 	else if(TIM11_PIT == pit_n)
 	{
-		T11PS = freq_div;	// ���÷�Ƶֵ
+		T11PS = freq_div;	// 设置分频值
 		T11L = temp;
         T11H = temp >> 8;
-		T11CR = 0x82;	// ������ʱ����ʹ�ܶ�ʱ���ж�
+		T11CR = 0x82;	// 启动定时器，使能定时器中断
 		
 	}
 }

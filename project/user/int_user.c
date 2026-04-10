@@ -4,11 +4,11 @@
 #include "../service/menu.h"
 #include "../service/speed_loop_autotune_adapter.h"
 
-/* ��ʱ���ж����ڶ��壨��λ��ms�� */
-#define TIME_0 5  /* ���Ŀ��ƻ����� */
-#define TIME_1 10 /* �������������� */
+/* 定时器中断周期定义（单位：ms） */
+#define TIME_0 5  /* 主控控制环周期 */
+#define TIME_1 10 /* 按键与菜单服务周期 */
 
-/* �ڲ�˽�г�ʼ���������� */
+/* 内部私有初始化函数声明 */
 static void hardware_init(void);
 static void control_init(void);
 static void app_init(void);
@@ -16,46 +16,46 @@ static void clamp_steer_output(PID_Steer *pid);
 static void timer1_service_10ms(void);
 
 /**
- * @brief ϵͳ��ʼ���ܺ���
+ * @brief 系统初始化函数
  */
 void int_user(void)
 {
-    hardware_init(); /* 1. Ӳ�������ʼ�� */
-    control_init();  /* 2. �����㷨������ʼ�� */
-    app_init();      /* 3. Ӧ���߼���ʼ�� */
+    hardware_init(); /* 1. 硬件平台初始化 */
+    control_init();  /* 2. 控制算法参数初始化 */
+    app_init();      /* 3. 应用逻辑初始化 */
 }
 
 /**
- * @brief Ӳ��������ײ������ʼ��
+ * @brief 硬件平台与底层驱动初始化
  */
 static void hardware_init(void)
 {
-    /* ����ϵͳ��� */
+    /* 初始化系统时钟 */
     system_delay_init();
-    ips114_init();   /* IPS ��Ļ */
-    imu660rc_init(IMU660RC_QUARTERNION_120HZ); /* 6����Դ����� */
-    eeprom_init();   /* ���ô洢���� */
+    ips114_init();                             /* IPS 屏幕 */
+    imu660rc_init(IMU660RC_QUARTERNION_120HZ); /* 六轴惯导初始化 */
+    eeprom_init();                             /* 参数存储模块 */
 
-    /* ��ʱ�� PIT ��ʼ�� */
+    /* 定时器 PIT 初始化 */
     pit_ms_init(TIM0_PIT, TIME_0);
     pit_ms_init(TIM1_PIT, TIME_1);
     tim1_irq_handler = timer1_service_10ms;
 
-    /* ���������������ʼ�� */
+    /* 编码器接口初始化 */
     encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04);
     encoder_dir_init(TIM4_ENCOEDER, IO_P42, TIM4_ENCOEDER_P06);
 
-    /* ADC ͨ����ʼ�� */
-    adc_init(ADC_CH13_P05, ADC_8BIT); /* ��ص�ѹ���� */
-    adc_init(ADC_CH0_P10, ADC_12BIT); /* ��� 1 */
-    adc_init(ADC_CH1_P11, ADC_12BIT); /* ��� 2 */
-    adc_init(ADC_CH8_P00, ADC_12BIT); /* ��� 3 */
-    adc_init(ADC_CH9_P01, ADC_12BIT); /* ��� 4 */
+    /* ADC 通道初始化 */
+    adc_init(ADC_CH13_P05, ADC_8BIT); /* 电池电压采样 */
+    adc_init(ADC_CH0_P10, ADC_12BIT); /* 电感 1 */
+    adc_init(ADC_CH1_P11, ADC_12BIT); /* 电感 2 */
+    adc_init(ADC_CH8_P00, ADC_12BIT); /* 电感 3 */
+    adc_init(ADC_CH9_P01, ADC_12BIT); /* 电感 4 */
 
-    /* Ӧ�ò����� */
-    motor_Init();         /* ������� PWM ������ */
-    fuya_Init();          /* ��ѹ���� PWM */
-    wireless_uart_init(); /* ���ߴ��ڣ����ڵ���/���أ� */
+    /* 应用层模块 */
+    motor_Init();         /* 电机驱动 PWM 输出 */
+    fuya_Init();          /* 负压风扇 PWM */
+    wireless_uart_init(); /* 无线串口（用于调试/上位机） */
 }
 
 static void timer1_service_10ms(void)
@@ -68,38 +68,38 @@ static void timer1_service_10ms(void)
 }
 
 /**
- * @brief ���Ʋ����� PID ʵ����ʼ��
+ * @brief 控制参数与 PID 实例初始化
  */
 static void control_init(void)
 {
-    /* �ٶȻ���ʼ����Ĭ�ϸ���һ�鰲ȫ�Ļ������� */
+    /* 速度环初始化，默认提供一组安全基础参数 */
     pid_speed_init(&PID.left_speed, 105.0f, 20.0f, 0.0f, 10000.0f, 10000.0f);
     pid_speed_init(&PID.right_speed, 105.0f, 20.0f, 0.0f, 10000.0f, 10000.0f);
 
-    /* ת����ǶȻ������㣬����� apply_config �� EEPROM ���� */
+    /* 转向和角度环先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     pid_steer_init(&PID.angle, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
-    /* ͬ�� EEPROM ���� */
+    /* 同步 EEPROM 参数 */
     control_apply_config();
     speed_loop_autotune_project_init();
 }
 
 /**
- * @brief Ӧ�ó��������߼�
+ * @brief 应用层启动逻辑
  */
 static void app_init(void)
 {
-    /* ����֤Ӳ����Ԫ�����ʱ��������������ƫ�� Mahony ��̬�� */
+    /* 预留：必要时可在此做传感器稳定后的一次姿态校准 */
 }
 
 /**
- * @brief ����ͬ������
- * @details ��ȫ�����ýṹ�� app �е�ֵд�뵽 PID ����ʵ����
+ * @brief 控制参数同步函数
+ * @details 把全局配置结构 app 中的值写入 PID 运行实例
  */
 void control_apply_config(void)
 {
-    /* 1. ͬ��ת�򻷣����ڵ�У����� */
+    /* 1. 同步转向环，包含二次校正项 */
     PID.steer.Kp = app.speed.kp_Err;
     PID.steer.Kd = app.speed.kd_Err;
     PID.steer.Kp2 = app.speed.kp2_Err;
@@ -107,7 +107,7 @@ void control_apply_config(void)
     PID.steer.min_output = app.speed.limiting_Err;
     clamp_steer_output(&PID.steer);
 
-    /* 2. ͬ���ǶȻ������������ǣ����� */
+    /* 2. 同步角度环，保持二次项关闭 */
     PID.angle.Kp = app.angle.kp_Angle;
     PID.angle.Kd = app.angle.kd_Angle;
     PID.angle.Kp2 = 0.0f;
@@ -117,7 +117,7 @@ void control_apply_config(void)
 }
 
 /**
- * @brief ��������
+ * @brief 保存当前参数
  */
 void config_save(void)
 {
@@ -126,7 +126,7 @@ void config_save(void)
 }
 
 /**
- * @brief ��������
+ * @brief 加载参数
  */
 void config_load(void)
 {
@@ -135,7 +135,7 @@ void config_load(void)
 }
 
 /**
- * @brief �����޷�����
+ * @brief 限制转向输出幅值
  */
 static void clamp_steer_output(PID_Steer *pid)
 {

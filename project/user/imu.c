@@ -3,36 +3,36 @@
 #include "imu.h"
 #include "../service/filter.h"
 
-/* --- È«¾Ö±äÁ¿¶¨Òå --- */
+/* --- å…¨å±€å˜é‡å®šä¹‰ --- */
 volatile float gyro_z = 0;
 float Gyro_offset_x = 0, Gyro_offset_y = 0, Gyro_offset_z = 0;
 float acc_offset_x = 0, acc_offset_y = 0, acc_offset_z = 0;
-int imu_flat_star = 0; /* ÁãÆ«³õÊ¼»¯Íê³É±êÖ¾ */
+int imu_flat_star = 0; /* é›¶ååˆå§‹åŒ–å®Œæˆæ ‡å¿— */
 
-/* Mahony Ëã·¨²ÎÊı£ºKp ¿ØÖÆÊÕÁ²ËÙ¶È£¬Ki ¿ØÖÆ¾²²î²¹³¥ */
+/* Mahony ç®—æ³•å‚æ•°ï¼šKp æ§åˆ¶æ”¶æ•›é€Ÿåº¦ï¼ŒKi æ§åˆ¶é™å·®è¡¥å¿ */
 #define Kp 5.0f
 #define Ki 0.007f
 
-/* ²ÉÑùÖÜÆÚÏà¹Ø£ºhalfT = 0.5 * Ts */
-/* Èô IMUupdate ÖÜÆÚÎª 10ms£¬Ôò halfT = 0.005f */
+/* é‡‡æ ·å‘¨æœŸç›¸å…³ï¼šhalfT = 0.5 * Ts */
+/* è‹¥ IMUupdate å‘¨æœŸä¸º 10msï¼Œåˆ™ halfT = 0.005f */
 #define halfT 0.005f
 
 #ifndef M_PI
 #define M_PI 3.14159265358979f
 #endif
 
-/* ÊµÀı¶ÔÏó */
+/* å®ä¾‹å¯¹è±¡ */
 FLOAT_ANGLE Att_Angle;
 FLOAT_XYZ Acc_filt;
 FLOAT_XYZ Gyr_filt;
 LowPassFilter_t Gyr_filt_lowpass;
 
-/* ËÄÔªÊı×´Ì¬ÏòÁ¿£¬³õÊ¼Îªµ¥Î»ËÄÔªÊı */
+/* å››å…ƒæ•°çŠ¶æ€å‘é‡ï¼Œåˆå§‹ä¸ºå•ä½å››å…ƒæ•° */
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
 float vx, vy, vz, ex, ey, ez, norm;
 
 /**
- * @brief ×Ô¶¨Òå atan2 Ëã·¨
+ * @brief è‡ªå®šä¹‰ atan2 ç®—æ³•
  */
 double my_atan2(double y, double x)
 {
@@ -60,11 +60,11 @@ double my_atan2(double y, double x)
 }
 
 /**
- * @brief Ö´ĞĞ IMU ÁãÆ«¾²Ì¬±ê¶¨
+ * @brief æ‰§è¡Œ IMU é›¶åé™æ€æ ‡å®š
  */
 void offset_init(void)
 {
-    int rt = 50; /* ²ÉÑù 50 ´ÎÈ¡¾ùÖµ */
+    int rt = 50; /* é‡‡æ · 50 æ¬¡å–å‡å€¼ */
     int i;
 
     for (i = 0; i < rt; i++)
@@ -72,7 +72,7 @@ void offset_init(void)
         imu660rc_get_gyro();
         imu660rc_get_acc();
 
-        /* ÀÛ¼ÓÔ­Ê¼ÎïÀíÁ¿ */
+        /* ç´¯åŠ åŸå§‹ç‰©ç†é‡ */
         Gyro_offset_x += imu660rc_gyro_transition(imu660rc_gyro_x);
         Gyro_offset_y += imu660rc_gyro_transition(imu660rc_gyro_y);
         Gyro_offset_z += imu660rc_gyro_transition(imu660rc_gyro_z);
@@ -83,7 +83,7 @@ void offset_init(void)
         system_delay_ms(5);
     }
 
-    /* ¼ÆËã¾ùÖµ×÷ÎªÁãÆ« */
+    /* è®¡ç®—å‡å€¼ä½œä¸ºé›¶å */
     Gyro_offset_x /= (float)rt;
     Gyro_offset_y /= (float)rt;
     Gyro_offset_z /= (float)rt;
@@ -95,28 +95,28 @@ void offset_init(void)
 }
 
 /**
- * @brief ´«¸ĞÆ÷Êı¾İÔ¤´¦Àí
- * @details ½«Ô­Ê¼Êı¾İ¼õÈ¥ÁãÆ«£¬²¢×ª»»Îª»¡¶È/s »ò g
+ * @brief ä¼ æ„Ÿå™¨æ•°æ®é¢„å¤„ç†
+ * @details å°†åŸå§‹æ•°æ®å‡å»é›¶åï¼Œå¹¶è½¬æ¢ä¸ºå¼§åº¦/s æˆ– g
  */
 void Prepare_Data(void)
 {
-    /* Ó²¼şËÄÔªÊıÑéÖ¤½×¶Î£ºÔİÍ£Èí¼ş×ËÌ¬Á´£¬±ÜÃâÓë INT1 »Øµ÷ÖØ¸´²ÉÑù */
+    /* ç¡¬ä»¶å››å…ƒæ•°éªŒè¯é˜¶æ®µï¼šæš‚åœè½¯ä»¶å§¿æ€é“¾ï¼Œé¿å…ä¸ INT1 å›è°ƒé‡å¤é‡‡æ · */
 }
 
 /**
- * @brief Mahony ×ËÌ¬¸üĞÂËã·¨
- * @details ÀûÓÃ¼ÓËÙ¶È¼ÆĞŞÕıËÄÔªÊıÆ¯ÒÆ£¬²¢»ı·Ö½ÇËÙ¶ÈµÃµ½ÊµÊ±×ËÌ¬
+ * @brief Mahony å§¿æ€æ›´æ–°ç®—æ³•
+ * @details åˆ©ç”¨åŠ é€Ÿåº¦è®¡ä¿®æ­£å››å…ƒæ•°æ¼‚ç§»ï¼Œå¹¶ç§¯åˆ†è§’é€Ÿåº¦å¾—åˆ°å®æ—¶å§¿æ€
  */
 void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc, FLOAT_ANGLE *Angle)
 {
     (void)Gyr_rad;
     (void)Acc;
     (void)Angle;
-    /* Ó²¼şËÄÔªÊıÑéÖ¤½×¶Î£ºÔİÍ£ Mahony ½âËã£¬Ö±½Ó¹Û²ì IMU660RC Ô­ÉúÊä³ö */
+    /* ç¡¬ä»¶å››å…ƒæ•°éªŒè¯é˜¶æ®µï¼šæš‚åœ Mahony è§£ç®—ï¼Œç›´æ¥è§‚å¯Ÿ IMU660RC åŸç”Ÿè¾“å‡º */
 }
 
 /**
- * @brief ¿ìËÙÆ½·½¸ùµ¹Êı (Quake Fast Inverse Sqrt)
+ * @brief å¿«é€Ÿå¹³æ–¹æ ¹å€’æ•° (Quake Fast Inverse Sqrt)
  */
 float invSqrt(float x)
 {
@@ -130,7 +130,7 @@ float invSqrt(float x)
 }
 
 /**
- * @brief ¿ìËÙÆ½·½¸ùËã·¨
+ * @brief å¿«é€Ÿå¹³æ–¹æ ¹ç®—æ³•
  */
 float SquareRootFloat(float number)
 {

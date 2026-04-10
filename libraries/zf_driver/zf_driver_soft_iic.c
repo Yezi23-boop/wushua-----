@@ -1,36 +1,36 @@
 /*********************************************************************************************************************
-* AI8051U Opensourec Library ¼´£¨AI8051U ¿ªÔ´¿â£©ÊÇÒ»¸ö»ùÓÚ¹Ù·½ SDK ½Ó¿ÚµÄµÚÈý·½¿ªÔ´¿â
-* Copyright (c) 2022 SEEKFREE Öð·É¿Æ¼¼
+* AI8051U Opensourec Library å³ï¼ˆAI8051U å¼€æºåº“ï¼‰æ˜¯ä¸€ä¸ªåŸºäºŽå®˜æ–¹ SDK æŽ¥å£çš„ç¬¬ä¸‰æ–¹å¼€æºåº“
+* Copyright (c) 2022 SEEKFREE é€é£žç§‘æŠ€
 *
-* ±¾ÎÄ¼þÊÇSTC ¿ªÔ´¿âµÄÒ»²¿·Ö
+* æœ¬æ–‡ä»¶æ˜¯STC å¼€æºåº“çš„ä¸€éƒ¨åˆ†
 *
-* AI8051U ¿ªÔ´¿â ÊÇÃâ·ÑÈí¼þ
-* Äú¿ÉÒÔ¸ù¾Ý×ÔÓÉÈí¼þ»ù½ð»á·¢²¼µÄ GPL£¨GNU General Public License£¬¼´ GNUÍ¨ÓÃ¹«¹²Ðí¿ÉÖ¤£©µÄÌõ¿î
-* ¼´ GPL µÄµÚ3°æ£¨¼´ GPL3.0£©»ò£¨ÄúÑ¡ÔñµÄ£©ÈÎºÎºóÀ´µÄ°æ±¾£¬ÖØÐÂ·¢²¼ºÍ/»òÐÞ¸ÄËü
+* AI8051U å¼€æºåº“ æ˜¯å…è´¹è½¯ä»¶
+* æ‚¨å¯ä»¥æ ¹æ®è‡ªç”±è½¯ä»¶åŸºé‡‘ä¼šå‘å¸ƒçš„ GPLï¼ˆGNU General Public Licenseï¼Œå³ GNUé€šç”¨å…¬å…±è®¸å¯è¯ï¼‰çš„æ¡æ¬¾
+* å³ GPL çš„ç¬¬3ç‰ˆï¼ˆå³ GPL3.0ï¼‰æˆ–ï¼ˆæ‚¨é€‰æ‹©çš„ï¼‰ä»»ä½•åŽæ¥çš„ç‰ˆæœ¬ï¼Œé‡æ–°å‘å¸ƒå’Œ/æˆ–ä¿®æ”¹å®ƒ
 *
-* ±¾¿ªÔ´¿âµÄ·¢²¼ÊÇÏ£ÍûËüÄÜ·¢»Ó×÷ÓÃ£¬µ«²¢Î´¶ÔÆä×÷ÈÎºÎµÄ±£Ö¤
-* ÉõÖÁÃ»ÓÐÒþº¬µÄÊÊÏúÐÔ»òÊÊºÏÌØ¶¨ÓÃÍ¾µÄ±£Ö¤
-* ¸ü¶àÏ¸½ÚÇë²Î¼û GPL
+* æœ¬å¼€æºåº“çš„å‘å¸ƒæ˜¯å¸Œæœ›å®ƒèƒ½å‘æŒ¥ä½œç”¨ï¼Œä½†å¹¶æœªå¯¹å…¶ä½œä»»ä½•çš„ä¿è¯
+* ç”šè‡³æ²¡æœ‰éšå«çš„é€‚é”€æ€§æˆ–é€‚åˆç‰¹å®šç”¨é€”çš„ä¿è¯
+* æ›´å¤šç»†èŠ‚è¯·å‚è§ GPL
 *
-* ÄúÓ¦¸ÃÔÚÊÕµ½±¾¿ªÔ´¿âµÄÍ¬Ê±ÊÕµ½Ò»·Ý GPL µÄ¸±±¾
-* Èç¹ûÃ»ÓÐ£¬Çë²ÎÔÄ<https://www.gnu.org/licenses/>
+* æ‚¨åº”è¯¥åœ¨æ”¶åˆ°æœ¬å¼€æºåº“çš„åŒæ—¶æ”¶åˆ°ä¸€ä»½ GPL çš„å‰¯æœ¬
+* å¦‚æžœæ²¡æœ‰ï¼Œè¯·å‚é˜…<https://www.gnu.org/licenses/>
 *
-* ¶îÍâ×¢Ã÷£º
-* ±¾¿ªÔ´¿âÊ¹ÓÃ GPL3.0 ¿ªÔ´Ðí¿ÉÖ¤Ð­Òé ÒÔÉÏÐí¿ÉÉêÃ÷ÎªÒëÎÄ°æ±¾
-* Ðí¿ÉÉêÃ÷Ó¢ÎÄ°æÔÚ libraries/doc ÎÄ¼þ¼ÐÏÂµÄ GPL3_permission_statement.txt ÎÄ¼þÖÐ
-* Ðí¿ÉÖ¤¸±±¾ÔÚ libraries ÎÄ¼þ¼ÐÏÂ ¼´¸ÃÎÄ¼þ¼ÐÏÂµÄ LICENSE ÎÄ¼þ
-* »¶Ó­¸÷Î»Ê¹ÓÃ²¢´«²¥±¾³ÌÐò µ«ÐÞ¸ÄÄÚÈÝÊ±±ØÐë±£ÁôÖð·É¿Æ¼¼µÄ°æÈ¨ÉùÃ÷£¨¼´±¾ÉùÃ÷£©
+* é¢å¤–æ³¨æ˜Žï¼š
+* æœ¬å¼€æºåº“ä½¿ç”¨ GPL3.0 å¼€æºè®¸å¯è¯åè®® ä»¥ä¸Šè®¸å¯ç”³æ˜Žä¸ºè¯‘æ–‡ç‰ˆæœ¬
+* è®¸å¯ç”³æ˜Žè‹±æ–‡ç‰ˆåœ¨ libraries/doc æ–‡ä»¶å¤¹ä¸‹çš„ GPL3_permission_statement.txt æ–‡ä»¶ä¸­
+* è®¸å¯è¯å‰¯æœ¬åœ¨ libraries æ–‡ä»¶å¤¹ä¸‹ å³è¯¥æ–‡ä»¶å¤¹ä¸‹çš„ LICENSE æ–‡ä»¶
+* æ¬¢è¿Žå„ä½ä½¿ç”¨å¹¶ä¼ æ’­æœ¬ç¨‹åº ä½†ä¿®æ”¹å†…å®¹æ—¶å¿…é¡»ä¿ç•™é€é£žç§‘æŠ€çš„ç‰ˆæƒå£°æ˜Žï¼ˆå³æœ¬å£°æ˜Žï¼‰
 *
-* ÎÄ¼þÃû³Æ          
-* ¹«Ë¾Ãû³Æ          ³É¶¼Öð·É¿Æ¼¼ÓÐÏÞ¹«Ë¾
-* °æ±¾ÐÅÏ¢          ²é¿´ libraries/doc ÎÄ¼þ¼ÐÄÚ version ÎÄ¼þ °æ±¾ËµÃ÷
-* ¿ª·¢»·¾³          MDK FOR C251
-* ÊÊÓÃÆ½Ì¨          AI8051U
-* µêÆÌÁ´½Ó          https://seekfree.taobao.com/
+* æ–‡ä»¶åç§°          
+* å…¬å¸åç§°          æˆéƒ½é€é£žç§‘æŠ€æœ‰é™å…¬å¸
+* ç‰ˆæœ¬ä¿¡æ¯          æŸ¥çœ‹ libraries/doc æ–‡ä»¶å¤¹å†… version æ–‡ä»¶ ç‰ˆæœ¬è¯´æ˜Ž
+* å¼€å‘çŽ¯å¢ƒ          MDK FOR C251
+* é€‚ç”¨å¹³å°          AI8051U
+* åº—é“ºé“¾æŽ¥          https://seekfree.taobao.com/
 *
-* ÐÞ¸Ä¼ÇÂ¼
-* ÈÕÆÚ              ×÷Õß           ±¸×¢
-* 2024-08-01        ´óW            first version
+* ä¿®æ”¹è®°å½•
+* æ—¥æœŸ              ä½œè€…           å¤‡æ³¨
+* 2024-08-01        å¤§W            first version
 ********************************************************************************************************************/
 
 #include "zf_common_debug.h"
@@ -41,14 +41,14 @@
 #pragma warning disable = 177
 
 
-#define SOFT_IIC_SDA_IO_SWITCH          (0)                                     // ÊÇ·ñÐèÒª SDA ½øÐÐ I/O ÇÐ»» 0-²»ÐèÒª 1-ÐèÒª
+#define SOFT_IIC_SDA_IO_SWITCH          (0)                                     // æ˜¯å¦éœ€è¦ SDA è¿›è¡Œ I/O åˆ‡æ¢ 0-ä¸éœ€è¦ 1-éœ€è¦
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ÑÓÊ±
-// ²ÎÊýËµÃ÷     delay           ÑÓÊ±´ÎÊý
-// ·µ»Ø²ÎÊý     void
-// Ê¹ÓÃÊ¾Àý     soft_iic_delay(1);
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC å»¶æ—¶
+// å‚æ•°è¯´æ˜Ž     delay           å»¶æ—¶æ¬¡æ•°
+// è¿”å›žå‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_delay(1);
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_delay (vuint32 delay)
 {
@@ -58,100 +58,100 @@ void soft_iic_delay (vuint32 delay)
 //#define soft_iic_delay(x)  for(uint32 i = x; i--; )
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC START ÐÅºÅ
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ·µ»Ø²ÎÊý     void
-// Ê¹ÓÃÊ¾Àý     soft_iic_start(soft_iic_obj);
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC START ä¿¡å·
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// è¿”å›žå‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_start(soft_iic_obj);
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_start (soft_iic_info_struct *soft_iic_obj)
 {
     //zf_assert(soft_iic_obj != NULL);
-    gpio_high(soft_iic_obj->scl_pin);                                           // SCL ¸ßµçÆ½
-    gpio_high(soft_iic_obj->sda_pin);                                           // SDA ¸ßµçÆ½
+    gpio_high(soft_iic_obj->scl_pin);                                           // SCL é«˜ç”µå¹³
+    gpio_high(soft_iic_obj->sda_pin);                                           // SDA é«˜ç”µå¹³
 
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_low(soft_iic_obj->sda_pin);                                            // SDA ÏÈÀ­µÍ
+    gpio_low(soft_iic_obj->sda_pin);                                            // SDA å…ˆæ‹‰ä½Ž
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ÔÙÀ­µÍ
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL å†æ‹‰ä½Ž
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC STOP ÐÅºÅ
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ·µ»Ø²ÎÊý     void
-// Ê¹ÓÃÊ¾Àý     soft_iic_stop(soft_iic_obj);
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC STOP ä¿¡å·
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// è¿”å›žå‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_stop(soft_iic_obj);
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_stop (soft_iic_info_struct *soft_iic_obj)
 {
     //zf_assert(soft_iic_obj != NULL);
-    gpio_low(soft_iic_obj->sda_pin);                                            // SDA µÍµçÆ½
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL µÍµçÆ½
+    gpio_low(soft_iic_obj->sda_pin);                                            // SDA ä½Žç”µå¹³
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ä½Žç”µå¹³
 
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_high(soft_iic_obj->scl_pin);                                           // SCL ÏÈÀ­¸ß
+    gpio_high(soft_iic_obj->scl_pin);                                           // SCL å…ˆæ‹‰é«˜
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_high(soft_iic_obj->sda_pin);                                           // SDA ÔÙÀ­¸ß
+    gpio_high(soft_iic_obj->sda_pin);                                           // SDA å†æ‹‰é«˜
     soft_iic_delay(soft_iic_obj->delay);
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ·¢ËÍ ACK/NAKC ÐÅºÅ ÄÚ²¿µ÷ÓÃ
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     ack             ACK µçÆ½
-// ·µ»Ø²ÎÊý     void
-// Ê¹ÓÃÊ¾Àý     soft_iic_send_ack(soft_iic_obj, 1);
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC å‘é€ ACK/NAKC ä¿¡å· å†…éƒ¨è°ƒç”¨
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     ack             ACK ç”µå¹³
+// è¿”å›žå‚æ•°     void
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_send_ack(soft_iic_obj, 1);
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_send_ack (soft_iic_info_struct *soft_iic_obj, uint8 ack)
 {
     //zf_assert(soft_iic_obj != NULL);
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL µÍµçÆ½
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ä½Žç”µå¹³
 
     if(ack)
     {
-        gpio_high(soft_iic_obj->sda_pin);                                       // SDA À­¸ß
+        gpio_high(soft_iic_obj->sda_pin);                                       // SDA æ‹‰é«˜
     }
     else
     {
-        gpio_low(soft_iic_obj->sda_pin);                                        // SDA À­µÍ
+        gpio_low(soft_iic_obj->sda_pin);                                        // SDA æ‹‰ä½Ž
     }
 
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_high(soft_iic_obj->scl_pin);                                           // SCL À­¸ß
+    gpio_high(soft_iic_obj->scl_pin);                                           // SCL æ‹‰é«˜
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL À­µÍ
-    gpio_high(soft_iic_obj->sda_pin);                                           // SDA À­¸ß
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL æ‹‰ä½Ž
+    gpio_high(soft_iic_obj->sda_pin);                                           // SDA æ‹‰é«˜
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC »ñÈ¡ ACK/NAKC ÐÅºÅ
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ·µ»Ø²ÎÊý     uint8           ACK ×´Ì¬
-// Ê¹ÓÃÊ¾Àý     soft_iic_wait_ack(soft_iic_obj);
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC èŽ·å– ACK/NAKC ä¿¡å·
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// è¿”å›žå‚æ•°     uint8           ACK çŠ¶æ€
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_wait_ack(soft_iic_obj);
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 uint8 soft_iic_wait_ack (soft_iic_info_struct *soft_iic_obj)
 {
 	uint8 temp = 0;
     //zf_assert(soft_iic_obj != NULL);
   
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL µÍµçÆ½
-    gpio_high(soft_iic_obj->sda_pin);                                           // SDA ¸ßµçÆ½ ÊÍ·Å SDA
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ä½Žç”µå¹³
+    gpio_high(soft_iic_obj->sda_pin);                                           // SDA é«˜ç”µå¹³ é‡Šæ”¾ SDA
 #if SOFT_IIC_SDA_IO_SWITCH
     gpio_set_dir(soft_iic_obj->sda_pin, GPI, GPI_FLOATING_IN);
 #endif
     soft_iic_delay(soft_iic_obj->delay);
 
-    gpio_high(soft_iic_obj->scl_pin);                                           // SCL ¸ßµçÆ½
+    gpio_high(soft_iic_obj->scl_pin);                                           // SCL é«˜ç”µå¹³
     soft_iic_delay(soft_iic_obj->delay);
 
     if(gpio_get_level((gpio_pin_enum)soft_iic_obj->sda_pin))
     {
         temp = 1;
     }
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL µÍµçÆ½
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ä½Žç”µå¹³
 #if SOFT_IIC_SDA_IO_SWITCH
     gpio_set_dir(soft_iic_obj->sda_pin, GPO, GPO_OPEN_DTAIN);
 #endif
@@ -161,11 +161,11 @@ uint8 soft_iic_wait_ack (soft_iic_info_struct *soft_iic_obj)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ·¢ËÍ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     dat            Êý¾Ý
-// ·µ»Ø²ÎÊý     uint8           ACK ×´Ì¬
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC å‘é€ 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     dat            æ•°æ®
+// è¿”å›žå‚æ•°     uint8           ACK çŠ¶æ€
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 uint8 soft_iic_send_data (soft_iic_info_struct *soft_iic_obj, const uint8 dat)
 {
@@ -180,41 +180,41 @@ uint8 soft_iic_send_data (soft_iic_info_struct *soft_iic_obj, const uint8 dat)
         temp >>= 1;
 
         soft_iic_delay(soft_iic_obj->delay);
-        gpio_high(soft_iic_obj->scl_pin);                                       // SCL À­¸ß
+        gpio_high(soft_iic_obj->scl_pin);                                       // SCL æ‹‰é«˜
         soft_iic_delay(soft_iic_obj->delay);
-        gpio_low(soft_iic_obj->scl_pin);                                        // SCL À­µÍ
+        gpio_low(soft_iic_obj->scl_pin);                                        // SCL æ‹‰ä½Ž
     }
     return ((soft_iic_wait_ack(soft_iic_obj) == 1) ? 0 : 1 );
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ¶ÁÈ¡ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     ack             ACK »ò NACK
-// ·µ»Ø²ÎÊý     uint8           Êý¾Ý
-// ±¸×¢ÐÅÏ¢     ÄÚ²¿µ÷ÓÃ
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC è¯»å– 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     ack             ACK æˆ– NACK
+// è¿”å›žå‚æ•°     uint8           æ•°æ®
+// å¤‡æ³¨ä¿¡æ¯     å†…éƒ¨è°ƒç”¨
 //-------------------------------------------------------------------------------------------------------------------
 uint8 soft_iic_read_data (soft_iic_info_struct *soft_iic_obj, uint8 ack)
 {
     uint8 dat = 0x00;
     uint8 temp = 8;
 	//zf_assert(soft_iic_obj != NULL);
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL µÍµçÆ½
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ä½Žç”µå¹³
     soft_iic_delay(soft_iic_obj->delay);
-    gpio_high(soft_iic_obj->sda_pin);                                           // SDA ¸ßµçÆ½ ÊÍ·Å SDA
+    gpio_high(soft_iic_obj->sda_pin);                                           // SDA é«˜ç”µå¹³ é‡Šæ”¾ SDA
 #if SOFT_IIC_SDA_IO_SWITCH
     gpio_set_dir(soft_iic_obj->sda_pin, GPI, GPI_FLOATING_IN);
 #endif
 
     while(temp --)
     {
-        gpio_low(soft_iic_obj->scl_pin);                                        // SCL À­µÍ
+        gpio_low(soft_iic_obj->scl_pin);                                        // SCL æ‹‰ä½Ž
         soft_iic_delay(soft_iic_obj->delay);
-        gpio_high(soft_iic_obj->scl_pin);                                       // SCL À­¸ß
+        gpio_high(soft_iic_obj->scl_pin);                                       // SCL æ‹‰é«˜
         soft_iic_delay(soft_iic_obj->delay);
         dat = ((dat << 1) | gpio_get_level((gpio_pin_enum)soft_iic_obj->sda_pin));
     }
-    gpio_low(soft_iic_obj->scl_pin);                                            // SCL µÍµçÆ½
+    gpio_low(soft_iic_obj->scl_pin);                                            // SCL ä½Žç”µå¹³
 #if SOFT_IIC_SDA_IO_SWITCH
     gpio_set_dir(soft_iic_obj->sda_pin, GPO, GPO_OPEN_DTAIN);
 #endif
@@ -224,12 +224,12 @@ uint8 soft_iic_read_data (soft_iic_info_struct *soft_iic_obj, uint8 ack)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÐ´ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     dat            ÒªÐ´ÈëµÄÊý¾Ý
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_8bit_register(soft_iic_obj, 0x01);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å†™ 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     dat            è¦å†™å…¥çš„æ•°æ®
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_8bit_register(soft_iic_obj, 0x01);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_8bit (soft_iic_info_struct *soft_iic_obj, const uint8 dat)
 {
@@ -241,13 +241,13 @@ void soft_iic_write_8bit (soft_iic_info_struct *soft_iic_obj, const uint8 dat)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÐ´ 8bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     *dat           Êý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     len             »º³åÇø³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_8bit_array(soft_iic_obj, dat, 6);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å†™ 8bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     *dat           æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     len             ç¼“å†²åŒºé•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_8bit_array(soft_iic_obj, dat, 6);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_8bit_array (soft_iic_info_struct *soft_iic_obj, const uint8 *dat, uint32 len)
 {
@@ -263,12 +263,12 @@ void soft_iic_write_8bit_array (soft_iic_info_struct *soft_iic_obj, const uint8 
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÆ÷Ð´ 16bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     dat            ÒªÐ´ÈëµÄÊý¾Ý
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_16bit(soft_iic_obj, 0x0101);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å™¨å†™ 16bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     dat            è¦å†™å…¥çš„æ•°æ®
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_16bit(soft_iic_obj, 0x0101);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_16bit (soft_iic_info_struct *soft_iic_obj, const uint16 dat)
 {
@@ -281,13 +281,13 @@ void soft_iic_write_16bit (soft_iic_info_struct *soft_iic_obj, const uint16 dat)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÐ´ 16bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     *dat           Êý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     len             »º³åÇø³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_16bit_array(soft_iic_obj, dat, 6);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å†™ 16bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     *dat           æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     len             ç¼“å†²åŒºé•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_16bit_array(soft_iic_obj, dat, 6);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_16bit_array (soft_iic_info_struct *soft_iic_obj, const uint16 *dat, uint32 len)
 {
@@ -304,13 +304,13 @@ void soft_iic_write_16bit_array (soft_iic_info_struct *soft_iic_obj, const uint1
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÏò´«¸ÐÆ÷¼Ä´æÆ÷Ð´ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     dat            ÒªÐ´ÈëµÄÊý¾Ý
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_8bit_register(soft_iic_obj, 0x01, 0x01);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å‘ä¼ æ„Ÿå™¨å¯„å­˜å™¨å†™ 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     dat            è¦å†™å…¥çš„æ•°æ®
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_8bit_register(soft_iic_obj, 0x01, 0x01);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_8bit_register (soft_iic_info_struct *soft_iic_obj, const uint8 register_name, const uint8 dat)
 {
@@ -323,14 +323,14 @@ void soft_iic_write_8bit_register (soft_iic_info_struct *soft_iic_obj, const uin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÏò´«¸ÐÆ÷¼Ä´æÆ÷Ð´ 8bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     *dat           Êý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     len             »º³åÇø³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_8bit_registers(soft_iic_obj, 0x01, dat, 6);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å‘ä¼ æ„Ÿå™¨å¯„å­˜å™¨å†™ 8bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     *dat           æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     len             ç¼“å†²åŒºé•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_8bit_registers(soft_iic_obj, 0x01, dat, 6);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_8bit_registers (soft_iic_info_struct *soft_iic_obj, const uint8 register_name, const uint8 *dat, uint32 len)
 {
@@ -347,13 +347,13 @@ void soft_iic_write_8bit_registers (soft_iic_info_struct *soft_iic_obj, const ui
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÏò´«¸ÐÆ÷¼Ä´æÆ÷Ð´ 16bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     dat            ÒªÐ´ÈëµÄÊý¾Ý
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_16bit_register(soft_iic_obj, 0x0101, 0x0101);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å‘ä¼ æ„Ÿå™¨å¯„å­˜å™¨å†™ 16bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     dat            è¦å†™å…¥çš„æ•°æ®
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_16bit_register(soft_iic_obj, 0x0101, 0x0101);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_16bit_register (soft_iic_info_struct *soft_iic_obj, const uint16 register_name, const uint16 dat)
 {
@@ -368,14 +368,14 @@ void soft_iic_write_16bit_register (soft_iic_info_struct *soft_iic_obj, const ui
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿ÚÏò´«¸ÐÆ÷¼Ä´æÆ÷Ð´ 16bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     *dat           Êý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     len             »º³åÇø³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_write_16bit_registers(soft_iic_obj, 0x0101, dat, 6);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£å‘ä¼ æ„Ÿå™¨å¯„å­˜å™¨å†™ 16bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     *dat           æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     len             ç¼“å†²åŒºé•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_write_16bit_registers(soft_iic_obj, 0x0101, dat, 6);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_write_16bit_registers (soft_iic_info_struct *soft_iic_obj, const uint16 register_name, const uint16 *dat, uint32 len)
 {
@@ -394,11 +394,11 @@ void soft_iic_write_16bit_registers (soft_iic_info_struct *soft_iic_obj, const u
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú¶ÁÈ¡ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ·µ»Ø²ÎÊý     uint8           ·µ»Ø¶ÁÈ¡µÄ 8bit Êý¾Ý
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_8bit(soft_iic_obj);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£è¯»å– 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// è¿”å›žå‚æ•°     uint8           è¿”å›žè¯»å–çš„ 8bit æ•°æ®
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_8bit(soft_iic_obj);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 uint8 soft_iic_read_8bit (soft_iic_info_struct *soft_iic_obj)
 {
@@ -412,14 +412,14 @@ uint8 soft_iic_read_8bit (soft_iic_info_struct *soft_iic_obj)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´Ó´«¸ÐÆ÷¼Ä´æÆ÷¶ÁÈ¡ 8bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     *dat           Òª¶ÁÈ¡µÄÊý¾ÝµÄ»º³åÇøÖ¸Õë
-// ²ÎÊýËµÃ÷     len             Òª¶ÁÈ¡µÄÊý¾Ý³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_8bit_array(soft_iic_obj, dat, 8);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä»Žä¼ æ„Ÿå™¨å¯„å­˜å™¨è¯»å– 8bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     *dat           è¦è¯»å–çš„æ•°æ®çš„ç¼“å†²åŒºæŒ‡é’ˆ
+// å‚æ•°è¯´æ˜Ž     len             è¦è¯»å–çš„æ•°æ®é•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_8bit_array(soft_iic_obj, dat, 8);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_read_8bit_array (soft_iic_info_struct *soft_iic_obj, uint8 *dat, uint32 len)
 {
@@ -435,12 +435,12 @@ void soft_iic_read_8bit_array (soft_iic_info_struct *soft_iic_obj, uint8 *dat, u
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú¶ÁÈ¡ 16bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ·µ»Ø²ÎÊý     uint16          ·µ»Ø¶ÁÈ¡µÄ 16bit Êý¾Ý
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_16bit(soft_iic_obj);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£è¯»å– 16bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// è¿”å›žå‚æ•°     uint16          è¿”å›žè¯»å–çš„ 16bit æ•°æ®
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_16bit(soft_iic_obj);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 uint16 soft_iic_read_16bit (soft_iic_info_struct *soft_iic_obj)
 {
@@ -455,13 +455,13 @@ uint16 soft_iic_read_16bit (soft_iic_info_struct *soft_iic_obj)
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú¶ÁÈ¡ 16bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     *dat           Òª¶ÁÈ¡µÄÊý¾ÝµÄ»º³åÇøÖ¸Õë
-// ²ÎÊýËµÃ÷     len             Òª¶ÁÈ¡µÄÊý¾Ý³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_16bit_array(soft_iic_obj, dat, 8);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£è¯»å– 16bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     *dat           è¦è¯»å–çš„æ•°æ®çš„ç¼“å†²åŒºæŒ‡é’ˆ
+// å‚æ•°è¯´æ˜Ž     len             è¦è¯»å–çš„æ•°æ®é•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_16bit_array(soft_iic_obj, dat, 8);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_read_16bit_array (soft_iic_info_struct *soft_iic_obj, uint16 *dat, uint32 len)
 {
@@ -479,12 +479,12 @@ void soft_iic_read_16bit_array (soft_iic_info_struct *soft_iic_obj, uint16 *dat,
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´Ó´«¸ÐÆ÷¼Ä´æÆ÷¶ÁÈ¡ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ·µ»Ø²ÎÊý     uint8           ·µ»Ø¶ÁÈ¡µÄ 8bit Êý¾Ý
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_8bit_register(soft_iic_obj, 0x01);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä»Žä¼ æ„Ÿå™¨å¯„å­˜å™¨è¯»å– 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// è¿”å›žå‚æ•°     uint8           è¿”å›žè¯»å–çš„ 8bit æ•°æ®
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_8bit_register(soft_iic_obj, 0x01);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 uint8 soft_iic_read_8bit_register (soft_iic_info_struct *soft_iic_obj, const uint8 register_name)
 {
@@ -501,14 +501,14 @@ uint8 soft_iic_read_8bit_register (soft_iic_info_struct *soft_iic_obj, const uin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´Ó´«¸ÐÆ÷¼Ä´æÆ÷¶ÁÈ¡ 8bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     *dat           Òª¶ÁÈ¡µÄÊý¾ÝµÄ»º³åÇøÖ¸Õë
-// ²ÎÊýËµÃ÷     len             Òª¶ÁÈ¡µÄÊý¾Ý³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_8bit_registers(soft_iic_obj, 0x01, dat, 8);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä»Žä¼ æ„Ÿå™¨å¯„å­˜å™¨è¯»å– 8bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     *dat           è¦è¯»å–çš„æ•°æ®çš„ç¼“å†²åŒºæŒ‡é’ˆ
+// å‚æ•°è¯´æ˜Ž     len             è¦è¯»å–çš„æ•°æ®é•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_8bit_registers(soft_iic_obj, 0x01, dat, 8);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_read_8bit_registers (soft_iic_info_struct *soft_iic_obj, const uint8 register_name, uint8 *dat, uint32 len)
 {
@@ -527,12 +527,12 @@ void soft_iic_read_8bit_registers (soft_iic_info_struct *soft_iic_obj, const uin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´Ó´«¸ÐÆ÷¼Ä´æÆ÷¶ÁÈ¡ 16bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ·µ»Ø²ÎÊý     uint16          ·µ»Ø¶ÁÈ¡µÄ 16bit Êý¾Ý
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_16bit_register(soft_iic_obj, 0x0101);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä»Žä¼ æ„Ÿå™¨å¯„å­˜å™¨è¯»å– 16bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// è¿”å›žå‚æ•°     uint16          è¿”å›žè¯»å–çš„ 16bit æ•°æ®
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_16bit_register(soft_iic_obj, 0x0101);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 uint16 soft_iic_read_16bit_register (soft_iic_info_struct *soft_iic_obj, const uint16 register_name)
 {
@@ -551,14 +551,14 @@ uint16 soft_iic_read_16bit_register (soft_iic_info_struct *soft_iic_obj, const u
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´Ó´«¸ÐÆ÷¼Ä´æÆ÷¶ÁÈ¡ 16bit Êý×é
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     *dat           Òª¶ÁÈ¡µÄÊý¾ÝµÄ»º³åÇøÖ¸Õë
-// ²ÎÊýËµÃ÷     len             Òª¶ÁÈ¡µÄÊý¾Ý³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_read_16bit_registers(soft_iic_obj, 0x0101, dat, 8);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä»Žä¼ æ„Ÿå™¨å¯„å­˜å™¨è¯»å– 16bit æ•°ç»„
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     *dat           è¦è¯»å–çš„æ•°æ®çš„ç¼“å†²åŒºæŒ‡é’ˆ
+// å‚æ•°è¯´æ˜Ž     len             è¦è¯»å–çš„æ•°æ®é•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_read_16bit_registers(soft_iic_obj, 0x0101, dat, 8);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_read_16bit_registers (soft_iic_info_struct *soft_iic_obj, const uint16 register_name, uint16 *dat, uint32 len)
 {
@@ -580,15 +580,15 @@ void soft_iic_read_16bit_registers (soft_iic_info_struct *soft_iic_obj, const ui
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´«Êä 8bit Êý×é ÏÈÐ´ºó¶ÁÈ¡
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     *write_data     ·¢ËÍÊý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     write_len       ·¢ËÍ»º³åÇø³¤¶È
-// ²ÎÊýËµÃ÷     *read_data      ¶ÁÈ¡Êý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     read_len        ¶ÁÈ¡»º³åÇø³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     iic_transfer_8bit_array(IIC_1, addr, dat, 64, dat, 64);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä¼ è¾“ 8bit æ•°ç»„ å…ˆå†™åŽè¯»å–
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     *write_data     å‘é€æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     write_len       å‘é€ç¼“å†²åŒºé•¿åº¦
+// å‚æ•°è¯´æ˜Ž     *read_data      è¯»å–æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     read_len        è¯»å–ç¼“å†²åŒºé•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     iic_transfer_8bit_array(IIC_1, addr, dat, 64, dat, 64);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_transfer_8bit_array (soft_iic_info_struct *soft_iic_obj, const uint8 *write_data, uint32 write_len, uint8 *read_data, uint32 read_len)
 {
@@ -615,15 +615,15 @@ void soft_iic_transfer_8bit_array (soft_iic_info_struct *soft_iic_obj, const uin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú´«Êä 16bit Êý×é ÏÈÐ´ºó¶ÁÈ¡
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     *write_data     ·¢ËÍÊý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     write_len       ·¢ËÍ»º³åÇø³¤¶È
-// ²ÎÊýËµÃ÷     *read_data      ¶ÁÈ¡Êý¾Ý´æ·Å»º³åÇø
-// ²ÎÊýËµÃ÷     read_len        ¶ÁÈ¡»º³åÇø³¤¶È
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     iic_transfer_16bit_array(IIC_1, addr, dat, 64, dat, 64);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ä¼ è¾“ 16bit æ•°ç»„ å…ˆå†™åŽè¯»å–
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     *write_data     å‘é€æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     write_len       å‘é€ç¼“å†²åŒºé•¿åº¦
+// å‚æ•°è¯´æ˜Ž     *read_data      è¯»å–æ•°æ®å­˜æ”¾ç¼“å†²åŒº
+// å‚æ•°è¯´æ˜Ž     read_len        è¯»å–ç¼“å†²åŒºé•¿åº¦
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     iic_transfer_16bit_array(IIC_1, addr, dat, 64, dat, 64);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_transfer_16bit_array (soft_iic_info_struct *soft_iic_obj, const uint16 *write_data, uint32 write_len, uint16 *read_data, uint32 read_len)
 {
@@ -652,13 +652,13 @@ void soft_iic_transfer_16bit_array (soft_iic_info_struct *soft_iic_obj, const ui
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú SCCB Ä£Ê½Ïò´«¸ÐÆ÷¼Ä´æÆ÷Ð´ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ²ÎÊýËµÃ÷     dat            ÒªÐ´ÈëµÄÊý¾Ý
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_sccb_write_register(soft_iic_obj, 0x01, 0x01);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ SCCB æ¨¡å¼å‘ä¼ æ„Ÿå™¨å¯„å­˜å™¨å†™ 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// å‚æ•°è¯´æ˜Ž     dat            è¦å†™å…¥çš„æ•°æ®
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_sccb_write_register(soft_iic_obj, 0x01, 0x01);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_sccb_write_register (soft_iic_info_struct *soft_iic_obj, const uint8 register_name, uint8 dat)
 {
@@ -671,12 +671,12 @@ void soft_iic_sccb_write_register (soft_iic_info_struct *soft_iic_obj, const uin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú SCCB Ä£Ê½´Ó´«¸ÐÆ÷¼Ä´æÆ÷¶ÁÈ¡ 8bit Êý¾Ý
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢ ¿ÉÒÔ²ÎÕÕ zf_driver_soft_iic.h ÀïµÄ¸ñÊ½¿´¿´
-// ²ÎÊýËµÃ÷     register_name   ´«¸ÐÆ÷µÄ¼Ä´æÆ÷µØÖ·
-// ·µ»Ø²ÎÊý     uint8           ·µ»Ø¶ÁÈ¡µÄ 8bit Êý¾Ý
-// Ê¹ÓÃÊ¾Àý     soft_iic_sccb_read_register(soft_iic_obj, 0x01);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£ SCCB æ¨¡å¼ä»Žä¼ æ„Ÿå™¨å¯„å­˜å™¨è¯»å– 8bit æ•°æ®
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯ å¯ä»¥å‚ç…§ zf_driver_soft_iic.h é‡Œçš„æ ¼å¼çœ‹çœ‹
+// å‚æ•°è¯´æ˜Ž     register_name   ä¼ æ„Ÿå™¨çš„å¯„å­˜å™¨åœ°å€
+// è¿”å›žå‚æ•°     uint8           è¿”å›žè¯»å–çš„ 8bit æ•°æ®
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_sccb_read_register(soft_iic_obj, 0x01);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 uint8 soft_iic_sccb_read_register (soft_iic_info_struct *soft_iic_obj, const uint8 register_name)
 {
@@ -695,24 +695,24 @@ uint8 soft_iic_sccb_read_register (soft_iic_info_struct *soft_iic_obj, const uin
 }
 
 //-------------------------------------------------------------------------------------------------------------------
-// º¯Êý¼ò½é     Èí¼þ IIC ½Ó¿Ú³õÊ¼»¯ Ä¬ÈÏ MASTER Ä£Ê½ ²»Ìá¹© SLAVE Ä£Ê½
-// ²ÎÊýËµÃ÷     *soft_iic_obj   Èí¼þ IIC Ö¸¶¨ÐÅÏ¢´æ·Å½á¹¹ÌåµÄÖ¸Õë
-// ²ÎÊýËµÃ÷     addr            Èí¼þ IIC µØÖ· ÕâÀïÐèÒª×¢Òâ ±ê×¼ÆßÎ»µØÖ· ×î¸ßÎ»ºöÂÔ Ð´ÈëÊ±ÇëÎñ±ØÈ·ÈÏÎÞÎó
-// ²ÎÊýËµÃ÷     delay           Èí¼þ IIC ÑÓÊ± ¾ÍÊÇÊ±ÖÓ¸ßµçÆ½Ê±¼ä Ô½¶Ì IIC ËÙÂÊÔ½¸ß
-// ²ÎÊýËµÃ÷     scl_pin         Èí¼þ IIC Ê±ÖÓÒý½Å ²ÎÕÕ zf_driver_gpio.h ÄÚ gpio_pin_enum Ã¶¾ÙÌå¶¨Òå
-// ²ÎÊýËµÃ÷     sda_pin         Èí¼þ IIC Êý¾ÝÒý½Å ²ÎÕÕ zf_driver_gpio.h ÄÚ gpio_pin_enum Ã¶¾ÙÌå¶¨Òå
-// ·µ»Ø²ÎÊý     void            
-// Ê¹ÓÃÊ¾Àý     soft_iic_init(&soft_iic_obj, addr, 100, B6, B7);
-// ±¸×¢ÐÅÏ¢     
+// å‡½æ•°ç®€ä»‹     è½¯ä»¶ IIC æŽ¥å£åˆå§‹åŒ– é»˜è®¤ MASTER æ¨¡å¼ ä¸æä¾› SLAVE æ¨¡å¼
+// å‚æ•°è¯´æ˜Ž     *soft_iic_obj   è½¯ä»¶ IIC æŒ‡å®šä¿¡æ¯å­˜æ”¾ç»“æž„ä½“çš„æŒ‡é’ˆ
+// å‚æ•°è¯´æ˜Ž     addr            è½¯ä»¶ IIC åœ°å€ è¿™é‡Œéœ€è¦æ³¨æ„ æ ‡å‡†ä¸ƒä½åœ°å€ æœ€é«˜ä½å¿½ç•¥ å†™å…¥æ—¶è¯·åŠ¡å¿…ç¡®è®¤æ— è¯¯
+// å‚æ•°è¯´æ˜Ž     delay           è½¯ä»¶ IIC å»¶æ—¶ å°±æ˜¯æ—¶é’Ÿé«˜ç”µå¹³æ—¶é—´ è¶ŠçŸ­ IIC é€ŸçŽ‡è¶Šé«˜
+// å‚æ•°è¯´æ˜Ž     scl_pin         è½¯ä»¶ IIC æ—¶é’Ÿå¼•è„š å‚ç…§ zf_driver_gpio.h å†… gpio_pin_enum æžšä¸¾ä½“å®šä¹‰
+// å‚æ•°è¯´æ˜Ž     sda_pin         è½¯ä»¶ IIC æ•°æ®å¼•è„š å‚ç…§ zf_driver_gpio.h å†… gpio_pin_enum æžšä¸¾ä½“å®šä¹‰
+// è¿”å›žå‚æ•°     void            
+// ä½¿ç”¨ç¤ºä¾‹     soft_iic_init(&soft_iic_obj, addr, 100, B6, B7);
+// å¤‡æ³¨ä¿¡æ¯     
 //-------------------------------------------------------------------------------------------------------------------
 void soft_iic_init (soft_iic_info_struct *soft_iic_obj, uint8 addr, uint32 delay, gpio_pin_enum scl_pin, gpio_pin_enum sda_pin)
 {
     //zf_assert(soft_iic_obj != NULL);
-    //zf_assert(scl_pin != sda_pin);                                 // ÐÑÐÑ£¡ scl_pin Óë sda_pin ÔõÃ´ÄÜÌîÍ¬Ò»¸öÒý½Å£¿
+    //zf_assert(scl_pin != sda_pin);                                 // é†’é†’ï¼ scl_pin ä¸Ž sda_pin æ€Žä¹ˆèƒ½å¡«åŒä¸€ä¸ªå¼•è„šï¼Ÿ
     soft_iic_obj->scl_pin = scl_pin;
     soft_iic_obj->sda_pin = sda_pin;
     soft_iic_obj->addr = addr;
     soft_iic_obj->delay = delay;
-    gpio_init(scl_pin, GPO, 1, GPO_OPEN_DTAIN);                          	// ÌáÈ¡¶ÔÓ¦IOË÷Òý AF¹¦ÄÜ±àÂë
-    gpio_init(sda_pin, GPO, 1, GPO_OPEN_DTAIN);                         	// ÌáÈ¡¶ÔÓ¦IOË÷Òý AF¹¦ÄÜ±àÂë
+    gpio_init(scl_pin, GPO, 1, GPO_OPEN_DTAIN);                          	// æå–å¯¹åº”IOç´¢å¼• AFåŠŸèƒ½ç¼–ç 
+    gpio_init(sda_pin, GPO, 1, GPO_OPEN_DTAIN);                         	// æå–å¯¹åº”IOç´¢å¼• AFåŠŸèƒ½ç¼–ç 
 }
