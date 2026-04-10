@@ -23,7 +23,7 @@ void main()
 
         /* 4. 调用用户层总初始化 (包含所有硬件、控制环、PID 的初始化) */
         int_user();
-        Menu_Set_Service_Enable((uint8)MAIN_ENABLE_MENU);
+       Menu_Set_Service_Enable((uint8)MAIN_ENABLE_MENU);
 
         /* 5. 主循环任务分发 */
         while (1)
@@ -35,12 +35,15 @@ void main()
 
                 /* B. 处理 IPS 屏幕菜单渲染与按键交互 (参数修改核心) */
 #if MAIN_ENABLE_MENU
+			    imu660rc_service();
                 Keystroke_Menu();
 #endif
 
                 /* C. 处理速度测试数据的定时打印 */
 #if MAIN_ENABLE_SPEED_TEST
-                printf_imu();
+ //	printf("%f,%f,%f\n",imu660rc_roll,imu660rc_pitch,imu660rc_yaw);
+//             printf_imu();
+//			printf_speed_test();
 #endif
         }
 }

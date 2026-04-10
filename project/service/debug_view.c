@@ -2,7 +2,8 @@
 #include "vofa.h"
 #include "zf_common_headfile.h"
 
-#define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 1
+#define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 0
+#define IMU_UART_PRINT_DIV 12
 
 /**
  * @brief VOFA+ 上位机交互服务
@@ -70,27 +71,26 @@ void printf_adc(void)
  */
 void printf_imu(void)
 {
+    uint8 updated = 0;
+    static uint8 imu_uart_print_count = 0;
 
-    /* 显示滤波后的角速度（陀螺仪） */
-//    ips114_show_float(4 * 24, 18 * 0, Gyr_filt.X, 4, 2);
-//    ips114_show_float(4 * 24, 18 * 1, Gyr_filt.Y, 4, 2);
-//    ips114_show_float(4 * 24, 18 * 2, Gyr_filt.Z, 4, 2);
+    updated = imu660rc_service();
 
-//    /* 显示滤波后的加速度 */
-//    ips114_show_float(4 * 24, 18 * 4, Acc_filt.X, 4, 2);
-//    ips114_show_float(4 * 24, 18 * 5, Acc_filt.Y, 4, 2);
-//    ips114_show_float(4 * 24, 18 * 6, Acc_filt.Z, 4, 2);
-
-//    /* 显示计算出的速度与负压风扇状态 */
-//    ips114_show_float(7 * 24, 18 * 0, vx, 4, 2);
-//    ips114_show_float(7 * 24, 18 * 1, vy, 4, 2);
-//    ips114_show_float(7 * 24, 18 * 2, vz, 4, 2);
-//    ips114_show_int32(7 * 24, 18 * 4, fuya_date, 4);
-//    ips114_show_int32(7 * 24, 18 * 5, phase, 4);
-
-    ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
-    ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
-    ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
+    if (updated)
+    {
+        imu_uart_print_count++;
+        if (IMU_UART_PRINT_DIV <= imu_uart_print_count)
+        {
+            imu_uart_print_count = 0;
+            ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
+            ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
+            ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
+            ips114_show_float(4 * 24, 18 * 3, imu660rc_quarternion[0], 1, 3);
+            ips114_show_float(4 * 24, 18 * 4, imu660rc_quarternion[1], 1, 3);
+            ips114_show_float(4 * 24, 18 * 5, imu660rc_quarternion[2], 1, 3);
+            ips114_show_float(4 * 24, 18 * 6, imu660rc_quarternion[3], 1, 3);
+        }
+    }
 }
 
 /**

@@ -4,11 +4,11 @@
 #include "../service/menu.h"
 #include "../service/speed_loop_autotune_adapter.h"
 
-/* ¶¨Ê±Æ÷ÖÐ¶ÏÖÜÆÚ¶¨Òå£¨µ¥Î»£ºms£© */
-#define TIME_0 2  /* ºËÐÄ¿ØÖÆ»·ÖÜÆÚ */
-#define TIME_1 10 /* ¸¨Öú¹ÜÀí»·ÖÜÆÚ */
+/* ï¿½ï¿½Ê±ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½ï¿½ï¿½Ú¶ï¿½ï¿½å£¨ï¿½ï¿½Î»ï¿½ï¿½msï¿½ï¿½ */
+#define TIME_0 5  /* ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½Æ»ï¿½ï¿½ï¿½ï¿½ï¿½ */
+#define TIME_1 10 /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 
-/* ÄÚ²¿Ë½ÓÐ³õÊ¼»¯º¯ÊýÉùÃ÷ */
+/* ï¿½Ú²ï¿½Ë½ï¿½Ð³ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
 static void hardware_init(void);
 static void control_init(void);
 static void app_init(void);
@@ -16,46 +16,46 @@ static void clamp_steer_output(PID_Steer *pid);
 static void timer1_service_10ms(void);
 
 /**
- * @brief ÏµÍ³³õÊ¼»¯×Üº¯Êý
+ * @brief ÏµÍ³ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½Üºï¿½ï¿½ï¿½
  */
 void int_user(void)
 {
-    hardware_init(); /* 1. Ó²¼þÍâÉè³õÊ¼»¯ */
-    control_init();  /* 2. ¿ØÖÆËã·¨²ÎÊý³õÊ¼»¯ */
-    app_init();      /* 3. Ó¦ÓÃÂß¼­³õÊ¼»¯ */
+    hardware_init(); /* 1. Ó²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ */
+    control_init();  /* 2. ï¿½ï¿½ï¿½ï¿½ï¿½ã·¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ */
+    app_init();      /* 3. Ó¦ï¿½ï¿½ï¿½ß¼ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ */
 }
 
 /**
- * @brief Ó²¼þÇý¶¯Óëµ×²ãÍâÉè³õÊ¼»¯
+ * @brief Ó²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½
  */
 static void hardware_init(void)
 {
-    /* »ù´¡ÏµÍ³×é¼þ */
+    /* ï¿½ï¿½ï¿½ï¿½ÏµÍ³ï¿½ï¿½ï¿½ */
     system_delay_init();
-    ips114_init();   /* IPS ÆÁÄ» */
-    imu660rc_init(IMU660RC_QUARTERNION_120HZ); /* 6Öá¹ßÐÔ´«¸ÐÆ÷ */
-    eeprom_init();   /* ÅäÖÃ´æ´¢¹ÜÀí */
+    ips114_init();   /* IPS ï¿½ï¿½Ä» */
+    imu660rc_init(IMU660RC_QUARTERNION_120HZ); /* 6ï¿½ï¿½ï¿½ï¿½Ô´ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    eeprom_init();   /* ï¿½ï¿½ï¿½Ã´æ´¢ï¿½ï¿½ï¿½ï¿½ */
 
-    /* ¶¨Ê±Æ÷ PIT ³õÊ¼»¯ */
+    /* ï¿½ï¿½Ê±ï¿½ï¿½ PIT ï¿½ï¿½Ê¼ï¿½ï¿½ */
     pit_ms_init(TIM0_PIT, TIME_0);
     pit_ms_init(TIM1_PIT, TIME_1);
     tim1_irq_handler = timer1_service_10ms;
 
-    /* ±àÂëÆ÷Õý½»½âÂë³õÊ¼»¯ */
+    /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ */
     encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04);
     encoder_dir_init(TIM4_ENCOEDER, IO_P42, TIM4_ENCOEDER_P06);
 
-    /* ADC Í¨µÀ³õÊ¼»¯ */
-    adc_init(ADC_CH13_P05, ADC_8BIT); /* µç³ØµçÑ¹²ÉÑù */
-    adc_init(ADC_CH0_P10, ADC_12BIT); /* µç¸Ð 1 */
-    adc_init(ADC_CH1_P11, ADC_12BIT); /* µç¸Ð 2 */
-    adc_init(ADC_CH8_P00, ADC_12BIT); /* µç¸Ð 3 */
-    adc_init(ADC_CH9_P01, ADC_12BIT); /* µç¸Ð 4 */
+    /* ADC Í¨ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ */
+    adc_init(ADC_CH13_P05, ADC_8BIT); /* ï¿½ï¿½Øµï¿½Ñ¹ï¿½ï¿½ï¿½ï¿½ */
+    adc_init(ADC_CH0_P10, ADC_12BIT); /* ï¿½ï¿½ï¿½ 1 */
+    adc_init(ADC_CH1_P11, ADC_12BIT); /* ï¿½ï¿½ï¿½ 2 */
+    adc_init(ADC_CH8_P00, ADC_12BIT); /* ï¿½ï¿½ï¿½ 3 */
+    adc_init(ADC_CH9_P01, ADC_12BIT); /* ï¿½ï¿½ï¿½ 4 */
 
-    /* Ó¦ÓÃ²ãÇý¶¯ */
-    motor_Init();         /* µç»úÇý¶¯ PWM ¼°·½Ïò */
-    fuya_Init();          /* ¸ºÑ¹·çÉÈ PWM */
-    wireless_uart_init(); /* ÎÞÏß´®¿Ú£¨ÓÃÓÚµ÷ÊÔ/ÏÂÔØ£© */
+    /* Ó¦ï¿½Ã²ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    motor_Init();         /* ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ PWM ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    fuya_Init();          /* ï¿½ï¿½Ñ¹ï¿½ï¿½ï¿½ï¿½ PWM */
+    wireless_uart_init(); /* ï¿½ï¿½ï¿½ß´ï¿½ï¿½Ú£ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½Ø£ï¿½ */
 }
 
 static void timer1_service_10ms(void)
@@ -68,38 +68,38 @@ static void timer1_service_10ms(void)
 }
 
 /**
- * @brief ¿ØÖÆ²ÎÊýÓë PID ÊµÀý³õÊ¼»¯
+ * @brief ï¿½ï¿½ï¿½Æ²ï¿½ï¿½ï¿½ï¿½ï¿½ PID Êµï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½
  */
 static void control_init(void)
 {
-    /* ËÙ¶È»·³õÊ¼»¯£ºÄ¬ÈÏ¸ø¶¨Ò»×é°²È«µÄ»ù´¡²ÎÊý */
+    /* ï¿½Ù¶È»ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½Ä¬ï¿½Ï¸ï¿½ï¿½ï¿½Ò»ï¿½é°²È«ï¿½Ä»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
     pid_speed_init(&PID.left_speed, 105.0f, 20.0f, 0.0f, 10000.0f, 10000.0f);
     pid_speed_init(&PID.right_speed, 105.0f, 20.0f, 0.0f, 10000.0f, 10000.0f);
 
-    /* ×ªÏò»·Óë½Ç¶È»·ÏÈÇåÁã£¬ËæºóÓÉ apply_config ´Ó EEPROM ¼ÓÔØ */
+    /* ×ªï¿½ï¿½ï¿½ï¿½Ç¶È»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ã£¬ï¿½ï¿½ï¿½ï¿½ï¿½ apply_config ï¿½ï¿½ EEPROM ï¿½ï¿½ï¿½ï¿½ */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     pid_steer_init(&PID.angle, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
-    /* Í¬²½ EEPROM ²ÎÊý */
+    /* Í¬ï¿½ï¿½ EEPROM ï¿½ï¿½ï¿½ï¿½ */
     control_apply_config();
     speed_loop_autotune_project_init();
 }
 
 /**
- * @brief Ó¦ÓÃ³ÌÐòÆô¶¯Âß¼­
+ * @brief Ó¦ï¿½Ã³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ß¼ï¿½
  */
 static void app_init(void)
 {
-    /* ½öÑéÖ¤Ó²¼þËÄÔªÊýÊä³öÊ±£¬ÏÈÌø¹ýÈí¼þÁãÆ«Óë Mahony ×ËÌ¬Á´ */
+    /* ï¿½ï¿½ï¿½ï¿½Ö¤Ó²ï¿½ï¿½ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ«ï¿½ï¿½ Mahony ï¿½ï¿½Ì¬ï¿½ï¿½ */
 }
 
 /**
- * @brief ²ÎÊýÍ¬²½º¯Êý
- * @details ½«È«¾ÖÅäÖÃ½á¹¹Ìå app ÖÐµÄÖµÐ´Èëµ½ PID ÔËÐÐÊµÀýÖÐ
+ * @brief ï¿½ï¿½ï¿½ï¿½Í¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+ * @details ï¿½ï¿½È«ï¿½ï¿½ï¿½ï¿½ï¿½Ã½á¹¹ï¿½ï¿½ app ï¿½Ðµï¿½ÖµÐ´ï¿½ëµ½ PID ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½
  */
 void control_apply_config(void)
 {
-    /* 1. Í¬²½×ªÏò»·£¨»ùÓÚµç¸Ð£©²ÎÊý */
+    /* 1. Í¬ï¿½ï¿½×ªï¿½ò»·£ï¿½ï¿½ï¿½ï¿½Úµï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½ */
     PID.steer.Kp = app.speed.kp_Err;
     PID.steer.Kd = app.speed.kd_Err;
     PID.steer.Kp2 = app.speed.kp2_Err;
@@ -107,7 +107,7 @@ void control_apply_config(void)
     PID.steer.min_output = app.speed.limiting_Err;
     clamp_steer_output(&PID.steer);
 
-    /* 2. Í¬²½½Ç¶È»·£¨»ùÓÚÍÓÂÝÒÇ£©²ÎÊý */
+    /* 2. Í¬ï¿½ï¿½ï¿½Ç¶È»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç£ï¿½ï¿½ï¿½ï¿½ï¿½ */
     PID.angle.Kp = app.angle.kp_Angle;
     PID.angle.Kd = app.angle.kd_Angle;
     PID.angle.Kp2 = 0.0f;
@@ -117,7 +117,7 @@ void control_apply_config(void)
 }
 
 /**
- * @brief ±£´æÅäÖÃ
+ * @brief ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  */
 void config_save(void)
 {
@@ -126,7 +126,7 @@ void config_save(void)
 }
 
 /**
- * @brief ¼ÓÔØÅäÖÃ
+ * @brief ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  */
 void config_load(void)
 {
@@ -135,7 +135,7 @@ void config_load(void)
 }
 
 /**
- * @brief ¸¨ÖúÏÞ·ùº¯Êý
+ * @brief ï¿½ï¿½ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½ï¿½ï¿½
  */
 static void clamp_steer_output(PID_Steer *pid)
 {

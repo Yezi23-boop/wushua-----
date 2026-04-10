@@ -126,6 +126,7 @@ extern float imu660rc_quarternion[4];
 void imu660rc_get_acc(void);
 void imu660rc_get_gyro(void);
 void imu660rc_get_quarternion(void);
+uint8 imu660rc_service(void);
 
 #define imu660rc_acc_transition(acc_value)       ((float)(acc_value) / imu660rc_transition_factor[0])
 #define imu660rc_gyro_transition(gyro_value)     ((float)(gyro_value) / imu660rc_transition_factor[1])

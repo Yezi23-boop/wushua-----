@@ -19,6 +19,7 @@
 #endif
 
 static uint8 imu660rc_quarternion_rate = IMU660RC_QUARTERNION_DISABLE;
+static vuint8 imu660rc_quarternion_updated = 0;
 
 float imu660rc_transition_factor[2] = {0};
 int16 imu660rc_gyro_x = 0;
@@ -316,7 +317,6 @@ void imu660rc_get_quarternion(void)
         imu660rc_set_mem_bank(IMU660RC_MAIN_MEM_BANK);
 
         quarternion_normalize(imu660rc_quarternion, buff);
-        quarternion_to_euler(imu660rc_quarternion, &imu660rc_roll, &imu660rc_pitch, &imu660rc_yaw);
 
 #if (1 == IMU660RC_QUARTERNION_GET_ACC)
         imu660rc_read_registers(IMU660RC_OUTX_L_A, dat, 6);
@@ -334,11 +334,26 @@ void imu660rc_get_quarternion(void)
     }
 }
 
+uint8 imu660rc_service(void)
+{
+    uint8 updated = 0;
+
+    if (imu660rc_quarternion_updated)
+    {
+        imu660rc_quarternion_updated = 0;
+        imu660rc_get_quarternion();
+        quarternion_to_euler(imu660rc_quarternion, &imu660rc_roll, &imu660rc_pitch, &imu660rc_yaw);
+        updated = 1;
+    }
+
+    return updated;
+}
+
 void imu660rc_callback(void)
 {
     if (gpio_get_level((gpio_pin_enum)(IMU660RC_INT2_PIN & 0xFF)))
     {
-        imu660rc_get_quarternion();
+        imu660rc_quarternion_updated = 1;
     }
 }
 
@@ -347,6 +362,7 @@ uint8 imu660rc_init(imu660rc_quarternion_rate_config quarternion_rate)
     uint8 return_state = 0;
 
     imu660rc_quarternion_rate = quarternion_rate;
+    imu660rc_quarternion_updated = 0;
 
 #if (IMU660RC_USE_INTERFACE == HARDWARE_SPI)
     spi_init(IMU660RC_SPI, SPI_MODE0, IMU660RC_SPI_SPEED, IMU660RC_SPC_PIN, IMU660RC_SDI_PIN, IMU660RC_SDO_PIN, SPI_CS_NULL);
