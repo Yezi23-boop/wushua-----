@@ -67,10 +67,8 @@
 #include "zf_driver_encoder.h"
 
 //------逐飞科技产品驱动头文件
-#include "zf_device_config.h"
 #include "zf_device_type.h"
 
-#include "zf_device_imu660ra.h"
 #include "zf_device_imu660rc.h"
 
 #include "zf_device_ips114.h"

@@ -264,7 +264,7 @@
             <uUch>0</uUch>
             <uFlt64>0</uFlt64>
             <Fuzzy>3</Fuzzy>
-            <Optim>3</Optim>
+            <Optim>0</Optim>
             <wLevel>3</wLevel>
             <SizSpd>0</SizSpd>
             <AcaOpt>0</AcaOpt>
@@ -545,16 +545,6 @@
           <GroupName>zf_device</GroupName>
           <Files>
             <File>
-              <FileName>zf_device_config.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\libraries\zf_device\zf_device_config.c</FilePath>
-            </File>
-            <File>
-              <FileName>zf_device_config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\libraries\zf_device\zf_device_config.h</FilePath>
-            </File>
-            <File>
               <FileName>zf_device_type.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\libraries\zf_device\zf_device_type.c</FilePath>
@@ -583,16 +573,6 @@
               <FileName>zf_device_wireless_uart.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\libraries\zf_device\zf_device_wireless_uart.h</FilePath>
-            </File>
-            <File>
-              <FileName>zf_device_imu660ra.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\libraries\zf_device\zf_device_imu660ra.c</FilePath>
-            </File>
-            <File>
-              <FileName>zf_device_imu660ra.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\libraries\zf_device\zf_device_imu660ra.h</FilePath>
             </File>
             <File>
               <FileName>zf_device_imu660rc.c</FileName>

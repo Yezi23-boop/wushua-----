@@ -3,8 +3,8 @@
 
 /* --- 功能模块开关控制 --- */
 #define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
-#define MAIN_ENABLE_MENU 0       /* 是否使能 IPS 屏幕菜单交互系统 */
-#define MAIN_ENABLE_SPEED_TEST 1 /* 是否使能串口打印速度环测试数据 */
+#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
+#define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 /* TM0/TM1 中断任务链的分函数开关统一定义在 isr.h，并由 zf_common_headfile.h 传入 */
 
 /**
@@ -35,14 +35,13 @@ void main()
 
                 /* B. 处理 IPS 屏幕菜单渲染与按键交互 (参数修改核心) */
 #if MAIN_ENABLE_MENU
-			    imu660rc_service();
                 Keystroke_Menu();
 #endif
 
                 /* C. 处理速度测试数据的定时打印 */
 #if MAIN_ENABLE_SPEED_TEST
  //	printf("%f,%f,%f\n",imu660rc_roll,imu660rc_pitch,imu660rc_yaw);
-//             printf_imu();
+            printf_imu();
 //			printf_speed_test();
 #endif
         }

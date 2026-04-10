@@ -71,25 +71,19 @@ void printf_adc(void)
  */
 void printf_imu(void)
 {
-    uint8 updated = 0;
     static uint8 imu_uart_print_count = 0;
-
-    updated = imu660rc_service();
-
-    if (updated)
+    
+    imu_uart_print_count++;
+    if (IMU_UART_PRINT_DIV <= imu_uart_print_count)
     {
-        imu_uart_print_count++;
-        if (IMU_UART_PRINT_DIV <= imu_uart_print_count)
-        {
-            imu_uart_print_count = 0;
-            ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
-            ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
-            ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
-            ips114_show_float(4 * 24, 18 * 3, imu660rc_quarternion[0], 1, 3);
-            ips114_show_float(4 * 24, 18 * 4, imu660rc_quarternion[1], 1, 3);
-            ips114_show_float(4 * 24, 18 * 5, imu660rc_quarternion[2], 1, 3);
-            ips114_show_float(4 * 24, 18 * 6, imu660rc_quarternion[3], 1, 3);
-        }
+        imu_uart_print_count = 0;
+        ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
+        ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
+        ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
+        ips114_show_float(4 * 24, 18 * 3, imu660rc_quarternion[0], 1, 3);
+        ips114_show_float(4 * 24, 18 * 4, imu660rc_quarternion[1], 1, 3);
+        ips114_show_float(4 * 24, 18 * 5, imu660rc_quarternion[2], 1, 3);
+        ips114_show_float(4 * 24, 18 * 6, imu660rc_quarternion[3], 1, 3);
     }
 }
 

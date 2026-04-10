@@ -317,6 +317,7 @@ void imu660rc_get_quarternion(void)
         imu660rc_set_mem_bank(IMU660RC_MAIN_MEM_BANK);
 
         quarternion_normalize(imu660rc_quarternion, buff);
+        quarternion_to_euler(imu660rc_quarternion, &imu660rc_roll, &imu660rc_pitch, &imu660rc_yaw);
 
 #if (1 == IMU660RC_QUARTERNION_GET_ACC)
         imu660rc_read_registers(IMU660RC_OUTX_L_A, dat, 6);
@@ -341,7 +342,6 @@ uint8 imu660rc_service(void)
     if (imu660rc_quarternion_updated)
     {
         imu660rc_quarternion_updated = 0;
-        quarternion_to_euler(imu660rc_quarternion, &imu660rc_roll, &imu660rc_pitch, &imu660rc_yaw);
         updated = 1;
     }
 
