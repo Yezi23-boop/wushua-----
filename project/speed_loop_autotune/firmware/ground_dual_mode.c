@@ -41,9 +41,9 @@ uint8 ground_dual_set_fuya(float value)
     {
         value = 0.0f;
     }
-    if (value > 4000.0f)
+    if (value > 100.0f)
     {
-        value = 4000.0f;
+        value = 100.0f;
     }
     test_fuya_pwm = (int16)value;
     return 1;
@@ -79,14 +79,7 @@ uint8 ground_dual_set_cooldown_ms(float value)
 
 void ground_dual_run_tick(void)
 {
-    if (test_fuya_pwm > 0)
-    {
-        speed_loop_autotune_component_write_fuya(test_fuya_pwm);
-    }
-    else
-    {
-        speed_loop_autotune_component_write_fuya(0);
-    }
+    speed_loop_autotune_component_write_fuya(test_fuya_pwm);
 
     if (test_trial_active)
     {

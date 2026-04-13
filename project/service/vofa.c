@@ -1,3 +1,13 @@
+/**
+ * @file vofa.c
+ * @brief VOFA 串口命令解析与调参服务
+ * @details
+ * 功能包含：
+ * 1) 从无线串口 FIFO 按字节解析命令帧（'!' 结尾）；
+ * 2) 使用固定深度环形队列缓存完整命令，避免主循环瞬时堵塞；
+ * 3) 将命令转发到 speed_loop_autotune 或 legacy 参数解析路径；
+ * 4) 统计帧溢出和队列溢出次数，供上位机诊断链路质量。
+ */
 #include "zf_common_headfile.h"
 #include "vofa.h"
 #include "../speed_loop_autotune/firmware/host_transport.h"
@@ -9,16 +19,22 @@ static void vofa_parse_byte(uint8 dat);
 static void vofa_enqueue_command(const uint8 *cmd, uint8 len);
 static void vofa_handle_legacy_command(char *cmd);
 
+/**
+ * @brief VOFA 解析器初始化
+ * @details 清空解析缓存与命令队列，重置状态统计。
+ */
 void vofa_init(void)
 {
     uint8 i;
     uint8 j;
 
+    /* 清空当前拼帧缓冲 */
     for (i = 0; i < VOFA_BUFFER_SIZE; i++)
     {
         vofa_data.buffer[i] = 0;
     }
 
+    /* 清空命令队列与各槽位长度 */
     for (i = 0; i < VOFA_CMD_QUEUE_DEPTH; i++)
     {
         vofa_data.cmd_queue_len[i] = 0;
@@ -38,6 +54,9 @@ void vofa_init(void)
     vofa_data.state = VOFA_PARSE_IDLE;
 }
 
+/**
+ * @brief 从无线串口 FIFO 持续取数并解析
+ */
 void vofa_parse_from_fifo(void)
 {
     uint8 dat;
@@ -48,18 +67,28 @@ void vofa_parse_from_fifo(void)
     }
 }
 
+/**
+ * @brief 单字节解析状态机
+ * @details
+ * - 以 '!' 为帧结束符；
+ * - 超长帧进入 discard 模式直到遇到下一个结束符；
+ * - 完整帧入队后状态置为 COMPLETE。
+ */
 static void vofa_parse_byte(uint8 dat)
 {
+    /* 帧结束符：提交当前帧或结束 discard 模式 */
     if (dat == '!' || dat == 0x21)
     {
         if (vofa_data.discard_frame)
         {
+            /* 丢弃状态下遇到结束符，表示本帧彻底跳过并复位 */
             vofa_data.index = 0;
             vofa_data.discard_frame = 0;
             vofa_data.state = (vofa_data.cmd_queue_count > 0) ? VOFA_PARSE_COMPLETE : VOFA_PARSE_IDLE;
         }
         else if (vofa_data.index > 0)
         {
+            /* 正常帧结束：补尾零并入队 */
             vofa_data.buffer[vofa_data.index] = '\0';
             vofa_enqueue_command(vofa_data.buffer, vofa_data.index);
             vofa_data.index = 0;
@@ -69,9 +98,11 @@ static void vofa_parse_byte(uint8 dat)
     {
         if (vofa_data.discard_frame)
         {
+            /* discard 模式中持续丢弃，直到遇到结束符 */
             return;
         }
 
+        /* 预留 1 字节给字符串结束符，避免越界 */
         if (vofa_data.index < (VOFA_MAX_CMD_LEN - 1) && vofa_data.index < (VOFA_BUFFER_SIZE - 1))
         {
             vofa_data.buffer[vofa_data.index++] = dat;
@@ -79,6 +110,7 @@ static void vofa_parse_byte(uint8 dat)
         }
         else
         {
+            /* 超长帧：切到丢弃模式并统计一次 frame overflow */
             vofa_data.index = 0;
             vofa_data.discard_frame = 1;
             vofa_data.frame_overflow_count++;
@@ -87,16 +119,22 @@ static void vofa_parse_byte(uint8 dat)
     }
 }
 
+/**
+ * @brief 将完整命令入队
+ * @details 队列满时丢弃并累计 queue_overflow_count。
+ */
 static void vofa_enqueue_command(const uint8 *cmd, uint8 len)
 {
     uint8 tail;
 
+    /* 队列满则直接丢包，不阻塞主循环 */
     if (vofa_data.cmd_queue_count >= VOFA_CMD_QUEUE_DEPTH)
     {
         vofa_data.queue_overflow_count++;
         return;
     }
 
+    /* 写入尾槽位并推进尾指针 */
     tail = vofa_data.cmd_queue_tail;
     memcpy(vofa_data.cmd_queue[tail], cmd, len);
     vofa_data.cmd_queue[tail][len] = '\0';
@@ -112,12 +150,19 @@ static void vofa_enqueue_command(const uint8 *cmd, uint8 len)
     vofa_data.state = VOFA_PARSE_COMPLETE;
 }
 
+/**
+ * @brief 读取一条待处理命令
+ * @param cmd_out 输出缓冲区
+ * @param max_len 输出缓冲区长度
+ * @return 1 读取成功；0 队列为空
+ */
 uint8 vofa_get_command(char *cmd_out, uint8 max_len)
 {
     uint8 head;
     uint8 cmd_len;
     uint8 copy_len;
 
+    /* 队列为空直接返回，避免无效内存访问 */
     if (vofa_data.cmd_queue_count == 0)
     {
         return 0;
@@ -129,6 +174,7 @@ uint8 vofa_get_command(char *cmd_out, uint8 max_len)
 
     if (max_len > 0)
     {
+        /* 拷贝时保留结尾 '\0'，防止输出缓冲越界 */
         copy_len = cmd_len;
         if (copy_len >= max_len)
         {
@@ -138,6 +184,7 @@ uint8 vofa_get_command(char *cmd_out, uint8 max_len)
         cmd_out[copy_len] = '\0';
     }
 
+    /* 消费头槽位并推进读指针 */
     vofa_data.cmd_queue_len[head] = 0;
     vofa_data.cmd_queue_head++;
     if (vofa_data.cmd_queue_head >= VOFA_CMD_QUEUE_DEPTH)
@@ -151,6 +198,9 @@ uint8 vofa_get_command(char *cmd_out, uint8 max_len)
     return 1;
 }
 
+/**
+ * @brief 清空解析状态与命令队列
+ */
 void vofa_clear_buffer(void)
 {
     vofa_data.index = 0;
@@ -161,45 +211,69 @@ void vofa_clear_buffer(void)
     vofa_data.state = VOFA_PARSE_IDLE;
 }
 
+/**
+ * @brief 获取帧溢出计数
+ */
 uint32 vofa_get_frame_overflow_count(void)
 {
     return vofa_data.frame_overflow_count;
 }
 
+/**
+ * @brief 获取命令队列溢出计数
+ */
 uint32 vofa_get_queue_overflow_count(void)
 {
     return vofa_data.queue_overflow_count;
 }
 
+/**
+ * @brief VOFA 主服务（自动调参模式）
+ * @details
+ * 解析输入命令并交给统一命令处理入口，同时上报解析统计与遥测。
+ */
 void vofa_service(void)
 {
     static char vofa_cmd[64];
 
+    /* 1) 拉取并解析串口数据 */
     vofa_parse_from_fifo();
+    /* 2) 上报解析器健康状态 */
     speed_loop_autotune_set_parser_stats(
         vofa_get_frame_overflow_count(),
         vofa_get_queue_overflow_count());
 
+    /* 3) 逐条消费命令，避免单次阻塞过久 */
     while (vofa_get_command(vofa_cmd, 64))
     {
         handle_vofa_command(vofa_cmd);
     }
 
+    /* 4) 周期输出遥测给上位机 */
     speed_loop_autotune_emit_telemetry();
 }
 
+/**
+ * @brief VOFA 兼容服务（旧版命令模式）
+ */
 void vofa_service_legacy(void)
 {
     static char vofa_cmd[64];
-
+    printf("%f,%f,%f,%f\n", test_angle_value, gyro_z, PID.angle.error, 1.0);
+    /* legacy 模式下只做旧命令兼容，不走新调参组件 */
     vofa_parse_from_fifo();
 
     while (vofa_get_command(vofa_cmd, 64))
     {
         vofa_handle_legacy_command(vofa_cmd);
+        //  printf("%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value);
     }
 }
 
+/**
+ * @brief 旧版文本命令解析
+ * @details 支持手工调 PID、保存/加载参数等历史命令。
+ */
 static void vofa_handle_legacy_command(char *cmd)
 {
     char *eq_pos;
@@ -208,6 +282,7 @@ static void vofa_handle_legacy_command(char *cmd)
     float value;
     uint8 i;
 
+    /* 先清空临时参数名缓存，避免脏数据影响匹配 */
     for (i = 0; i < 16; i++)
     {
         param_name[i] = 0;
@@ -217,6 +292,7 @@ static void vofa_handle_legacy_command(char *cmd)
 
     if (eq_pos != NULL)
     {
+        /* key=value 类型命令：先拆分参数名，再解析数值 */
         name_len = (uint8)(eq_pos - cmd);
 
         if (name_len < 16)
@@ -227,6 +303,7 @@ static void vofa_handle_legacy_command(char *cmd)
 
             if (strcmp(param_name, "L_KP") == 0)
             {
+                /* 速度环左轮参数在线更新 */
                 PID.left_speed.Kp = value;
             }
             else if (strcmp(param_name, "L_KI") == 0)
@@ -292,6 +369,7 @@ static void vofa_handle_legacy_command(char *cmd)
     }
     else
     {
+        /* 无等号命令：按动作类指令处理 */
         if (strcmp(cmd, "FUYA") == 0)
         {
         }
@@ -312,8 +390,13 @@ static void vofa_handle_legacy_command(char *cmd)
     }
 }
 
+/**
+ * @brief VOFA 命令统一分发入口
+ * @details 优先交给 speed_loop_autotune 处理，未匹配再走 legacy 路径。
+ */
 void handle_vofa_command(char *cmd)
 {
+    /* 优先新协议：匹配成功即返回，避免同命令被重复解释 */
     if (speed_loop_autotune_handle_text_command(cmd))
     {
         return;

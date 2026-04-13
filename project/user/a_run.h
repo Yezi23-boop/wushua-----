@@ -6,8 +6,10 @@
 /**
  * @brief 运行状态标志
  */
-extern volatile int flat_statr; /**< 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */
-extern volatile int flat_fly;   /**< 飞坡状态标志：1-飞坡控制生效，0-普通巡线状态 */
+extern volatile int flat_statr;         /**< 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */
+extern volatile int flat_fly;           /**< 飞坡状态标志：1-飞坡控制生效，0-普通巡线状态 */
+extern volatile float run_left_target;  /**< 当前左轮目标速度（用于菜单/调试显示） */
+extern volatile float run_right_target; /**< 当前右轮目标速度（用于菜单/调试显示） */
 
 /**
  * @brief 5ms 主控制任务
@@ -29,7 +31,6 @@ void run_time_3(void);
 
 /* --- 测试与保护接口 --- */
 void run_test_angle(void);
-void run_test_motor(int speed_l, int speed_r);
 void a_run_apply_iap_guard(void);
 
 #endif /* __A_RUN_H__ */

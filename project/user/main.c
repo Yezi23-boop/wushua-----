@@ -1,11 +1,4 @@
 #include "zf_common_headfile.h"
-#include "debug_view.h"
-
-/* --- 功能模块开关控制 --- */
-#define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
-#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
-#define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
-/* TM0/TM1 中断任务链的分函数开关统一定义在 isr.h，并由 zf_common_headfile.h 传入 */
 
 /**
  * @brief 程序主入口
@@ -23,7 +16,7 @@ void main()
 
         /* 4. 调用用户层总初始化 (包含所有硬件、控制环、PID 的初始化) */
         int_user();
-       Menu_Set_Service_Enable((uint8)MAIN_ENABLE_MENU);
+        Menu_Set_Service_Enable((uint8)MAIN_ENABLE_MENU);
 
         /* 5. 主循环任务分发 */
         while (1)
@@ -35,13 +28,19 @@ void main()
 
                 /* B. 处理 IPS 屏幕菜单渲染与按键交互 (参数修改核心) */
 #if MAIN_ENABLE_MENU
+                //	P36=0;
                 Keystroke_Menu();
+                //	P36=1;
 #endif
 
                 /* C. 处理速度测试数据的定时打印 */
 #if MAIN_ENABLE_SPEED_TEST
- //	printf("%f,%f,%f\n",imu660rc_roll,imu660rc_pitch,imu660rc_yaw);
-            printf_imu();
+
+                printf("%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, speed_l, speed_r);
+                ips114_show_float(4 * 24, 18 * 0, P46, 4, 1);
+                ips114_show_float(4 * 24, 18 * 1, P42, 4, 1);
+                //      printf_imu();
+//			printf_adc();
 //			printf_speed_test();
 #endif
         }

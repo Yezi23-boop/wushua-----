@@ -5,7 +5,7 @@
 #include "../service/speed_loop_autotune_adapter.h"
 
 /* 定时器中断周期定义（单位：ms） */
-#define TIME_0 5  /* 主控控制环周期 */
+#define TIME_0 2  /* 主控控制环周期 */
 #define TIME_1 10 /* 按键与菜单服务周期 */
 
 /* 内部私有初始化函数声明 */
@@ -13,6 +13,7 @@ static void hardware_init(void);
 static void control_init(void);
 static void app_init(void);
 static void clamp_steer_output(PID_Steer *pid);
+static float clamp_config_percent(float value);
 static void timer1_service_10ms(void);
 
 /**
@@ -20,9 +21,13 @@ static void timer1_service_10ms(void);
  */
 void int_user(void)
 {
+    //	gpio_init(IO_P36, GPO, 1, GPO_PUSH_PULL);
     hardware_init(); /* 1. 硬件平台初始化 */
     control_init();  /* 2. 控制算法参数初始化 */
     app_init();      /* 3. 应用逻辑初始化 */
+                     /* 定时器 PIT 初始化 */
+    pit_ms_init(TIM0_PIT, TIME_0);
+    pit_ms_init(TIM1_PIT, TIME_1);
 }
 
 /**
@@ -33,12 +38,9 @@ static void hardware_init(void)
     /* 初始化系统时钟 */
     system_delay_init();
     ips114_init();                             /* IPS 屏幕 */
-    imu660rc_init(IMU660RC_QUARTERNION_120HZ); /* 六轴惯导初始化 */
+    imu660rc_init(IMU660RC_QUARTERNION_240HZ); /* 六轴惯导初始化 */
     eeprom_init();                             /* 参数存储模块 */
 
-    /* 定时器 PIT 初始化 */
-    pit_ms_init(TIM0_PIT, TIME_0);
-    pit_ms_init(TIM1_PIT, TIME_1);
     tim1_irq_handler = timer1_service_10ms;
 
     /* 编码器接口初始化 */
@@ -90,7 +92,8 @@ static void control_init(void)
  */
 static void app_init(void)
 {
-    /* 预留：必要时可在此做传感器稳定后的一次姿态校准 */
+    /* 上电时在静止状态下采集 gyro_z 零偏，后续控制环自动去零飘。 */
+    imu_calibrate_gyro_z_zero_drift();
 }
 
 /**
@@ -99,6 +102,9 @@ static void app_init(void)
  */
 void control_apply_config(void)
 {
+    app.start.fuya_xili = clamp_config_percent(app.start.fuya_xili);
+    app.start.fuya_wall_percent = clamp_config_percent(app.start.fuya_wall_percent);
+
     /* 1. 同步转向环，包含二次校正项 */
     PID.steer.Kp = app.speed.kp_Err;
     PID.steer.Kd = app.speed.kd_Err;
@@ -143,4 +149,13 @@ static void clamp_steer_output(PID_Steer *pid)
         pid->output = pid->max_output;
     else if (pid->output < -pid->min_output)
         pid->output = -pid->min_output;
+}
+
+static float clamp_config_percent(float value)
+{
+    if (value < 0.0f)
+        return 0.0f;
+    if (value > 100.0f)
+        return 100.0f;
+    return value;
 }

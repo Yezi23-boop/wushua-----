@@ -1,9 +1,6 @@
-#include "debug_view.h"
-#include "vofa.h"
 #include "zf_common_headfile.h"
 
 #define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 0
-#define IMU_UART_PRINT_DIV 12
 
 /**
  * @brief VOFA+ 上位机交互服务
@@ -71,20 +68,20 @@ void printf_adc(void)
  */
 void printf_imu(void)
 {
-    static uint8 imu_uart_print_count = 0;
-    
-    imu_uart_print_count++;
-    if (IMU_UART_PRINT_DIV <= imu_uart_print_count)
-    {
-        imu_uart_print_count = 0;
-        ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
-        ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
-        ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
-        ips114_show_float(4 * 24, 18 * 3, imu660rc_quarternion[0], 1, 3);
-        ips114_show_float(4 * 24, 18 * 4, imu660rc_quarternion[1], 1, 3);
-        ips114_show_float(4 * 24, 18 * 5, imu660rc_quarternion[2], 1, 3);
-        ips114_show_float(4 * 24, 18 * 6, imu660rc_quarternion[3], 1, 3);
-    }
+
+    ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
+    ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
+    ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
+    ips114_show_float(4 * 24, 18 * 3, imu660rc_quarternion[0], 1, 3);
+    ips114_show_float(4 * 24, 18 * 4, imu660rc_quarternion[1], 1, 3);
+    ips114_show_float(4 * 24, 18 * 5, imu660rc_quarternion[2], 1, 3);
+    ips114_show_float(4 * 24, 18 * 6, imu660rc_quarternion[3], 1, 3);
+
+    ips114_show_float(0, 15, imu660rc_gyro_x, 6, 1);
+    ips114_show_float(0, 35, imu660rc_gyro_y, 6, 1);
+    ips114_show_float(0, 55, imu660rc_gyro_z, 6, 1);
+    ips114_show_float(0, 75, gyro_z, 6, 2);
+    //  ips114_show_float(0, 95, PID.angle.error, 6, 2);
 }
 
 /**

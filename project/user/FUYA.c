@@ -1,202 +1,225 @@
+/**
+ * @file FUYA.c
+ * @brief 负压风机输出控制与墙面/地面工况切换
+ * @details
+ * 功能分三层：
+ * 1) 百分比与 PWM 互转：统一调参接口与底层输出量纲；
+ * 2) 工况识别：依据重力向量 Z 分量判断地面/墙面；
+ * 3) 输出平滑：限制每周期步进，避免电源冲击和机械突变。
+ *
+ * 该模块默认在 10ms 周期内调用，参数阈值优先保证稳定性与可调性。
+ */
 #include "zf_common_headfile.h"
 #include "FUYA.h"
-#include <math.h>
 
-/* --- 全局状态变量 --- */
-volatile int fuya_date = 0;             /* 当前输出给负压执行器的平滑占空比 */
-volatile float fuya_date_factor = 0.0f; /* 目标占空比，用于调试观察 */
-volatile uint8 phase = 0;               /* 当前所处运动阶段（0~4） */
+/* --- 负压输出量纲定义 --- */
+#define FUYA_PERCENT_MIN 0
+#define FUYA_PERCENT_MAX 100
+#define FUYA_PWM_MIN 1000
+#define FUYA_PWM_MAX 2000
 
-/* --- 负压基准参数 (占空比量程 0~10000) --- */
-float DUTY_BOTTOM = 0;           /* 平地段吸力基准（由配置决定） */
-#define DUTY_LEFT 4500.0f        /* 左侧竖墙吸力基准 */
-#define DUTY_RIGHT 4000.0f       /* 右侧竖墙吸力基准 */
-#define DUTY_TOP 4000.0f         /* 天花板（倒立）吸力基准 */
-#define PREFERENCE_OFFSET 500.0f /* 前向优待最大修正偏移 */
+/* --- 表面识别阈值（基于重力向量 Z 分量） --- */
+#define FUYA_GROUND_ENTER_VZ 0.86f
+#define FUYA_WALL_ENTER_VZ 0.72f
 
-/* --- 姿态判定阈值 (基于单位向量分量) --- */
-#define VZC_GROUND_THRESH 0.93f   /* 判定为平地的 Z 分量阈值 */
-#define VZC_VERTICAL_THRESH 0.15f /* 判定为竖直墙面的 Z 分量阈值 */
-#define VZC_INVERT_THRESH -0.9f   /* 判定为完全倒立的 Z 分量阈值 */
-#define VXC_PLANE_MARGIN 0.06f    /* X 分量平地余量 */
-#define VXC_WALL_MARGIN 0.06f     /* X 分量墙面余量 */
-#define VXC_WALL_RELEASE 0.02f    /* X 分量释放阈值 */
+/* --- 输出平滑步进（10ms 调用一次） --- */
+#define FUYA_PWM_STEP_UP 40
+#define FUYA_PWM_STEP_DOWN 30
 
-/* --- 动态滤波系数 (Alpha) --- */
-#define ALPHA_UP1 0.92f    /* 阶段 0/1 的响应速度 */
-#define ALPHA_UP2 0.65f    /* 阶段 2 的响应速度 */
-#define ALPHA_DOWN1 0.55f  /* 阶段 3 的响应速度 */
-#define ALPHA_DOWN2 0.45f  /* 阶段 4 的响应速度 */
-#define ALPHA_DEFAULT 0.8f /* 默认响应速度 */
+volatile int fuya_date = FUYA_PWM_MIN;       /* 当前平滑后的负压输出脉宽 */
+volatile int fuya_target_pwm = FUYA_PWM_MIN; /* 当前目标脉宽 */
+volatile uint8 fuya_target_percent = 0;      /* 当前目标百分比 */
+volatile uint8 fuya_surface_state = FUYA_SURFACE_GROUND;
 
-/**
- * @brief 负压风扇硬件初始化
- */
-void fuya_Init(void)
+static uint8 fuya_limit_percent(int percent)
 {
-    /* 初始化 PWMA 通道 2N，引脚 P03，频率 17kHz，用于控制负压风扇 */
-    pwm_init(PWMA_CH2N_P03, 17000, 0);
+    /* 上层写入统一裁剪为 0~100，避免后续映射越界 */
+    if (percent < FUYA_PERCENT_MIN)
+    {
+        percent = FUYA_PERCENT_MIN;
+    }
+    else if (percent > FUYA_PERCENT_MAX)
+    {
+        percent = FUYA_PERCENT_MAX;
+    }
+    return (uint8)percent;
 }
 
 /**
- * @brief 输出 PWM 占空比到负压执行器
- * @param pwm 占空比值 (0~4000)
+ * @brief 负压百分比映射到 PWM 脉宽
+ * @param percent 0~100 的目标负压百分比
+ * @return 对应 PWM 脉宽，范围 FUYA_PWM_MIN~FUYA_PWM_MAX
+ */
+static int fuya_percent_to_pwm(uint8 percent)
+{
+    return (int)(FUYA_PWM_MIN + ((int)percent * (FUYA_PWM_MAX - FUYA_PWM_MIN)) / FUYA_PERCENT_MAX);
+}
+
+/**
+ * @brief 根据重力向量 Z 分量识别地面/墙面
+ * @details 使用双阈值切换，减少边界抖动引起的状态来回跳变。
+ */
+static uint8 fuya_detect_surface(float vzc)
+{
+    uint8 next_state;
+
+    /* 滞回切换：地面转墙面阈值更低，墙面回地面阈值更高 */
+    next_state = fuya_surface_state;
+    if (FUYA_SURFACE_GROUND == fuya_surface_state)
+    {
+        if (vzc <= FUYA_WALL_ENTER_VZ)
+        {
+            next_state = FUYA_SURFACE_WALL;
+        }
+    }
+    else
+    {
+        if (vzc >= FUYA_GROUND_ENTER_VZ)
+        {
+            next_state = FUYA_SURFACE_GROUND;
+        }
+    }
+
+    return next_state;
+}
+
+/**
+ * @brief PWM 输出斜坡器
+ * @details 按上升/下降不同步进平滑过渡，降低负压系统突变。
+ */
+static int fuya_ramp_pwm(int current_pwm, int target_pwm)
+{
+    int delta;
+    int step;
+
+    /* 先求差值，后按方向选择上升/下降步进 */
+    delta = target_pwm - current_pwm;
+    if (0 == delta)
+    {
+        return current_pwm;
+    }
+
+    if (delta > 0)
+    {
+        /* 上升沿采用更快步进，提高贴墙阶段响应 */
+        step = FUYA_PWM_STEP_UP;
+        if (delta < step)
+        {
+            step = delta;
+        }
+        return current_pwm + step;
+    }
+
+    /* 下降沿稍慢，避免负压瞬降导致姿态抖动 */
+    step = FUYA_PWM_STEP_DOWN;
+    if (-delta < step)
+    {
+        step = -delta;
+    }
+    return current_pwm - step;
+}
+
+/**
+ * @brief 负压模块初始化
+ * @details 初始化 PWM 通道并复位内部状态到安全默认值。
+ */
+void fuya_Init(void)
+{
+    pwm_init(PWMA_CH2N_P03, 100, 0);
+
+    /* 统一复用停机路径，确保初始化与保护停机行为一致 */
+    fuya_force_stop();
+}
+
+/**
+ * @brief 负压输出底层接口
+ * @details 对 PWM 做最终限幅，避免越界写入。
  */
 void fuya_motor_output(int pwm)
 {
-    /* 安全限幅 */
-    if (pwm < 0)
-        pwm = 0;
-    if (pwm > 4000)
-        pwm = 4000;
+    if (pwm < FUYA_PWM_MIN)
+    {
+        pwm = FUYA_PWM_MIN;
+    }
+    else if (pwm > FUYA_PWM_MAX)
+    {
+        pwm = FUYA_PWM_MAX;
+    }
+
     pwm_set_duty(PWMA_CH2N_P03, (uint32)pwm);
 }
 
 /**
- * @brief 根据姿态向量判定当前的运动阶段
+ * @brief 直接设置负压目标百分比
+ * @details 该接口用于菜单或调参命令快速写入，默认立即生效。
+ */
+void fuya_set_percent(uint8 percent)
+{
+    uint8 limited_percent;
+    int pwm_value;
+
+    /* 菜单/上位机统一按百分比输入，内部转换为 ESC 脉宽 */
+    limited_percent = fuya_limit_percent((int)percent);
+    pwm_value = fuya_percent_to_pwm(limited_percent);
+
+    fuya_target_percent = limited_percent;
+    fuya_target_pwm = pwm_value;
+    fuya_date = pwm_value;
+    fuya_motor_output(pwm_value);
+}
+
+/**
+ * @brief 强制关闭负压
+ * @details 用于停止态或保护态，确保风机输出回到最小占空。
+ */
+void fuya_force_stop(void)
+{
+    fuya_target_percent = 0;
+    fuya_target_pwm = FUYA_PWM_MIN;
+    fuya_date = FUYA_PWM_MIN;
+    fuya_surface_state = FUYA_SURFACE_GROUND;
+    fuya_motor_output(FUYA_PWM_MIN);
+}
+
+/**
+ * @brief 简化负压更新流程
  * @details
- * 0: 平地
- * 1: 平地 -> 左墙 (上墙)
- * 2: 左墙 -> 天花板
- * 3: 天花板 -> 右墙 (下墙)
- * 4: 右墙 -> 平地
- */
-uint8 get_current_phase(float vzc, float vxc)
-{
-    if (vzc >= VZC_GROUND_THRESH && (float)fabs(vxc) <= VXC_PLANE_MARGIN)
-    {
-        return 0;
-    }
-    else if (vzc >= VZC_VERTICAL_THRESH && vzc < VZC_GROUND_THRESH && vxc <= -VXC_WALL_MARGIN)
-    {
-        return 1;
-    }
-    else if (vzc >= -1.0f && vzc <= VZC_VERTICAL_THRESH && vxc <= VXC_WALL_RELEASE)
-    {
-        return 2;
-    }
-    else if (vzc >= -1.0f && vzc <= VZC_VERTICAL_THRESH && vxc > VXC_WALL_RELEASE)
-    {
-        return 3;
-    }
-    else if (vzc >= VZC_VERTICAL_THRESH && vzc < VZC_GROUND_THRESH && vxc > VXC_WALL_MARGIN)
-    {
-        return 4;
-    }
-    return 0;
-}
-
-/**
- * @brief 计算前向优待修正值
- * @details 在墙面或倾斜场景下，根据小车航向与重力方向的夹角，微调吸力以获得更好的抓地力
- */
-static float calculate_forward_preference(float base_duty, float vzc, float vxc, float vyc)
-{
-    float strength = 0.0f;
-    float gt_norm, align_fwd, offset;
-
-    /* 1. 计算场景强度系数 (0~1) */
-    if ((float)fabs(vzc) < VZC_VERTICAL_THRESH)
-    {
-        strength = 1.0f;
-    }
-    else if (vzc > VZC_VERTICAL_THRESH && vzc < VZC_GROUND_THRESH)
-    {
-        strength = 1.0f - (vzc - VZC_VERTICAL_THRESH) / (VZC_GROUND_THRESH - VZC_VERTICAL_THRESH);
-    }
-    else if (vzc > VZC_INVERT_THRESH && vzc < -VZC_VERTICAL_THRESH)
-    {
-        strength = 1.0f - (-VZC_VERTICAL_THRESH - vzc) / (-VZC_VERTICAL_THRESH - VZC_INVERT_THRESH);
-    }
-
-    if (strength < 0.1f)
-        return base_duty;
-
-    /* 2. 计算平面内对齐度 */
-    gt_norm = (float)sqrt(vxc * vxc + vyc * vyc);
-    align_fwd = (gt_norm > 1e-6f) ? (float)fabs(vxc) / gt_norm : 0.5f;
-    align_fwd = func_limit_ab(align_fwd, 0.0f, 1.0f);
-
-    /* 3. 叠加偏移量 */
-    offset = (align_fwd - 0.5f) * PREFERENCE_OFFSET;
-    return base_duty + strength * offset;
-}
-
-/**
- * @brief 计算各阶段的基础目标负压
- */
-static float calculate_base_duty(uint8 p, float vzc)
-{
-    float ratio, delta;
-    DUTY_BOTTOM = app.start.fuya_xili;
-
-    switch (p)
-    {
-    case 0:
-        return DUTY_BOTTOM;
-    case 1: /* 指数型过渡：平地 -> 左墙 */
-        ratio = 1.0f - vzc;
-        delta = 1.0f - (float)exp(-3.0f * ratio);
-        return DUTY_BOTTOM + (DUTY_LEFT - DUTY_BOTTOM) * func_limit_ab(delta, 0.0f, 1.0f);
-    case 2: /* 墙面 -> 天花板 */
-        ratio = -vzc;
-        delta = 1.0f - (float)exp(-3.0f * ratio);
-        return DUTY_LEFT - (DUTY_LEFT - DUTY_TOP) * func_limit_ab(delta, 0.0f, 1.0f);
-    case 3: /* 天花板 -> 右墙 */
-        ratio = vzc + 1.0f;
-        delta = 1.0f - (float)exp(-3.0f * ratio);
-        return DUTY_TOP + (DUTY_RIGHT - DUTY_TOP) * func_limit_ab(delta, 0.0f, 1.0f);
-    case 4: /* 右墙 -> 平地 */
-        ratio = vzc;
-        delta = 1.0f - (float)exp(-3.0f * ratio);
-        return DUTY_RIGHT - (DUTY_RIGHT - DUTY_BOTTOM) * func_limit_ab(delta, 0.0f, 1.0f);
-    default:
-        return 1800.0f;
-    }
-}
-
-/**
- * @brief 负压控制核心更新函数
+ * 读取姿态 -> 识别工况 -> 选择目标负压 -> 斜坡输出。
+ * 该流程适合 10ms 周期调度，兼顾响应与稳定。
  */
 void fuya_update_simple(void)
 {
-    float vzc, vxc, vyc, base_duty, target_duty, alpha;
+    float vzc;
+    uint8 next_state;
+    uint8 target_percent;
+    int target_pwm;
+    int output_pwm;
 
-    /* 1. 获取并限制传感器输入 */
-    vzc = func_limit(vz, 1.0f);
-    vxc = func_limit(vx, 1.0f);
-    vyc = func_limit(vy, 1.0f);
+    /* 1) 姿态输入：只取重力向量 Z 分量即可完成墙面识别 */
+    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+    vzc = func_limit(vzc, 1.0f);
 
-    /* 2. 状态判定与基础计算 */
-    phase = get_current_phase(vzc, vxc);
-    base_duty = calculate_base_duty(phase, vzc);
+    /* 2) 识别当前表面工况 */
+    next_state = fuya_detect_surface(vzc);
+    fuya_surface_state = next_state;
 
-    /* 3. 叠加高级修正 */
-    target_duty = calculate_forward_preference(base_duty, vzc, vxc, vyc);
-
-    /* 4. 执行动态滤波平滑 */
-    switch (phase)
+    /* 3) 按工况选择目标百分比（墙面优先用 wall 参数） */
+    if (FUYA_SURFACE_WALL == next_state)
     {
-    case 0:
-        alpha = ALPHA_UP1;
-        break;
-    case 1:
-        alpha = ALPHA_UP2;
-        break;
-    case 2:
-        alpha = ALPHA_DOWN1;
-        break;
-    case 3:
-        alpha = ALPHA_DOWN2;
-        break;
-    default:
-        alpha = ALPHA_DEFAULT;
-        break;
+        target_percent = fuya_limit_percent((int)(app.start.fuya_wall_percent + 0.5f));
     }
-    fuya_date = (int)((float)fuya_date + alpha * (target_duty - (float)fuya_date));
-    fuya_date_factor = target_duty;
+    else
+    {
+        target_percent = fuya_limit_percent((int)(app.start.fuya_xili + 0.5f));
+    }
 
-    /* 5. 最终物理输出 */
-    /* 注意：此处当前硬编码为使用配置值，若需动态调节可改为 fuya_date */
-    fuya_motor_output((int)app.start.fuya_xili);
+    /* 4) 目标映射与斜坡输出，防止负压突跳 */
+    target_pwm = fuya_percent_to_pwm(target_percent);
+    output_pwm = fuya_ramp_pwm(fuya_date, target_pwm);
+
+    fuya_target_percent = target_percent;
+    fuya_target_pwm = target_pwm;
+    fuya_date = output_pwm;
+
+    fuya_motor_output(output_pwm);
 }

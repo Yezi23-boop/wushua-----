@@ -1,15 +1,15 @@
 #include "pid.h"
 
-/* 实例化全局控制器聚合结构 */
-PID_Controllers PID;
-
-/* 编码器低通滤波器实例 */
-LowPassFilter_t encoder_l;
-LowPassFilter_t encoder_r;
+/* 左右轮编码器组合滤波状态：符号纠错 + 3 点中值 + EMA(1/2) */
+static EncoderMedian3EmaFilterState encoder_filter_left;
+static EncoderMedian3EmaFilterState encoder_filter_right;
 
 /* 内部中间变量 */
-float speed_l = 0; /* 左轮当前平滑速度 */
-float speed_r = 0; /* 右轮当前平滑速度 */
+float speed_l = 0; /* 左轮当前速度反馈 */
+float speed_r = 0; /* 右轮当前速度反馈 */
+
+/* 实例化全局控制器聚合结构 */
+PID_Controllers PID;
 
 /**
  * @brief 速度环初始化（增量式）
@@ -66,23 +66,31 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out
 
 /**
  * @brief 读取并处理编码器数据
- * @details 读取硬件编码器计数值，转换为物理速度，并进行低通滤波处理
+ * @details 读取硬件编码器计数值，执行组合滤波后再转换为速度
  * @param left 左轮 PID 结构指针
  * @param right 右轮 PID 结构指针
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
+    int32 fixed_left_count;
+    int32 fixed_right_count;
+
     /*
      * 读取硬件编码器计数值
-     * 乘以 0.2f 是将原始计数值转换为实际速度单位的缩放因子
+     * 先做符号纠错 + 3 点中值 + EMA(1/2)，再做速度换算
      * 注意：左轮和右轮可能因为安装方向不同而需要取反
      */
-    right->speed = encoder_get_count(TIM4_ENCOEDER) * 0.4f; /* 右电机编码器 */
-    left->speed = -encoder_get_count(TIM3_ENCOEDER) * 0.4f; /* 左电机编码器 */
+    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
+                                                        &encoder_filter_left);
+    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
+                                                         &encoder_filter_right);
+//    speed_l=(int32)encoder_get_count(TIM4_ENCOEDER);
+//	speed_r=-(int32)encoder_get_count(TIM3_ENCOEDER);
+    speed_l = (float)fixed_left_count * 0.4f;
+    speed_r = (float)fixed_right_count * 0.4f;
 
-    /* 对原始速度进行一阶低通滤波，减小编码器噪声对速度环的影响 */
-    low_pass_filter_mt(&encoder_l, &left->speed, 0.8f); /* alpha=1.0 代表暂不滤波，可根据需要调整 */
-    low_pass_filter_mt(&encoder_r, &right->speed, 0.8f);
+    left->speed = speed_l;
+    right->speed = speed_r;
 
     /* 清零硬件计数器，准备下一采样周期的计数 */
     encoder_clear_count(TIM3_ENCOEDER);

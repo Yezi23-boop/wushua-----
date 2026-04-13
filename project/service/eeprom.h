@@ -10,7 +10,8 @@ typedef struct
 {
     int16 start_flag;   /**< 启动标志位：1-启动运行，0-停止待机 */
     int16 circle_flags; /**< 圆环方向标志：1-强制左环，-1-强制右环，0-自动识别 */
-    float fuya_xili;    /**< 负压风扇吸力设定值（单位：占空比或特定数值） */
+    float fuya_xili;    /**< 平地负压百分比，范围 0~100 */
+    float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
 } AppStartConfig;
 
 /**

@@ -1,0 +1,35 @@
+wing: wushua
+rooms:
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: libraries
+  description: Files from libraries/
+  keywords:
+  - libraries
+  - libraries
+- name: project
+  description: Files from project/
+  keywords:
+  - project
+  - project
+- name: testing
+  description: Files from tests/
+  keywords:
+  - testing
+  - tests
+- name: tmp_session_sim
+  description: Files from tmp_session_sim/
+  keywords:
+  - tmp_session_sim
+  - tmp_session_sim
+- name: scripts
+  description: Files from tools/
+  keywords:
+  - scripts
+  - tools
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

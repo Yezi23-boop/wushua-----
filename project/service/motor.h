@@ -3,13 +3,8 @@
 
 #include "zf_common_headfile.h"
 
-/* --- 主链死区补偿编译期配置 --- */
-#define MAIN_ENABLE_SPEED_DEADZONE_COMP 0
-#define MAIN_LEFT_DEADZONE_PWM 1900
-#define MAIN_RIGHT_DEADZONE_PWM 2000
-#define MAIN_DEADZONE_BAND_PWM 300
-#define MAIN_DEADZONE_EXIT_SPEED 8.0f
-#define MAIN_DEADZONE_TARGET_SPEED_MIN 3.0f
+/* --- 电机输出限幅编译期配置（单位：PWM 占空比） --- */
+#define MOTOR_OUTPUT_PWM_LIMIT 9000
 
 /**
  * @brief 电机控制与外设初始化
@@ -19,21 +14,10 @@ void motor_Init(void);
 
 /**
  * @brief 电机占空比输出函数
- * @param lpwm 左电机 PWM 占空比（正值前进，负值后退）
- * @param rpwm 右电机 PWM 占空比（正值前进，负值后退）
+ * @param lpwm 左电机 PWM 占空比（正值前进，负值后退，函数内会限幅到 ±MOTOR_OUTPUT_PWM_LIMIT）
+ * @param rpwm 右电机 PWM 占空比（正值前进，负值后退，函数内会限幅到 ±MOTOR_OUTPUT_PWM_LIMIT）
  */
 void motor_output(int32 lpwm, int32 rpwm);
-
-/**
- * @brief 主链低输出区死区补偿
- * @details 仅用于正式控制链，避免小输出落入电机死区后内侧轮完全掉死
- * @param raw_pwm 原始 PWM 输出
- * @param target_speed 当前轮目标速度
- * @param actual_speed 当前轮实际速度
- * @param deadzone_pwm 当前轮稳定脱离死区所需最小 PWM
- * @return 补偿后的 PWM 输出
- */
-int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm);
 
 /**
  * @brief 丢线检测保护函数

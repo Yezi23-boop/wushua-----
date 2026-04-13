@@ -10,7 +10,11 @@
 #define AUTOTUNE_TEST_MODE_SPEED 0
 #define AUTOTUNE_TEST_MODE_PWM_IDENTIFY 1
 
-#define AUTOTUNE_TEST_TICK_MS 5
+/*
+ * 调参组件内部时基（ms），需与 TM0 实际周期保持一致。
+ * 当前工程 TM0 周期为 2ms。
+ */
+#define AUTOTUNE_TEST_TICK_MS 2
 
 extern volatile uint8 test_trial_active;
 extern volatile uint8 test_trial_armed;

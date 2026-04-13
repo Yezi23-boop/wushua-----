@@ -98,7 +98,7 @@ void speed_loop_autotune_print_info(void)
            (unsigned int)test_trial_cooldown_ms,
            (int)test_trial_armed,
            (int)test_trial_active);
-    printf("Fuya: %d\n", (int)test_fuya_pwm);
+    printf("Fuya Percent: %d\n", (int)test_fuya_pwm);
     printf("Binding: %u, %u\n",
            (unsigned int)speed_loop_autotune_component_is_ready(),
            (unsigned int)speed_loop_autotune_component_has_valid_port());

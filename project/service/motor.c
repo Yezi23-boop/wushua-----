@@ -27,126 +27,69 @@ void motor_Init(void)
 }
 
 /**
- * @brief 主链低输出区死区补偿
- * @details 仅在目标非零、轮速未起来且输出落在死区附近时抬到最小有效 PWM
+ * @brief 输出 PWM 限幅
+ * @details 将输出限制在 ±MOTOR_OUTPUT_PWM_LIMIT，避免过驱
  */
-int32 motor_apply_speed_deadzone_comp(int32 raw_pwm, float target_speed, float actual_speed, int32 deadzone_pwm)
+static int32 motor_limit_output_pwm(int32 pwm)
 {
-    int32 abs_pwm;
-    int32 upper_limit;
-    float abs_speed;
-    float abs_target_speed;
-
-    if (!MAIN_ENABLE_SPEED_DEADZONE_COMP)
+    if (pwm > MOTOR_OUTPUT_PWM_LIMIT)
     {
-        return raw_pwm;
+        return MOTOR_OUTPUT_PWM_LIMIT;
     }
-
-    abs_target_speed = target_speed;
-    if (abs_target_speed < 0.0f)
+    if (pwm < -MOTOR_OUTPUT_PWM_LIMIT)
     {
-        abs_target_speed = -abs_target_speed;
+        return -MOTOR_OUTPUT_PWM_LIMIT;
     }
-
-    if (abs_target_speed < MAIN_DEADZONE_TARGET_SPEED_MIN)
-    {
-        return raw_pwm;
-    }
-
-    if (raw_pwm == 0 || deadzone_pwm <= 0)
-    {
-        return raw_pwm;
-    }
-
-    abs_speed = actual_speed;
-    if (abs_speed < 0.0f)
-    {
-        abs_speed = -abs_speed;
-    }
-
-    if (abs_speed >= MAIN_DEADZONE_EXIT_SPEED)
-    {
-        return raw_pwm;
-    }
-
-    if (target_speed > 0.0f && raw_pwm < 0)
-    {
-        return raw_pwm;
-    }
-
-    if (target_speed < 0.0f && raw_pwm > 0)
-    {
-        return raw_pwm;
-    }
-
-    if (raw_pwm > 0)
-    {
-        abs_pwm = raw_pwm;
-    }
-    else
-    {
-        abs_pwm = -raw_pwm;
-    }
-
-    upper_limit = deadzone_pwm + MAIN_DEADZONE_BAND_PWM;
-    if (abs_pwm >= upper_limit)
-    {
-        return raw_pwm;
-    }
-
-    if (abs_pwm < deadzone_pwm)
-    {
-        if (raw_pwm > 0)
-        {
-            return deadzone_pwm;
-        }
-        return -deadzone_pwm;
-    }
-
-    return raw_pwm;
+    return pwm;
 }
 
 /**
  * @brief 电机 PWM 占空比输出控制
  * @details 根据 lpwm 和 rpwm 的正负号控制电机正反转
- * @param lpwm 左轮目标占空比（-PWM_DUTY_MAX ~ PWM_DUTY_MAX）
- * @param rpwm 右轮目标占空比
+ * @param lpwm 左轮目标占空比（函数内会限幅到 ±MOTOR_OUTPUT_PWM_LIMIT）
+ * @param rpwm 右轮目标占空比（函数内会限幅到 ±MOTOR_OUTPUT_PWM_LIMIT）
  */
 void motor_output(int32 lpwm, int32 rpwm)
 {
+    int32 lpwm_limited;
+    int32 rpwm_limited;
+
+    lpwm_limited = motor_limit_output_pwm(lpwm);
+    rpwm_limited = motor_limit_output_pwm(rpwm);
+
     /* 检查停车标志位，stop 为 0 时正常运行 */
     if (stop == 0)
     {
         /* --- 右电机控制逻辑 (硬件映射可能交叉) --- */
-        if (rpwm > 0)
+        if (lpwm_limited > 0)
         {
-            P14 = 0;                          /* 设置方向：正转 */
-            pwm_set_duty(PWMB_CH2_P13, rpwm); /* 设置 PWM 占空比 */
+            P14 = 0;                                  /* 设置方向：正转 */
+            pwm_set_duty(PWMB_CH2_P13, lpwm_limited); /* 设置 PWM 占空比 */
         }
-        else if (rpwm < 0)
+        else if (lpwm_limited < 0)
         {
-            P14 = 1;                           /* 设置方向：反转 */
-            pwm_set_duty(PWMB_CH2_P13, -rpwm); /* 取绝对值输出 PWM */
+            P14 = 1;                                   /* 设置方向：反转 */
+            pwm_set_duty(PWMB_CH2_P13, -lpwm_limited); /* 取绝对值输出 PWM */
         }
         else
         {
-            pwm_set_duty(PWMB_CH2_P13, 0); /* 停止 */
+            pwm_set_duty(PWMB_CH2_P13, 0); /* 停止输出 */
         }
 
         /* --- 左电机控制逻辑 --- */
-        if (lpwm > 0)
+        if (rpwm_limited > 0)
         {
-            P53 = 1; /* 设置方向：正转 */
-            pwm_set_duty(PWMB_CH3_P52, lpwm);
+            P53 = 0; /* 设置方向：正转 */
+            pwm_set_duty(PWMB_CH3_P52, rpwm_limited);
         }
-        else if (lpwm < 0)
+        else if (rpwm_limited < 0)
         {
-            P53 = 0; /* 设置方向：反转 */
-            pwm_set_duty(PWMB_CH3_P52, -lpwm);
+            P53 = 1; /* 设置方向：反转 */
+            pwm_set_duty(PWMB_CH3_P52, -rpwm_limited);
         }
         else
         {
-            pwm_set_duty(PWMB_CH3_P52, 0);
+            pwm_set_duty(PWMB_CH3_P52, 0); /* 停止输出 */
         }
     }
     else

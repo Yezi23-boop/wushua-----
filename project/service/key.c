@@ -1,6 +1,4 @@
 #include "zf_common_headfile.h"
-#include "key.h"
-
 /* 硬件引脚定义 */
 #define KEY1_PIN P26 /* 上/增加 */
 #define KEY2_PIN P35 /* 下/减少 */
@@ -16,31 +14,56 @@
 #define REPEAT_INTERVAL 10      /* 100ms */
 
 /* 全局按键状态变量 */
-volatile uint8 keystroke_label = 0;                 /* 最近一次发布的按键事件编码 */
+volatile uint8 keystroke_label = 0; /* 最近一次发布的按键事件编码 */
 static volatile uint8 key_event_queue[KEY_EVENT_QUEUE_SIZE];
 static volatile uint8 key_event_head = 0;
 static volatile uint8 key_event_tail = 0;
-static volatile uint8 key_event_count = 0;
-static uint8 key_last_status[KEY_NUM] = {0};        /* 上次稳定状态 */
-static uint8 key_status[KEY_NUM] = {0};             /* 当前消抖后的稳定状态 */
-static uint16 key_press_time[KEY_NUM] = {0};        /* 累计按下时长 */
-static uint8 key_debounce_cnt[KEY_NUM] = {0};       /* 消抖计数器 */
+static volatile uint8 key_repeat_pending_mask = 0; /* 长按连发事件在队列中的挂起位图 */
+static volatile uint8 key_repeat_cancel_mask = 0;  /* 松手后需要丢弃的长按遗留事件位图 */
+static uint8 key_last_status[KEY_NUM] = {0};  /* 上次稳定状态 */
+static uint8 key_status[KEY_NUM] = {0};       /* 当前消抖后的稳定状态 */
+static uint16 key_press_time[KEY_NUM] = {0};  /* 累计按下时长 */
+static uint8 key_debounce_cnt[KEY_NUM] = {0}; /* 消抖计数器 */
+
+static uint8 Keystroke_Is_Long_Event(uint8 event_code)
+{
+    return (uint8)((event_code >= 5) && (event_code <= 8));
+}
+
+static uint8 Keystroke_Long_Event_Mask(uint8 event_code)
+{
+    return (uint8)(1u << (event_code - 5));
+}
 
 static void Keystroke_Publish_Event(uint8 event_code)
 {
+    uint8 next_tail;
+    uint8 repeat_mask;
+
     if (event_code == 0)
         return;
 
-    keystroke_label = event_code;
+    if (Keystroke_Is_Long_Event(event_code))
+    {
+        repeat_mask = Keystroke_Long_Event_Mask(event_code);
+        if (key_repeat_pending_mask & repeat_mask)
+            return;
+        key_repeat_cancel_mask &= (uint8)(~repeat_mask);
+    }
 
-    if (key_event_count >= KEY_EVENT_QUEUE_SIZE)
+    next_tail = (uint8)(key_event_tail + 1);
+    if (next_tail >= KEY_EVENT_QUEUE_SIZE)
+        next_tail = 0;
+
+    /* 无锁环形队列：tail 的下一个位置撞上 head 时视为满，丢弃新事件 */
+    if (next_tail == key_event_head)
         return;
 
     key_event_queue[key_event_tail] = event_code;
-    key_event_tail++;
-    if (key_event_tail >= KEY_EVENT_QUEUE_SIZE)
-        key_event_tail = 0;
-    key_event_count++;
+    key_event_tail = next_tail;
+    if (Keystroke_Is_Long_Event(event_code))
+        key_repeat_pending_mask |= repeat_mask;
+    keystroke_label = event_code;
 }
 
 /**
@@ -83,6 +106,11 @@ void Keystroke_Scan_10ms(void)
                         Keystroke_Publish_Event((uint8)(i + 1)); /* 产生短按事件 (1-4) */
                         return;
                     }
+                    else if (key_last_status[i])
+                    {
+                        /* 长按松手后，丢弃队列里尚未消费的该键连发事件，避免松手后还继续移动。 */
+                        key_repeat_cancel_mask |= (uint8)(1u << i);
+                    }
                     key_press_time[i] = 0;
                 }
             }
@@ -124,23 +152,29 @@ void Keystroke_Scan(void)
 uint8 Keystroke_Get_Event(void)
 {
     uint8 event_code = 0;
-    uint8 irq_state;
+    uint8 repeat_mask;
 
-    irq_state = EA;
-    EA = 0;
-
-    if (key_event_count > 0)
+    while (key_event_head != key_event_tail)
     {
         event_code = key_event_queue[key_event_head];
         key_event_head++;
         if (key_event_head >= KEY_EVENT_QUEUE_SIZE)
             key_event_head = 0;
-        key_event_count--;
+
+        if (Keystroke_Is_Long_Event(event_code))
+        {
+            repeat_mask = Keystroke_Long_Event_Mask(event_code);
+            key_repeat_pending_mask &= (uint8)(~repeat_mask);
+            if (key_repeat_cancel_mask & repeat_mask)
+            {
+                key_repeat_cancel_mask &= (uint8)(~repeat_mask);
+                event_code = 0;
+                continue;
+            }
+        }
+
+        return event_code;
     }
 
-    if (key_event_count == 0)
-        keystroke_label = 0;
-
-    EA = irq_state;
-    return event_code;
+    return 0;
 }

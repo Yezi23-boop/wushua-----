@@ -1,3 +1,15 @@
+/**
+ * @file isr.c
+ * @brief AI8051U 中断服务入口实现
+ * @details
+ * 统一承接 UART DMA、中断引脚和 PIT 定时器中断，
+ * 并在最小开销前提下把事件转发给业务层回调。
+ *
+ * 设计要求：
+ * 1) 中断内只做必要清标志与轻量调度；
+ * 2) 避免阻塞操作，保证高频控制环实时性；
+ * 3) 通过编译开关精确控制 TM0/TM1 挂载任务。
+ */
 #include "zf_common_headfile.h"
 #include "../speed_loop_autotune/firmware/speed_loop_trial.h"
 
@@ -103,12 +115,16 @@ void INT1_IRQHandler(void) interrupt 2
 }
 
 /**
- * @brief PIT0 定时器中断 (5ms)
+ * @brief PIT0 定时器中断 (2ms)
  * @details 触发核心控制环任务 run_time_1
  */
 void TM0_IRQHandler() interrupt 1
 {
     TIM0_CLEAR_FLAG;
+// a_run_apply_iap_guard();
+/* 1. 获取编码器实时速度反馈 */
+// Encoder_get(&PID.left_speed, &PID.right_speed);
+// motor_output(5000, 5000);
 #if MAIN_ENABLE_ISR_RUN_TEST_SPEED
     run_test_speed();
 #endif

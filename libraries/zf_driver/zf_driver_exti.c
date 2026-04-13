@@ -55,12 +55,12 @@ void exti_enable(exti_pin_enum eru_pin)
     case INT1_P33:
         EX1 = 1;
         break;
-    case INT2_P36:
-        EX2 = 1;
-        break;
-    case INT3_P37:
-        EX3 = 1;
-        break;
+  //  case INT2_P36:
+  //      EX2 = 1;
+   //     break;
+  //  case INT3_P37:
+   //     EX3 = 1;
+   //     break;
     case INT4_P30:
         EX4 = 1;
         break;
@@ -79,12 +79,12 @@ void exti_disable(exti_pin_enum eru_pin)
     case INT1_P33:
         EX1 = 0;
         break;
-    case INT2_P36:
-        EX2 = 0;
-        break;
-    case INT3_P37:
-        EX3 = 0;
-        break;
+ //   case INT2_P36:
+//EX2 = 0;
+   //     break;
+ //   case INT3_P37:
+   //     EX3 = 0;
+  //      break;
     case INT4_P30:
         EX4 = 0;
         break;
@@ -105,10 +105,10 @@ void exti_init(exti_pin_enum eru_pin, exti_trigger_enum trigger)
     case INT1_P33:
         IT1 = trigger;
         break;
-    case INT2_P36:
-        break;
-    case INT3_P37:
-        break;
+ //   case INT2_P36:
+  //      break;
+ //   case INT3_P37:
+  //      break;
     case INT4_P30:
         break;
     default:

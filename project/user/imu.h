@@ -4,78 +4,47 @@
 #include "zf_common_typedef.h"
 
 /**
- * @brief IMU 模块说明
+ * @file imu.h
+ * @brief IMU 姿态辅助接口声明
  * @details
- * - 提供 6 轴惯性测量单元（IMU660RA）的数据读取与姿态解算。
- * - 采用 Mahony 互补滤波算法，输出欧拉角（Roll, Pitch, Yaw）。
- * - 坐标系约定：X 前、Y 左、Z 上（符合右手定则）。
+ * 对外提供重力向量计算、角速度更新与基础数学工具函数，
+ * 供主控制环、负压控制与调试链路复用。
  */
 
-/* --- 转换常量 --- */
-#define RadtoDeg 57.324841f /**< 弧度转角度系数 */
-#define DegtoRad 0.0174533f /**< 角度转弧度系数 */
-
-/* --- 数据结构定义 --- */
+extern float gyro_z; /* 当前 Z 轴角速度反馈量 */
 
 /**
- * @brief 三轴浮点坐标结构
+ * @brief 上电标定 gyro_z 零偏
+ * @details 在静止状态下采样均值，用于后续去零飘。
  */
-typedef struct
-{
-    float X;
-    float Y;
-    float Z;
-} FLOAT_XYZ;
+void imu_calibrate_gyro_z_zero_drift(void);
 
 /**
- * @brief 姿态角结构体（欧拉角）
+ * @brief 由四元数更新重力向量
+ * @param vx 输出重力向量 X 分量，可为 0 表示不需要
+ * @param vy 输出重力向量 Y 分量，可为 0 表示不需要
+ * @param vz 输出重力向量 Z 分量，可为 0 表示不需要
  */
-typedef struct
-{
-    float rol; /**< 横滚角 (Roll) */
-    float pit; /**< 俯仰角 (Pitch) */
-    float yaw; /**< 偏航角 (Yaw) */
-} FLOAT_ANGLE;
-
-/* --- 全局导出变量 --- */
-extern volatile float gyro_z;        /**< 校准后的 Z 轴角速度控制反馈量 */
-extern float q0, q1, q2, q3;         /**< 姿态四元数 */
-extern FLOAT_ANGLE Att_Angle;        /**< 全局欧拉角输出 */
-extern FLOAT_XYZ Acc_filt, Gyr_filt; /**< 滤波后的加速度与角速度数据 */
-
-/* --- 中间变量声明（用于调试查看） --- */
-extern float vx, vy, vz; /**< 重力向量在机体坐标系下的投影 */
-extern float ex, ey, ez; /**< 姿态误差项 */
-
-/* --- 函数声明 --- */
+void imu_update_gravity_vector_from_quaternion(float *vx, float *vy, float *vz);
 
 /**
- * @brief 初始化 IMU 零偏校准
- * @details 建议在静止状态下调用，采集均值作为静差
+ * @brief 更新全局 gyro_z
+ * @details 从 imu660rc 原始陀螺仪数据转换得到控制环使用量纲。
  */
-void offset_init(void);
+void imu_update_gyro_z_from_imu660rc(void);
 
 /**
- * @brief 准备传感器数据
- * @details 读取原始 ADC，执行零偏补偿与单位转换
+ * @brief C89 兼容 atan2
  */
-void Prepare_Data(void);
+double my_atan2(double y, double x);
 
 /**
- * @brief 姿态解算更新主函数
- * @param Gyr_rad 实时角速度（弧度/s）
- * @param Acc_filt 实时加速度（仅用于方向校正）
- * @param Att_Angle 输出：更新后的欧拉角
- */
-void IMUupdate(FLOAT_XYZ *Gyr_rad, FLOAT_XYZ *Acc_filt, FLOAT_ANGLE *Att_Angle);
-
-/**
- * @brief 快速平方根倒数算法
+ * @brief 快速反平方根近似
  */
 float invSqrt(float x);
 
 /**
- * @brief 快速平方根算法
+ * @brief 快速平方根近似
  */
 float SquareRootFloat(float number);
 

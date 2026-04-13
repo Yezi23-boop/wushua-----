@@ -11,8 +11,9 @@ float test_angle_value = 0;
  */
 void test_angle_func(void)
 {
-    /* 1. 准备传感器数据（采样并初步处理） */
-    Prepare_Data();
+    a_run_apply_iap_guard();
+    /* 1. 刷新四元数中断已缓存的陀螺仪 Z 轴反馈量 */
+    imu_update_gyro_z_from_imu660rc();
 
     /* 2. 获取编码器反馈速度 */
     Encoder_get(&PID.left_speed, &PID.right_speed);
@@ -34,6 +35,7 @@ void test_angle_func(void)
  */
 void test_speed_func(void)
 {
+    a_run_apply_iap_guard();
     /* 1. 获取编码器实时速度反馈 */
     Encoder_get(&PID.left_speed, &PID.right_speed);
 

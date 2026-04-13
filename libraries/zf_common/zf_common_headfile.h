@@ -81,10 +81,10 @@
 //------逐飞科技产品组件层文件
 
 // 自己的
-#include "fuya.h"
+#include "FUYA.h"
 #include "motor.h"
 #include "filter.h"
-#include "adc.h"
+// #include "ADC.h"
 #include "pid.h"
 #include "imu.h"
 #include "int_user.h"
@@ -95,4 +95,6 @@
 #include "vofa.h"
 #include "a_run.h"
 #include "soft_timer.h"
+#include "../user/ADC.h"
+#include "debug_view.h"
 #endif

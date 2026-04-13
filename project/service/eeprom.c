@@ -1,5 +1,4 @@
 #include "zf_common_headfile.h"
-#include "eeprom.h"
 
 /* 数据缓冲区，用于与 IAP 接口交换数据，大小为 200 字节 */
 uint8 date_buff[200];
@@ -16,6 +15,7 @@ static void save_int(int32 input, uint8 value_bit);
 static int32 read_int(uint8 value_bit);
 static void save_float(float input, uint8 value_bit);
 static float read_float(uint8 value_bit);
+static float clamp_percent_value(float value, float default_value);
 
 /**
  * @brief 加载系统默认参数
@@ -26,21 +26,22 @@ static float read_float(uint8 value_bit);
 static void eeprom_load_defaults(AppConfig *config)
 {
     /* 启动与基础配置默认值 */
-    config->start.start_flag = 1;       /* 默认启动 */
-    config->start.circle_flags = 0;     /* 默认自动识别圆环方向 */
-    config->start.fuya_xili = 2000.00f; /* 默认负压吸力 */
+    config->start.start_flag = 1;             /* 默认启动 */
+    config->start.circle_flags = 0;           /* 默认自动识别圆环方向 */
+    config->start.fuya_xili = 20.00f;         /* 默认平地负压百分比 */
+    config->start.fuya_wall_percent = 70.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 0.70f;
     config->speed.kd_Err = 0.70f;
-    config->speed.speed_run = 30.00f;     /* 默认基础速度 30 */
+    config->speed.speed_run = 20.00f;     /* 默认基础速度 30 */
     config->speed.limiting_Err = 600.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.01f;
 
     /* 角度环 PID 默认参数 */
     config->angle.kp_Angle = 0.60f;
     config->angle.kd_Angle = 0.20f;
-    config->angle.limiting_Angle = 30.00f;
+    config->angle.limiting_Angle = 20.00f;
     config->angle.A_1 = 0.50f;
     config->angle.B_1 = 1.00f;
     config->angle.C_l = 0.60f;
@@ -68,6 +69,8 @@ static void eeprom_load_defaults(AppConfig *config)
  */
 static void eeprom_read_config(AppConfig *config)
 {
+    uint8 percent_migrated;
+
     config->start.start_flag = (int16)read_int(1);
     config->start.circle_flags = (int16)read_int(2);
 
@@ -97,6 +100,26 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.count_fly_time_2 = (int)read_int(24);
     config->fly.count_fly_angle = (int)read_int(25);
     config->fly.fly_ramp_enable = (int16)read_int(26);
+    config->start.fuya_wall_percent = read_float(27);
+
+    percent_migrated = 0;
+    if (config->start.fuya_xili < 0.0f || config->start.fuya_xili > 100.0f)
+    {
+        config->start.fuya_xili = 20.0f;
+        percent_migrated = 1;
+    }
+
+    if (config->start.fuya_wall_percent < 0.0f || config->start.fuya_wall_percent > 100.0f)
+    {
+        config->start.fuya_wall_percent = 70.0f;
+    }
+    else if (percent_migrated && config->start.fuya_wall_percent == 0.0f)
+    {
+        config->start.fuya_wall_percent = 70.0f;
+    }
+
+    config->start.fuya_xili = clamp_percent_value(config->start.fuya_xili, 20.0f);
+    config->start.fuya_wall_percent = clamp_percent_value(config->start.fuya_wall_percent, 70.0f);
 }
 
 /**
@@ -111,7 +134,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->start.circle_flags, 2);
 
     save_float(config->speed.kp_Err, 4);
-    save_float(config->start.fuya_xili, 5);
+    save_float(clamp_percent_value(config->start.fuya_xili, 20.0f), 5);
     save_float(config->speed.kd_Err, 6);
     save_float(config->speed.kp2_Err, 7);
     save_float(config->speed.speed_run, 8);
@@ -136,6 +159,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.count_fly_time_2, 24);
     save_int(config->fly.count_fly_angle, 25);
     save_int(config->fly.fly_ramp_enable, 26);
+    save_float(clamp_percent_value(config->start.fuya_wall_percent, 70.0f), 27);
 }
 
 /**
@@ -259,4 +283,13 @@ static float read_float(uint8 value_bit)
         *(p + i) = date_buff[begin++];
     }
     return output;
+}
+
+static float clamp_percent_value(float value, float default_value)
+{
+    if (value < 0.0f || value > 100.0f)
+    {
+        return default_value;
+    }
+    return value;
 }

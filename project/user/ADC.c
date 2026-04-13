@@ -1,3 +1,15 @@
+/**
+ * @file ADC.c
+ * @brief 四路电感采样、滤波与循迹偏差解算
+ * @details
+ * 本模块运行在高速控制链路中，负责把 ADC 原始采样转换为稳定的归一化电感值，
+ * 并通过差比和公式输出偏差 Err。
+ *
+ * 执行顺序：
+ * 1) 多次采样 -> 2) 排序与去极值均值 -> 3) 归一化 -> 4) 偏差解算
+ *
+ * 设计目标是在保证响应速度的前提下，抑制单次采样抖动，避免高速过弯时误判。
+ */
 #include "zf_common_headfile.h"
 #include "ADC.h"
 
@@ -37,6 +49,13 @@ static void dispose(uint16 ad1, uint16 ad2, uint16 ad3, uint16 ad4);
 /**
  * @brief 处理电感偏差计算
  * @details 采用四路电感的差比和算法，并支持参数 A_1, B_1, C_l 的加权修正
+ *
+ * 公式说明：
+ * 1) diff14 = ad1 - ad4：左右横向差分，反映主偏移方向
+ * 2) diff23 = ad2 - ad3：竖向差分，辅助修正斜入/斜出姿态
+ * 3) denom  = A_1*(ad1+ad4) + C_l*|diff23|：自适应归一化分母
+ *
+ * 其中 C_l 项用于在竖向差异增大时提高分母，降低异常工况下的偏差放大。
  */
 static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 {
@@ -45,19 +64,23 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     int16 diff23;
     uint16 sum14;
 
+    /* 1) 构造横向/竖向差分特征 */
     diff14 = (int16)ad11 - (int16)ad44;
     diff23 = (int16)ad22 - (int16)ad33;
     sum14 = ad11 + ad44;
 
+    /* 2) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
     denom = app.angle.A_1 * (float)sum14 +
             app.angle.C_l * (float)func_abs(diff23);
 
+    /* 3) 分母过小时直接归零，避免瞬态噪声被异常放大 */
     if (denom < 1.0f)
     {
         Err = 0.0f;
         return;
     }
 
+    /* 4) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
     Err = (float)limit *
           (app.angle.A_1 * (float)diff14 +
            app.angle.B_1 * (float)diff23) /
@@ -110,6 +133,7 @@ void read_AD(void)
     /* 2. 对每个通道进行排序和基础滤波 */
     for (i = 0; i < NUM; i++)
     {
+        /* 2.1 选择排序：通道样本数固定很小，复杂度可控且实现稳定 */
         for (j = 0; j < SORT_LENGTH - 1; j++)
         {
             min_idx = j;
@@ -126,9 +150,10 @@ void read_AD(void)
             }
         }
 
-        /* 取排序后的中间项计算均值，更新样本 */
+        /* 2.2 仅取中间两项平均，抑制尖峰/毛刺对本周期结果的影响 */
         ad_sum[i] = (uint32)AD_value[i][1] + (uint32)AD_value[i][2];
         ad_ave[i] = (uint16)((ad_sum[i] + 1u) / 2u);
+        /* 2.3 将均值回写到窗口尾部，保持后续平均阶段输入平滑 */
         AD_value[i][SORT_LENGTH - 1] = ad_ave[i];
     }
 
@@ -142,6 +167,7 @@ void read_AD(void)
         AD_V[i] = (uint16)(ad_sum[i] / SORT_LENGTH);
         RAW[i] = AD_V[i]; /* 保存原始值用于调试和标定 */
 
+        /* 上限保护：防止异常高值把归一化结果压缩到不可调区域 */
         if (AD_V[i] > MAX_Err[i])
             AD_V[i] = MAX_Err[i];
     }
@@ -188,10 +214,14 @@ void adc_measure_reset(void)
  */
 static void adc_read_channels(uint16 *raw_buffer)
 {
-    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左横电感 */
-    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
-    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
-    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
+//    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左横电感 */
+//    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
+//    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
+//    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
+	raw_buffer[0] = adc_convert(ADC_CH1_P11); /* 左横电感 */
+    raw_buffer[1] = adc_convert(ADC_CH0_P10); /* 左竖电感 */
+    raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
+    raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */
 }
 
 /**
@@ -202,6 +232,7 @@ static uint16 adc_normalize_value(uint16 raw, uint16 min, uint16 max)
     uint16 span;
     uint32 scaled;
 
+    /* 1) 标定区间异常时回退默认区间，防止除零或负跨度 */
     if (max <= min)
     {
         min = 0;
@@ -209,11 +240,13 @@ static uint16 adc_normalize_value(uint16 raw, uint16 min, uint16 max)
     }
 
     span = max - min;
+    /* 2) 先做边界裁剪，减少后续乘除运算分支风险 */
     if (raw <= min)
         return 0;
     if (raw >= max)
         return ADC_NORM_MAX;
 
+    /* 3) 线性映射并采用四舍五入，降低量化抖动 */
     scaled = (uint32)(raw - min) * ADC_NORM_MAX;
     return (uint16)((scaled + (uint32)span / 2u) / (uint32)span);
 }

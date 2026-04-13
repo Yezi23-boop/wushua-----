@@ -1,3 +1,14 @@
+/**
+ * @file a_run_mode.c
+ * @brief 运行模式状态机（启停、飞坡、环岛）
+ * @details
+ * 本模块聚合车辆运行阶段相关状态机：
+ * 1) 启停状态：按键/外部命令驱动停止、预启动、运行三态切换；
+ * 2) 飞坡状态：根据四路电感特征触发短时速度与转向覆盖；
+ * 3) 右环状态机：基于电感特征、编码器累计、角速度累计进行分阶段切换。
+ *
+ * 该文件直接影响赛道特征段通过策略，注释重点说明状态切换条件与计时含义。
+ */
 #include "zf_common_headfile.h"
 #include "a_run_mode.h"
 
@@ -7,7 +18,7 @@ static int count_fly_1 = 0;     /* 飞坡进入判定计数 */
 static int count_fly_2 = 0;     /* 飞坡保持阶段计数 */
 
 /* --- 启停状态机参数 --- */
-#define START_DEBOUNCE_TIME 50 // 启动按键消抖确认次数
+#define START_DEBOUNCE_TIME 20 /* 启动按键消抖确认次数（10ms 调用周期下约 500ms） */
 
 enum StartState
 {
@@ -26,6 +37,7 @@ static int8 key_released = 1;                               // 按键释放锁�
  */
 void a_run_mode_update_start_state(void)
 {
+    /* 记录外部镜像状态，供后续扩展状态迁移诊断使用 */
     flat_statr_date = flat_statr;
 
     /* 外部命令可直接请求进入运行态，flat_statr == 3 为一次性触发 */
@@ -47,6 +59,7 @@ void a_run_mode_update_start_state(void)
     {
         if (key_released == 1) // 仅在本次按下的首次稳定阶段计数
         {
+            /* 仅在按键保持按下期间递增，形成时间窗消抖 */
             press_debounce_cnt++;
             if (press_debounce_cnt >= START_DEBOUNCE_TIME)
             {
@@ -93,6 +106,10 @@ void a_run_mode_update_fuya_state(void)
     {
         fuya_update_simple();
     }
+    else
+    {
+        fuya_force_stop();
+    }
 }
 
 /**
@@ -128,6 +145,8 @@ void a_run_mode_update_fly_speed(int *speed)
             flat_fly = 0;
         }
     }
+
+    /* 非飞坡阶段按赛道策略回退到基础巡线速度 */
     if (ring_data.flast_r == 1)
     {
         /* C. 环岛阶段当前仍沿用基础速度 */
@@ -142,6 +161,7 @@ void a_run_mode_update_fly_speed(int *speed)
 
 void run_mode_update_angle_output(float *angle)
 {
+    /* 环岛阶段可用 Gyroz_set 强制覆盖角度环输出，实现固定打角策略 */
     if (ring_data.Gyroz_set != 0)
     {
         *angle = ring_data.Gyroz_set;
@@ -183,6 +203,7 @@ void circle_check_r()
     /* 右环入口特征连续命中计数 */
     static uint8 count_start = 0;
 
+    /* 状态机每次只推进一步，确保计时与传感器判定可追踪 */
     switch (current_state)
     {
     case no_ring:
@@ -201,7 +222,8 @@ void circle_check_r()
                 count_start = 0;
                 timedestroy(&ring_data.time_r); // 清空右环识别定时器
                 ring_data.flast_r = 1;          // 置位右环过程标志
-                current_state = ring;           // 切换到环岛准备阶段
+                /* 从入口识别切到 ring，后续进入距离累计阶段 */
+                current_state = ring; // 切换到环岛准备阶段
             }
             /* 超过 1000ms 仍未满足次数，丢弃本次识别 */
             else if (timeadd(&ring_data.time_r, 1000))
@@ -242,6 +264,7 @@ void circle_check_r()
         /* 环内角速度达到出环阈值后，进入预出环阶段 */
         if (ring_data.Gyroz >= app.ring.pre_out_ring_Gyroz)
         {
+            /* 进入预出环后由目标角速度引导车辆平顺回线 */
             current_state = pre_out_ring; // 切换到预出环阶段
         }
         break;
@@ -284,12 +307,14 @@ void gyro_integrals()
     /* 角速度累计使能时，累加校准后的 gyro_z */
     if (ring_data.gyro_flat == 1)
     {
+        /* Gyroz 为离散累加量，阈值需与采样周期共同校准 */
         ring_data.Gyroz += gyro_z; // 用于判断是否完成入环/出环转向
     }
 
     /* 编码器累计使能时，累加当前前进距离估计 */
     if (ring_data.distance == 1)
     {
+        /* 0.01 系数与当前速度单位配套，保持里程判据量级稳定 */
         ring_data.encoder += (speed_l + speed_r) * 0.01; // 用于判断是否达到环岛距离阈值
     }
 }
