@@ -15,8 +15,8 @@ typedef enum
 /**
  * @brief 负压系统全局变量
  */
-extern volatile int fuya_date;             /**< 当前平滑后的输出脉宽，范围 1000~2000 */
-extern volatile int fuya_target_pwm;       /**< 当前目标脉宽，范围 1000~2000 */
+extern volatile int fuya_date;             /**< 当前平滑后的输出脉宽，范围 500~1000 */
+extern volatile int fuya_target_pwm;       /**< 当前目标脉宽，范围 500~1000 */
 extern volatile uint8 fuya_target_percent; /**< 当前目标百分比，范围 0~100 */
 extern volatile uint8 fuya_surface_state;  /**< 当前识别到的表面状态 */
 
@@ -38,7 +38,7 @@ void fuya_set_percent(uint8 percent);
 
 /**
  * @brief 强制停止负压输出
- * @details 将目标和实际输出都拉回到 ESC 最小脉宽 1000
+ * @details 将目标和实际输出都拉回到 ESC 最小脉宽 500
  */
 void fuya_force_stop(void);
 

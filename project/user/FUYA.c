@@ -11,12 +11,24 @@
  */
 #include "zf_common_headfile.h"
 #include "FUYA.h"
+// 计算无刷电调转速   （1ms - 2ms）/20ms * 10000（10000是PWM的满占空比时候的值）
+// 在50Hz的控制频率下，无刷电调转速 0%   为 500
+// 在50Hz的控制频率下，无刷电调转速 20%  为 600
+// 在50Hz的控制频率下，无刷电调转速 40%  为 700
+// 在50Hz的控制频率下，无刷电调转速 60%  为 800
+// 在50Hz的控制频率下，无刷电调转速 80%  为 900
+// 在50Hz的控制频率下，无刷电调转速 100% 为 1000
 
+// 电调支持50hz-300hz的控制频率
+// 50Hz的控制频率 ，从0%到100%占空比为500到1000
+// 100Hz的控制频率，从0%到100%占空比为1000到2000
+// 200Hz的控制频率，从0%到100%占空比为2000到4000
+// 300Hz的控制频率，从0%到100%占空比为3000到6000
 /* --- 负压输出量纲定义 --- */
 #define FUYA_PERCENT_MIN 0
 #define FUYA_PERCENT_MAX 100
-#define FUYA_PWM_MIN 1000
-#define FUYA_PWM_MAX 2000
+#define FUYA_PWM_MIN 500
+#define FUYA_PWM_MAX 1000
 
 /* --- 表面识别阈值（基于重力向量 Z 分量） --- */
 #define FUYA_GROUND_ENTER_VZ 0.86f
@@ -125,7 +137,7 @@ static int fuya_ramp_pwm(int current_pwm, int target_pwm)
  */
 void fuya_Init(void)
 {
-    pwm_init(PWMA_CH2N_P03, 100, 0);
+    pwm_init(PWMA_CH2N_P03, 50, 0);
 
     /* 统一复用停机路径，确保初始化与保护停机行为一致 */
     fuya_force_stop();

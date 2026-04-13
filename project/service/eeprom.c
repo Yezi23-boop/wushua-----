@@ -29,7 +29,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.circle_flags = 0;           /* 默认自动识别圆环方向 */
     config->start.fuya_xili = 20.00f;         /* 默认平地负压百分比 */
-    config->start.fuya_wall_percent = 70.00f; /* 默认墙面负压百分比 */
+    config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 0.70f;
