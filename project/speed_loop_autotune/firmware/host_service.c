@@ -15,7 +15,7 @@ void speed_loop_autotune_service(void)
     telemetry_tick_now = test_tick_5ms_count;
     if ((uint8)(telemetry_tick_now - last_telemetry_tick) >= (uint8)AUTOTUNE_TELEMETRY_TICK_DIV)
     {
-        printf("%f,%f,%f,%ld,%ld,%d,%d,%d,%d,%d\n",
+        printf("%f,%f,%f,%ld,%ld,%d,%d,%d,%d,%d,%u,%u,%u\n",
                speed_loop_autotune_component_get_target_speed(),
                speed_loop_autotune_component_get_left_speed(),
                speed_loop_autotune_component_get_right_speed(),
@@ -25,7 +25,10 @@ void speed_loop_autotune_service(void)
                (int)speed_loop_autotune_component_get_stop_flag(),
                (int)speed_loop_autotune_get_mode_id(),
                (int)test_left_pwm_cmd,
-               (int)test_right_pwm_cmd);
+               (int)test_right_pwm_cmd,
+               (unsigned int)test_start_seq_cmd,
+               (unsigned int)test_start_seq_latched,
+               (unsigned int)test_start_state);
         last_telemetry_tick = telemetry_tick_now;
     }
 }

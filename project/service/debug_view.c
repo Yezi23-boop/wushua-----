@@ -1,6 +1,6 @@
 #include "zf_common_headfile.h"
 
-#define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 0
+#define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 1
 
 /**
  * @brief VOFA+ 上位机交互服务

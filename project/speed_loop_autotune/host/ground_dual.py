@@ -3,6 +3,7 @@ import pathlib
 import time
 
 from . import agent_session, common
+from .open_loop_startup import allocate_start_seq
 from .common import (
     DEFAULT_TUNING_PROFILE_PATH,
     DEFAULT_MIN_SCORE_TARGET_SPEED,
@@ -29,6 +30,123 @@ from .common import (
     wheel_pid_gains_from_dict,
     wheel_pid_gains_to_dict,
 )
+
+
+GROUND_FIRE_MODE_ID = 1
+GROUND_FIRE_STATE_RUNNING = 2
+GROUND_FIRE_READY_MATCH_COUNT = 2
+GROUND_FIRE_READY_WAIT_SECONDS = 1.0
+GROUND_FIRE_READY_POLL_SECONDS = 0.02
+GROUND_FIRE_RETRY_LIMIT = 2
+
+
+class GroundFireConfirmationTimeout(RuntimeError):
+    def __init__(self, request_seq, attempt_index, last_sample):
+        self.request_seq = int(request_seq)
+        self.attempt_index = int(attempt_index)
+        self.last_sample = last_sample
+        RuntimeError.__init__(self, self._build_message())
+
+    def _build_message(self):
+        if self.last_sample is None:
+            details = "mode_id=n/a start_seq=n/a start_state=n/a trial_active=n/a stop_flag=n/a"
+        else:
+            details = "mode_id={0} start_seq={1} start_state={2} trial_active={3} stop_flag={4}".format(
+                getattr(self.last_sample, "mode_id", "n/a"),
+                getattr(self.last_sample, "start_seq", "n/a"),
+                getattr(self.last_sample, "start_state", "n/a"),
+                getattr(self.last_sample, "trial_active", "n/a"),
+                getattr(self.last_sample, "stop_flag", "n/a"),
+            )
+        return "ground fire confirmation failed request_seq={0} attempt={1} {2}".format(
+            self.request_seq,
+            self.attempt_index,
+            details,
+        )
+
+
+def _ground_fire_sample_matches(sample, request_seq):
+    if abs(sample.mode_id - float(GROUND_FIRE_MODE_ID)) > 0.5:
+        return 0
+    if abs(sample.start_seq - float(request_seq)) > 0.5:
+        return 0
+    if abs(sample.start_state - float(GROUND_FIRE_STATE_RUNNING)) > 0.5:
+        return 0
+    if sample.trial_active < 0.5:
+        return 0
+    return 1
+
+
+def _wait_for_ground_fire_confirmation(client, request_seq, wait_seconds, poll_seconds, attempt_index):
+    deadline = time.monotonic() + float(wait_seconds)
+    consecutive = 0
+    prefetched_samples = []
+    last_sample = None
+
+    if not hasattr(client, "read_samples"):
+        raise RuntimeError("client missing read_samples for ground fire confirmation")
+
+    while time.monotonic() < deadline:
+        samples = client.read_samples(poll_seconds)
+        for sample in samples:
+            last_sample = sample
+            if _ground_fire_sample_matches(sample, request_seq):
+                prefetched_samples.append(sample)
+                consecutive += 1
+                if consecutive >= GROUND_FIRE_READY_MATCH_COUNT:
+                    return prefetched_samples
+            else:
+                consecutive = 0
+
+    raise GroundFireConfirmationTimeout(request_seq, attempt_index, last_sample)
+
+
+def _capture_ground_trial_with_confirmation(
+    client,
+    trial,
+    cooldown_ms,
+    precharge_ms,
+    sleep_fn,
+    retry_limit=GROUND_FIRE_RETRY_LIMIT,
+):
+    attempt_index = 1
+    first_target = trial.segments_ms[0][0]
+    capture_seconds = (trial.trial_ms + cooldown_ms + 150) / 1000.0
+
+    while attempt_index <= retry_limit:
+        request_seq = allocate_start_seq()
+        prefetched_samples = []
+
+        if attempt_index > 1:
+            client.send_command("AT_RESET")
+            client.send_command("AT_ARM")
+            if precharge_ms > 0:
+                sleep_fn(float(precharge_ms) / 1000.0)
+
+        client.send_command("AT_TRIAL_MS={0}".format(int(trial.trial_ms)))
+        client.send_command("AT_SPEED={0}".format(format_gain(first_target)))
+        client.send_command("AT_START_SEQ={0}".format(int(request_seq)))
+        client.drain_input()
+        client.send_command("AT_FIRE")
+
+        try:
+            prefetched_samples = _wait_for_ground_fire_confirmation(
+                client,
+                request_seq,
+                GROUND_FIRE_READY_WAIT_SECONDS,
+                GROUND_FIRE_READY_POLL_SECONDS,
+                attempt_index,
+            )
+            samples = client.capture_trial(capture_seconds, events=_build_trial_events(trial))
+            if prefetched_samples:
+                return list(prefetched_samples) + list(samples)
+            return list(samples)
+        except GroundFireConfirmationTimeout:
+            if attempt_index >= retry_limit:
+                raise
+        attempt_index += 1
+
+    raise RuntimeError("ground fire retry loop exited unexpectedly")
 
 
 def build_ground_step_trials(profile=None):
@@ -492,25 +610,23 @@ def run_ground_stage_group(
 
     group_results = []
     for trial in trials:
-        first_target = trial.segments_ms[0][0]
-        capture_seconds = (trial.trial_ms + cooldown_ms + 150) / 1000.0
-
-        client.send_command("AT_TRIAL_MS={0}".format(int(trial.trial_ms)))
-        client.send_command("AT_SPEED={0}".format(format_gain(first_target)))
-        client.drain_input()
-        client.send_command("AT_FIRE")
-        samples = client.capture_trial(capture_seconds, events=_build_trial_events(trial))
+        samples = _capture_ground_trial_with_confirmation(
+            client,
+            trial,
+            cooldown_ms,
+            precharge_ms,
+            sleep_fn,
+        )
         group_results.append(samples)
 
     if return_trial is not None:
-        first_target = return_trial.segments_ms[0][0]
-        capture_seconds = (return_trial.trial_ms + cooldown_ms + 150) / 1000.0
-
-        client.send_command("AT_TRIAL_MS={0}".format(int(return_trial.trial_ms)))
-        client.send_command("AT_SPEED={0}".format(format_gain(first_target)))
-        client.drain_input()
-        client.send_command("AT_FIRE")
-        client.capture_trial(capture_seconds, events=_build_trial_events(return_trial))
+        _capture_ground_trial_with_confirmation(
+            client,
+            return_trial,
+            cooldown_ms,
+            precharge_ms,
+            sleep_fn,
+        )
 
     return (
         score_ground_stage_group(

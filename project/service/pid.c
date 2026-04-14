@@ -84,10 +84,10 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
                                                         &encoder_filter_left);
     fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
                                                          &encoder_filter_right);
-//    speed_l=(int32)encoder_get_count(TIM4_ENCOEDER);
-//	speed_r=-(int32)encoder_get_count(TIM3_ENCOEDER);
-    speed_l = (float)fixed_left_count * 0.4f;
-    speed_r = (float)fixed_right_count * 0.4f;
+    //    speed_l=(int32)encoder_get_count(TIM4_ENCOEDER);
+    //	speed_r=-(int32)encoder_get_count(TIM3_ENCOEDER);
+    speed_l = (float)fixed_left_count * 0.5f;
+    speed_r = (float)fixed_right_count * 0.5f;
 
     left->speed = speed_l;
     right->speed = speed_r;

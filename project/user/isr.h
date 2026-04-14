@@ -9,16 +9,15 @@
  * 注意：高频中断路径应保持轻量，避免在此处开启重型调试逻辑。
  */
 /* --- 功能模块开关控制 --- */
-#define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
-#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
+#define MAIN_ENABLE_VOFA 1       /* 是否使能 VOFA+ 上位机串口交互 */
+#define MAIN_ENABLE_MENU 0       /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 
-
-#define MAIN_ENABLE_ISR_RUN_TEST_SPEED 0  /* 1: 在 TM0 中断中运行 run_test_speed() */
-#define MAIN_ENABLE_ISR_TEST_ANGLE_FUNC 0 /* 1: 在 TM0 中断中运行 test_angle_func() */
+#define MAIN_ENABLE_ISR_RUN_TEST_SPEED 1  /* 1: 在 TM0 中断中运行 run_test_speed() */
+#define MAIN_ENABLE_ISR_TEST_ANGLE_FUNC 1 /* 1: 在 TM0 中断中运行 test_angle_func() */
 #define MAIN_ENABLE_ISR_TEST_SPEED_FUNC 0 /* 1: 在 TM0 中断中运行 test_speed_func() */
-#define MAIN_ENABLE_ISR_RUN_TIME_1 1      /* 1: 在 TM0 中断中运行主控制环 run_time_1() */
-#define MAIN_ENABLE_ISR_RUN_TIME_2 1      /* 1: 在 TM1 中断中运行状态环 run_time_2() */
+#define MAIN_ENABLE_ISR_RUN_TIME_1 0      /* 1: 在 TM0 中断中运行主控制环 run_time_1() */
+#define MAIN_ENABLE_ISR_RUN_TIME_2 0      /* 1: 在 TM1 中断中运行状态环 run_time_2() */
 
 /**
  * @brief 中断服务函数声明文件

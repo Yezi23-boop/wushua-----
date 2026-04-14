@@ -16,6 +16,12 @@ uint8 pwm_identify_set_test_mode(float value)
     return 1;
 }
 
+uint8 pwm_identify_set_start_seq(float value)
+{
+    speed_loop_autotune_set_start_seq(value);
+    return 1;
+}
+
 uint8 pwm_identify_set_left_pwm(float value)
 {
     speed_loop_autotune_set_left_pwm_cmd(value);
@@ -37,6 +43,7 @@ uint8 pwm_identify_set_pair_pwm(float value)
 void pwm_identify_run_tick(void)
 {
     speed_loop_autotune_component_run_open_loop_pwm(test_left_pwm_cmd, test_right_pwm_cmd);
+    speed_loop_autotune_mark_drive_running();
     test_left_pwm_output = speed_loop_autotune_component_get_left_output();
     test_right_pwm_output = speed_loop_autotune_component_get_right_output();
 }

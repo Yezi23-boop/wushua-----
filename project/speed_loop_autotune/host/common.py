@@ -19,7 +19,7 @@ ScoreConfig = collections.namedtuple(
         "overshoot_gate_penalty",
     ],
 )
-TelemetrySample = collections.namedtuple(
+_TelemetrySampleBase = collections.namedtuple(
     "TelemetrySample",
     [
         "target",
@@ -32,9 +32,43 @@ TelemetrySample = collections.namedtuple(
         "mode_id",
         "left_cmd_pwm",
         "right_cmd_pwm",
+        "start_seq_cmd",
+        "start_seq",
+        "start_state",
     ],
 )
-TelemetrySample.__new__.__defaults__ = (0.0, 0.0, 0.0)
+
+
+class TelemetrySample(_TelemetrySampleBase):
+    __slots__ = ()
+
+    def __new__(cls, *args, **kwargs):
+        field_names = _TelemetrySampleBase._fields
+
+        if kwargs:
+            values = []
+            for name in field_names:
+                if name in kwargs:
+                    values.append(kwargs.pop(name))
+                else:
+                    values.append(0.0)
+            if kwargs:
+                raise TypeError("Unexpected keyword arguments: {0}".format(", ".join(sorted(kwargs.keys()))))
+            args = tuple(values)
+
+        if len(args) == 12:
+            args = args[:10] + (0.0, args[10], args[11])
+        elif len(args) < len(field_names):
+            args = args + (0.0,) * (len(field_names) - len(args))
+        elif len(args) > len(field_names):
+            raise TypeError(
+                "TelemetrySample expected at most {0} arguments, got {1}".format(
+                    len(field_names),
+                    len(args),
+                )
+            )
+
+        return _TelemetrySampleBase.__new__(cls, *args)
 TrialMetrics = collections.namedtuple(
     "TrialMetrics",
     [
@@ -431,6 +465,14 @@ def parse_telemetry_line(raw_line):
         mode_id = float(parts[7]) if len(parts) >= 8 else 0.0
         left_cmd_pwm = float(parts[8]) if len(parts) >= 9 else 0.0
         right_cmd_pwm = float(parts[9]) if len(parts) >= 10 else 0.0
+        if len(parts) >= 13:
+            start_seq_cmd = float(parts[10])
+            start_seq = float(parts[11])
+            start_state = float(parts[12])
+        else:
+            start_seq_cmd = 0.0
+            start_seq = float(parts[10]) if len(parts) >= 11 else 0.0
+            start_state = float(parts[11]) if len(parts) >= 12 else 0.0
     except ValueError:
         return None
 
@@ -445,6 +487,9 @@ def parse_telemetry_line(raw_line):
         mode_id,
         left_cmd_pwm,
         right_cmd_pwm,
+        start_seq_cmd,
+        start_seq,
+        start_state,
     )
 
 

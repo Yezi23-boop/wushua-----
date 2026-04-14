@@ -40,6 +40,7 @@ static const speed_loop_autotune_param_registration_t speed_loop_autotune_param_
     {"AT_TRIAL_MS", ground_dual_set_trial_ms},
     {"AT_COOLDOWN_MS", ground_dual_set_cooldown_ms},
     {"AT_TEST_MODE", pwm_identify_set_test_mode},
+    {"AT_START_SEQ", pwm_identify_set_start_seq},
     {"L_TEST_PWM", pwm_identify_set_left_pwm},
     {"R_TEST_PWM", pwm_identify_set_right_pwm},
     {"TEST_pwm", pwm_identify_set_pair_pwm},

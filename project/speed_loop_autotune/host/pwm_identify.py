@@ -11,6 +11,7 @@ from .common import (
     resolve_profile_path,
     save_tuning_profile,
 )
+from .open_loop_startup import OpenLoopStartupTimeout, run_confirmed_open_loop_trial
 
 
 IdentifyLevelMetrics = collections.namedtuple(
@@ -43,81 +44,10 @@ def _clamp_identify_pwm(value):
     return pwm_value
 
 
-def _build_pwm_command(wheel_name, pwm_value):
-    if wheel_name == "left":
-        return ("L_TEST_PWM={0}".format(int(pwm_value)), "R_TEST_PWM=0")
-    if wheel_name == "right":
-        return ("L_TEST_PWM=0", "R_TEST_PWM={0}".format(int(pwm_value)))
-    raise ValueError("wheel_name must be 'left' or 'right'")
-
-
 def _get_sample_command_pwm(sample, wheel_name):
     if wheel_name == "left":
         return sample.left_cmd_pwm
     return sample.right_cmd_pwm
-
-
-def _build_identify_capture_events(wheel_name, hold_ms):
-    events = []
-    keepalive_ms = DEFAULT_IDENTIFY_START_KEEPALIVE_MS
-    zero_active_command, zero_idle_command = _build_pwm_command(wheel_name, 0)
-
-    if keepalive_ms > 0:
-        while keepalive_ms < hold_ms:
-            events.append((float(keepalive_ms) / 1000.0, "START"))
-            keepalive_ms += DEFAULT_IDENTIFY_START_KEEPALIVE_MS
-
-    events.append((float(hold_ms) / 1000.0, zero_active_command))
-    events.append((float(hold_ms) / 1000.0, zero_idle_command))
-    return events
-
-
-def _is_identify_ready_sample(sample, wheel_name, command_pwm):
-    current_command = 0.0
-
-    if abs(sample.mode_id - 2.0) > 0.5:
-        return None
-    if sample.stop_flag >= 0.5:
-        return None
-
-    current_command = _get_sample_command_pwm(sample, wheel_name)
-    if float(command_pwm) <= 0.5:
-        if abs(current_command) <= 0.5:
-            return 0.0
-        return None
-
-    if abs(current_command - float(command_pwm)) <= 0.5:
-        return current_command
-
-    return None
-
-
-def _wait_for_identify_ready(
-    client,
-    wheel_name,
-    command_pwm,
-    wait_seconds=DEFAULT_IDENTIFY_READY_WAIT_SECONDS,
-    poll_seconds=DEFAULT_IDENTIFY_READY_POLL_SECONDS,
-):
-    deadline = 0.0
-    samples = []
-    sample = None
-    prefetched_samples = []
-
-    if not hasattr(client, "read_samples"):
-        return prefetched_samples
-
-    deadline = time.monotonic() + wait_seconds
-    while time.monotonic() < deadline:
-        samples = client.read_samples(poll_seconds)
-        prefetched_samples.extend(samples)
-        for sample in samples:
-            if _is_identify_ready_sample(sample, wheel_name, command_pwm) is not None:
-                return prefetched_samples
-        client.send_command("START")
-
-    raise RuntimeError("pwm-identify start did not become ready")
-
 
 def _resolve_identify_start_pwm(wheel_section, pwm_step):
     deadzone_pwm = 0
@@ -133,6 +63,55 @@ def _resolve_identify_start_pwm(wheel_section, pwm_step):
     return ((deadzone_pwm // step_value) + 1) * step_value
 
 
+def _collect_wheel_levels_from_start(client, args, wheel_name, start_pwm, deadzone_pwm):
+    valid_levels = []
+    pwm_value = int(start_pwm)
+
+    print(
+        "identify {0} start_pwm={1} deadzone_pwm={2}".format(
+            wheel_name,
+            pwm_value,
+            int(deadzone_pwm),
+        )
+    )
+
+    while pwm_value <= int(args.identify_pwm_max):
+        run_metrics = []
+        run_index = 0
+
+        while run_index < int(args.identify_repeat):
+            samples = run_pwm_identify_trial(
+                client,
+                wheel_name,
+                pwm_value,
+                hold_ms=args.identify_hold_ms,
+                tail_zero_ms=args.identify_tail_zero_ms,
+                rest_seconds=args.rest_seconds,
+            )
+            run_metrics.append(extract_identify_level_metrics(samples, wheel_name, pwm_value))
+            run_index += 1
+
+        level_metrics = _aggregate_identify_level_metrics(run_metrics, pwm_value)
+        print(
+            "identify {0} pwm={1} speed={2:.3f} theta={3:.3f} tau={4:.3f} valid={5}".format(
+                wheel_name,
+                pwm_value,
+                level_metrics.steady_speed,
+                level_metrics.theta_s,
+                level_metrics.tau_s,
+                int(level_metrics.valid),
+            )
+        )
+        if level_metrics.valid:
+            valid_levels.append(level_metrics)
+            if len(valid_levels) >= DEFAULT_IDENTIFY_MAX_VALID_LEVELS:
+                break
+
+        pwm_value += int(args.identify_pwm_step)
+
+    return valid_levels
+
+
 def run_pwm_identify_trial(
     client,
     wheel_name,
@@ -143,26 +122,24 @@ def run_pwm_identify_trial(
     sleep_fn=time.sleep,
 ):
     pwm_value = _clamp_identify_pwm(pwm_value)
-    active_command, idle_command = _build_pwm_command(wheel_name, pwm_value)
-
-    client.send_command("AT_RESET")
-    sleep_fn(rest_seconds)
-    client.send_command("AT_TEST_MODE=1")
-    client.send_command(active_command)
-    client.send_command(idle_command)
-    client.send_command("START")
-    if hasattr(client, "drain_input"):
-        client.drain_input()
-    prefetched_samples = _wait_for_identify_ready(client, wheel_name, pwm_value)
-    samples = client.capture_trial(
-        float(hold_ms + tail_zero_ms) / 1000.0,
-        events=_build_identify_capture_events(wheel_name, hold_ms),
-    )
-    client.send_command("AT_TEST_MODE=0")
-    client.send_command("AT_RESET")
-    if prefetched_samples:
-        return list(prefetched_samples) + list(samples)
-    return samples
+    try:
+        return run_confirmed_open_loop_trial(
+            client,
+            wheel_name,
+            pwm_value,
+            hold_ms,
+            tail_zero_ms,
+            rest_seconds,
+            DEFAULT_IDENTIFY_READY_WAIT_SECONDS,
+            DEFAULT_IDENTIFY_READY_POLL_SECONDS,
+            DEFAULT_IDENTIFY_START_KEEPALIVE_MS,
+            True,
+            False,
+            False,
+            sleep_fn=sleep_fn,
+        )
+    except OpenLoopStartupTimeout as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def _extract_active_identify_samples(samples, wheel_name, command_pwm):
@@ -311,11 +288,13 @@ def build_identify_seed_from_levels(levels, discrete_sample_s=DEFAULT_IDENTIFY_D
 
 
 def _collect_wheel_levels(client, args, wheel_name):
-    valid_levels = []
     profile = None
     pwm_map_section = None
     wheel_section = None
-    pwm_value = 0
+    start_pwm = 0
+    fallback_start_pwm = 0
+    deadzone_pwm = 0
+    valid_levels = []
 
     profile = load_tuning_profile(args.profile_path, required=True)
     pwm_map_section = profile.get("pwm_map")
@@ -326,48 +305,28 @@ def _collect_wheel_levels(client, args, wheel_name):
     if not isinstance(wheel_section, dict) or wheel_section.get("deadzone_break_pwm") is None:
         raise RuntimeError("Missing {0} deadzone in tuning profile: {1}".format(wheel_name, resolve_profile_path(args.profile_path)))
 
-    pwm_value = _resolve_identify_start_pwm(wheel_section, args.identify_pwm_step)
-    print(
-        "identify {0} start_pwm={1} deadzone_pwm={2}".format(
-            wheel_name,
-            pwm_value,
-            int(wheel_section.get("deadzone_break_pwm", 0)),
-        )
-    )
+    deadzone_pwm = int(wheel_section.get("deadzone_break_pwm", 0))
+    start_pwm = _resolve_identify_start_pwm(wheel_section, args.identify_pwm_step)
+    valid_levels = _collect_wheel_levels_from_start(client, args, wheel_name, start_pwm, deadzone_pwm)
+    if len(valid_levels) >= DEFAULT_IDENTIFY_MIN_VALID_LEVELS:
+        return valid_levels
 
-    while pwm_value <= int(args.identify_pwm_max):
-        run_metrics = []
-        run_index = 0
-
-        while run_index < int(args.identify_repeat):
-            samples = run_pwm_identify_trial(
-                client,
-                wheel_name,
-                pwm_value,
-                hold_ms=args.identify_hold_ms,
-                tail_zero_ms=args.identify_tail_zero_ms,
-                rest_seconds=args.rest_seconds,
-            )
-            run_metrics.append(extract_identify_level_metrics(samples, wheel_name, pwm_value))
-            run_index += 1
-
-        level_metrics = _aggregate_identify_level_metrics(run_metrics, pwm_value)
+    fallback_start_pwm = start_pwm - int(args.identify_pwm_step)
+    if fallback_start_pwm >= int(args.identify_pwm_step):
         print(
-            "identify {0} pwm={1} speed={2:.3f} theta={3:.3f} tau={4:.3f} valid={5}".format(
+            "identify {0} fallback_start_pwm={1} because initial start collected only {2} valid levels".format(
                 wheel_name,
-                pwm_value,
-                level_metrics.steady_speed,
-                level_metrics.theta_s,
-                level_metrics.tau_s,
-                int(level_metrics.valid),
+                int(fallback_start_pwm),
+                len(valid_levels),
             )
         )
-        if level_metrics.valid:
-            valid_levels.append(level_metrics)
-            if len(valid_levels) >= DEFAULT_IDENTIFY_MAX_VALID_LEVELS:
-                break
-
-        pwm_value += int(args.identify_pwm_step)
+        valid_levels = _collect_wheel_levels_from_start(
+            client,
+            args,
+            wheel_name,
+            fallback_start_pwm,
+            deadzone_pwm,
+        )
 
     return valid_levels
 

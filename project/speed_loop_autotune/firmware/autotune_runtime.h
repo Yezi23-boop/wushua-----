@@ -10,6 +10,10 @@
 #define AUTOTUNE_TEST_MODE_SPEED 0
 #define AUTOTUNE_TEST_MODE_PWM_IDENTIFY 1
 
+#define AUTOTUNE_START_STATE_IDLE 0
+#define AUTOTUNE_START_STATE_ACCEPTED 1
+#define AUTOTUNE_START_STATE_RUNNING 2
+
 /*
  * 调参组件内部时基（ms），需与 TM0 实际周期保持一致。
  * 当前工程 TM0 周期为 2ms。
@@ -29,14 +33,22 @@ extern volatile int16 test_left_pwm_cmd;
 extern volatile int16 test_right_pwm_cmd;
 extern volatile uint8 test_tick_5ms_count;
 extern volatile uint8 test_control_mode;
+extern volatile uint16 test_start_seq_cmd;
+extern volatile uint16 test_start_seq_latched;
+extern volatile uint8 test_start_state;
+extern volatile int16 test_start_left_pwm_cmd;
+extern volatile int16 test_start_right_pwm_cmd;
 
 void speed_loop_autotune_force_stop_output(void);
 void speed_loop_autotune_reset_runtime(uint8 keep_armed, uint8 start_cooldown);
 void speed_loop_autotune_start_drive(void);
 void speed_loop_autotune_set_test_mode(uint8 mode);
+void speed_loop_autotune_set_start_seq(float value);
 void speed_loop_autotune_set_left_pwm_cmd(float value);
 void speed_loop_autotune_set_right_pwm_cmd(float value);
 void speed_loop_autotune_set_pair_pwm_cmd(float value);
+void speed_loop_autotune_mark_open_loop_running(void);
+void speed_loop_autotune_mark_drive_running(void);
 uint8 speed_loop_autotune_get_mode_id(void);
 
 #endif /* _AUTOTUNE_RUNTIME_H_ */

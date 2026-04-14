@@ -84,6 +84,7 @@ void ground_dual_run_tick(void)
     if (test_trial_active)
     {
         speed_loop_autotune_component_run_closed_loop();
+        speed_loop_autotune_mark_drive_running();
         test_left_pwm_output = speed_loop_autotune_component_get_left_output();
         test_right_pwm_output = speed_loop_autotune_component_get_right_output();
         test_trial_elapsed_ms += AUTOTUNE_TEST_TICK_MS;

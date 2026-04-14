@@ -11,9 +11,9 @@
  * 供上位机调参与在线诊断链路调用。
  */
 
-#define VOFA_BUFFER_SIZE 64    /* 原始接收缓冲区大小 */
-#define VOFA_MAX_CMD_LEN 32    /* 单条命令最大长度（含结束前有效字符） */
-#define VOFA_CMD_QUEUE_DEPTH 8 /* 命令环形队列深度 */
+#define VOFA_BUFFER_SIZE 64     /* 原始接收缓冲区大小 */
+#define VOFA_MAX_CMD_LEN 32     /* 单条命令最大长度（含结束前有效字符） */
+#define VOFA_CMD_QUEUE_DEPTH 16 /* 命令环形队列深度，覆盖启动阶段的突发命令 */
 
 typedef enum
 {

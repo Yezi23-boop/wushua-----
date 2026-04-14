@@ -4,6 +4,7 @@
 #include "zf_common_typedef.h"
 
 uint8 pwm_identify_set_test_mode(float value);
+uint8 pwm_identify_set_start_seq(float value);
 uint8 pwm_identify_set_left_pwm(float value);
 uint8 pwm_identify_set_right_pwm(float value);
 uint8 pwm_identify_set_pair_pwm(float value);

@@ -32,11 +32,15 @@ class ParseTelemetryTests(unittest.TestCase):
         four = module.parse_telemetry_line("12.5,10.0,11.0,0.0")
         seven = module.parse_telemetry_line("30.0,29.5,29.0,3200,3180,1,0")
         ten = module.parse_telemetry_line("30.0,29.5,29.0,3200,3180,1,0,2,3000,0")
+        twelve = module.parse_telemetry_line("30.0,29.5,29.0,3200,3180,1,0,2,3000,0,17,2")
+        thirteen = module.parse_telemetry_line("30.0,29.5,29.0,3200,3180,1,0,2,3000,0,19,17,2")
 
         self.assertIsNotNone(three)
         self.assertIsNotNone(four)
         self.assertIsNotNone(seven)
         self.assertIsNotNone(ten)
+        self.assertIsNotNone(twelve)
+        self.assertIsNotNone(thirteen)
         self.assertEqual(three.target, 12.5)
         self.assertEqual(three.left_speed, 10.0)
         self.assertEqual(three.right_speed, 11.0)
@@ -48,9 +52,21 @@ class ParseTelemetryTests(unittest.TestCase):
         self.assertEqual(seven.mode_id, 0.0)
         self.assertEqual(seven.left_cmd_pwm, 0.0)
         self.assertEqual(seven.right_cmd_pwm, 0.0)
+        self.assertEqual(seven.start_seq_cmd, 0.0)
+        self.assertEqual(seven.start_seq, 0.0)
+        self.assertEqual(seven.start_state, 0.0)
         self.assertEqual(ten.mode_id, 2.0)
         self.assertEqual(ten.left_cmd_pwm, 3000.0)
         self.assertEqual(ten.right_cmd_pwm, 0.0)
+        self.assertEqual(ten.start_seq_cmd, 0.0)
+        self.assertEqual(ten.start_seq, 0.0)
+        self.assertEqual(ten.start_state, 0.0)
+        self.assertEqual(twelve.start_seq_cmd, 0.0)
+        self.assertEqual(twelve.start_seq, 17.0)
+        self.assertEqual(twelve.start_state, 2.0)
+        self.assertEqual(thirteen.start_seq_cmd, 19.0)
+        self.assertEqual(thirteen.start_seq, 17.0)
+        self.assertEqual(thirteen.start_state, 2.0)
 
     def test_rejects_invalid_rows(self):
         module = load_module()
@@ -332,6 +348,7 @@ class FirmwareRegistryTests(unittest.TestCase):
             "AT_TRIAL_MS",
             "AT_COOLDOWN_MS",
             "AT_TEST_MODE",
+            "AT_START_SEQ",
             "L_TEST_PWM",
             "R_TEST_PWM",
             "TEST_pwm",
@@ -343,6 +360,22 @@ class FirmwareRegistryTests(unittest.TestCase):
             "INFO",
         ):
             self.assertIn('"{0}"'.format(token), source)
+
+    def test_firmware_open_loop_start_state_is_exposed_in_runtime_and_service(self):
+        firmware_dir = MODULE_PATH.parents[1] / "firmware"
+        runtime_source = (firmware_dir / "autotune_runtime.c").read_text(encoding="utf-8")
+        runtime_header = (firmware_dir / "autotune_runtime.h").read_text(encoding="utf-8")
+        host_service_source = (firmware_dir / "host_service.c").read_text(encoding="utf-8")
+
+        self.assertIn("test_start_seq_cmd", runtime_source)
+        self.assertIn("test_start_seq_latched", runtime_source)
+        self.assertIn("test_start_state", runtime_source)
+        self.assertIn("speed_loop_autotune_clear_start_session();", runtime_source)
+        self.assertIn("speed_loop_autotune_mark_open_loop_running", runtime_source)
+        self.assertIn("AUTOTUNE_START_STATE_RUNNING", runtime_header)
+        self.assertIn("test_start_seq_cmd", host_service_source)
+        self.assertIn("test_start_seq_latched", host_service_source)
+        self.assertIn("test_start_state", host_service_source)
 
 
 class FirmwareComponentBoundaryTests(unittest.TestCase):
@@ -466,6 +499,11 @@ class FirmwareHostTransportBoundaryTests(unittest.TestCase):
 
         self.assertIn("host_transport.c", uvproj_source)
         self.assertIn("host_transport.h", uvproj_source)
+
+    def test_vofa_command_queue_depth_is_expanded_for_autotune_startup_burst(self):
+        vofa_header = (MODULE_PATH.parents[2] / "service" / "vofa.h").read_text(encoding="utf-8")
+
+        self.assertIn("#define VOFA_CMD_QUEUE_DEPTH 16", vofa_header)
 
 
 class UserIsrSwitchTests(unittest.TestCase):
@@ -678,18 +716,60 @@ class GroundLoadTests(unittest.TestCase):
 
     def test_run_ground_stage_group_sends_expected_commands(self):
         module = load_module()
+        ground_dual = load_host_package_module("ground_dual")
 
         class FakeClient(object):
             def __init__(self, sample_batches):
                 self.commands = []
                 self.capture_calls = []
                 self.sample_batches = list(sample_batches)
+                self.read_calls = 0
 
             def send_command(self, command):
                 self.commands.append(command)
 
             def drain_input(self):
                 self.commands.append("DRAIN")
+
+            def read_samples(self, duration_seconds):
+                request_seq = 0.0
+
+                del duration_seconds
+                self.read_calls += 1
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        request_seq = float(command.split("=", 1)[1])
+                        break
+                return [
+                    module.TelemetrySample(
+                        25.0,
+                        20.0,
+                        20.0,
+                        2200.0,
+                        2200.0,
+                        1.0,
+                        0.0,
+                        float(ground_dual.GROUND_FIRE_MODE_ID),
+                        0.0,
+                        0.0,
+                        request_seq,
+                        float(ground_dual.GROUND_FIRE_STATE_RUNNING),
+                    ),
+                    module.TelemetrySample(
+                        25.0,
+                        21.0,
+                        21.0,
+                        2250.0,
+                        2250.0,
+                        1.0,
+                        0.0,
+                        float(ground_dual.GROUND_FIRE_MODE_ID),
+                        0.0,
+                        0.0,
+                        request_seq,
+                        float(ground_dual.GROUND_FIRE_STATE_RUNNING),
+                    ),
+                ]
 
             def capture_trial(self, duration_seconds, events=None):
                 self.capture_calls.append((duration_seconds, list(events or [])))
@@ -713,25 +793,15 @@ class GroundLoadTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertLess(score, float("inf"))
         self.assertEqual(sleep_calls, [0.7])
-        self.assertEqual(
-            client.commands,
-            [
-                "AT_FUYA=2000",
-                "AT_COOLDOWN_MS=450",
-                "AT_KP=105.0000",
-                "AT_KI=20.0000",
-                "AT_KD=0.0000",
-                "AT_ARM",
-                "AT_TRIAL_MS=1000",
-                "AT_SPEED=25.0000",
-                "DRAIN",
-                "AT_FIRE",
-                "AT_TRIAL_MS=1665",
-                "AT_SPEED=-15.0000",
-                "DRAIN",
-                "AT_FIRE",
-            ],
-        )
+        self.assertEqual(client.commands[:8], ["AT_FUYA=2000", "AT_COOLDOWN_MS=450", "AT_KP=105.0000", "AT_KI=20.0000", "AT_KD=0.0000", "AT_ARM", "AT_TRIAL_MS=1000", "AT_SPEED=25.0000"])
+        self.assertEqual(client.commands[9], "DRAIN")
+        self.assertEqual(client.commands[10], "AT_FIRE")
+        self.assertTrue(client.commands[8].startswith("AT_START_SEQ="))
+        self.assertEqual(client.commands[11:13], ["AT_TRIAL_MS=1665", "AT_SPEED=-15.0000"])
+        self.assertTrue(client.commands[13].startswith("AT_START_SEQ="))
+        self.assertEqual(client.commands[14], "DRAIN")
+        self.assertEqual(client.commands[15], "AT_FIRE")
+        self.assertEqual(client.read_calls, 2)
         self.assertEqual(
             client.capture_calls[0][1],
             [
@@ -750,6 +820,88 @@ class GroundLoadTests(unittest.TestCase):
                 (1.332, "AT_SPEED=-15.0000"),
             ],
         )
+
+    def test_run_ground_stage_group_retries_once_after_fire_confirmation_timeout(self):
+        module = load_module()
+        ground_dual = load_host_package_module("ground_dual")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+                self.read_calls = 0
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.commands.append("DRAIN")
+
+            def read_samples(self, duration_seconds):
+                request_seq = 0.0
+                request_count = 0
+
+                del duration_seconds
+                self.read_calls += 1
+                for command in self.commands:
+                    if command.startswith("AT_START_SEQ="):
+                        request_count += 1
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        request_seq = float(command.split("=", 1)[1])
+                        break
+                if request_count <= 1:
+                    return []
+                return [
+                    module.TelemetrySample(
+                        25.0,
+                        20.0,
+                        20.0,
+                        2200.0,
+                        2200.0,
+                        1.0,
+                        0.0,
+                        float(ground_dual.GROUND_FIRE_MODE_ID),
+                        0.0,
+                        0.0,
+                        request_seq,
+                        float(ground_dual.GROUND_FIRE_STATE_RUNNING),
+                    ),
+                    module.TelemetrySample(
+                        25.0,
+                        21.0,
+                        21.0,
+                        2250.0,
+                        2250.0,
+                        1.0,
+                        0.0,
+                        float(ground_dual.GROUND_FIRE_MODE_ID),
+                        0.0,
+                        0.0,
+                        request_seq,
+                        float(ground_dual.GROUND_FIRE_STATE_RUNNING),
+                    ),
+                ]
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return [[module.TelemetrySample(25.0, 24.5, 24.2, 2200.0, 2210.0, 0.0, 1.0)]][0]
+
+        client = FakeClient()
+
+        score, results = module.run_ground_stage_group(
+            client,
+            module.PidGains(105.0, 20.0, 0.0),
+            trials=[module.SpeedStageTrial("t1", ((25.0, 200),), 200)],
+            precharge_ms=0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(len(results), 1)
+        self.assertLess(score, float("inf"))
+        self.assertEqual(len(client.capture_calls), 1)
+        self.assertGreaterEqual(client.commands.count("AT_ARM"), 2)
+        self.assertIn("AT_RESET", client.commands)
 
 
 class AutotuneModeTests(unittest.TestCase):
@@ -1007,6 +1159,19 @@ class SearchTests(unittest.TestCase):
             def drain_input(self):
                 self.drain_calls += 1
 
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
+                del duration_seconds
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                return [
+                    module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0, expected_seq, expected_seq, 2.0),
+                    module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 600.0, 0.0, expected_seq, expected_seq, 2.0),
+                ]
+
             def capture_trial(self, duration_seconds, events=None):
                 self.capture_calls.append((duration_seconds, list(events or [])))
                 return []
@@ -1022,16 +1187,9 @@ class SearchTests(unittest.TestCase):
             sleep_fn=lambda seconds: None,
         )
 
-        self.assertEqual(
-            client.commands[:5],
-            [
-                "AT_RESET",
-                "AT_TEST_MODE=1",
-                "L_TEST_PWM=600",
-                "R_TEST_PWM=0",
-                "START",
-            ],
-        )
+        self.assertEqual(client.commands[:4], ["AT_RESET", "AT_TEST_MODE=1", "L_TEST_PWM=600", "R_TEST_PWM=0"])
+        self.assertTrue(client.commands[4].startswith("AT_START_SEQ="))
+        self.assertEqual(client.commands[5], "START")
         self.assertEqual(
             client.capture_calls,
             [
@@ -1049,6 +1207,7 @@ class SearchTests(unittest.TestCase):
 
     def test_run_pwm_map_trial_issues_mode_and_open_loop_commands(self):
         module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
 
         class FakeClient(object):
             def __init__(self):
@@ -1061,6 +1220,19 @@ class SearchTests(unittest.TestCase):
 
             def drain_input(self):
                 self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
+                del duration_seconds
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                return [
+                    common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 1000.0, expected_seq, expected_seq, 2.0),
+                    common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 1000.0, expected_seq, expected_seq, 2.0),
+                ]
 
             def capture_trial(self, duration_seconds, events=None):
                 self.capture_calls.append((duration_seconds, list(events or [])))
@@ -1077,16 +1249,9 @@ class SearchTests(unittest.TestCase):
             sleep_fn=lambda seconds: None,
         )
 
-        self.assertEqual(
-            client.commands[:5],
-            [
-                "AT_RESET",
-                "AT_TEST_MODE=1",
-                "L_TEST_PWM=0",
-                "R_TEST_PWM=1000",
-                "START",
-            ],
-        )
+        self.assertEqual(client.commands[:4], ["AT_RESET", "AT_TEST_MODE=1", "L_TEST_PWM=0", "R_TEST_PWM=1000"])
+        self.assertTrue(client.commands[4].startswith("AT_START_SEQ="))
+        self.assertEqual(client.commands[5], "START")
         self.assertEqual(
             client.capture_calls,
             [
@@ -1101,10 +1266,39 @@ class SearchTests(unittest.TestCase):
                 )
             ],
         )
-        self.assertEqual(client.drain_calls, 1)
+        self.assertEqual(client.drain_calls, 2)
         self.assertEqual(client.commands[-2:], ["AT_TEST_MODE=0", "AT_RESET"])
 
-    def test_run_pwm_map_trial_waits_for_ready_sample_before_capture(self):
+    def test_run_pwm_identify_trial_requires_read_samples_for_confirmation(self):
+        module = load_host_package_module("pwm_identify")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                return None
+
+            def capture_trial(self, duration_seconds, events=None):
+                del duration_seconds, events
+                return []
+
+        client = FakeClient()
+        with self.assertRaisesRegex(RuntimeError, "read_samples"):
+            module.run_pwm_identify_trial(
+                client,
+                "left",
+                600,
+                hold_ms=80,
+                tail_zero_ms=40,
+                rest_seconds=0.0,
+                sleep_fn=lambda seconds: None,
+            )
+
+    def test_run_pwm_map_trial_zero_pwm_does_not_wait_for_ready_confirmation(self):
         module = load_host_package_module("pwm_map")
         common = load_host_package_module("common")
 
@@ -1113,11 +1307,7 @@ class SearchTests(unittest.TestCase):
                 self.commands = []
                 self.capture_calls = []
                 self.drain_calls = 0
-                self.read_calls = []
-                self._batches = [
-                    [common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 500.0, 0.0)],
-                    [common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0)],
-                ]
+                self.read_calls = 0
 
             def send_command(self, command):
                 self.commands.append(command)
@@ -1126,9 +1316,80 @@ class SearchTests(unittest.TestCase):
                 self.drain_calls += 1
 
             def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
+                del duration_seconds
+                self.read_calls += 1
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                return [
+                    common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, expected_seq, 0.0, 0.0),
+                    common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, expected_seq, 0.0, 0.0),
+                ]
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_map_trial(
+            client,
+            "left",
+            0,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(client.read_calls, 1)
+        self.assertEqual(client.drain_calls, 2)
+        self.assertEqual(client.commands[:4], ["AT_RESET", "AT_TEST_MODE=1", "L_TEST_PWM=0", "R_TEST_PWM=0"])
+        self.assertTrue(client.commands[4].startswith("AT_START_SEQ="))
+        self.assertEqual(client.commands[5], "START")
+        self.assertEqual(len(client.capture_calls), 1)
+        self.assertEqual(client.commands[-2:], ["AT_TEST_MODE=0", "AT_RESET"])
+
+    def test_run_pwm_map_trial_waits_for_ready_sample_before_capture(self):
+        module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+        test_case = self
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+                self.drain_calls = 0
+                self.read_calls = []
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
                 self.read_calls.append(duration_seconds)
-                if self._batches:
-                    return self._batches.pop(0)
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                if len(self.read_calls) == 1:
+                    test_case.assertEqual(self.commands.count("START"), 0)
+                    return [
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, 0.0, 0.0),
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, 0.0, 0.0),
+                    ]
+                if len(self.read_calls) == 2:
+                    test_case.assertEqual(self.commands.count("START"), 1)
+                    return [
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, expected_seq, 2.0),
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, expected_seq, 2.0),
+                    ]
                 return []
 
             def capture_trial(self, duration_seconds, events=None):
@@ -1147,20 +1408,42 @@ class SearchTests(unittest.TestCase):
         )
 
         self.assertEqual(len(client.read_calls), 2)
-        self.assertEqual(client.commands.count("START"), 2)
+        self.assertEqual(client.commands.count("START"), 1)
         self.assertEqual(client.drain_calls, 2)
         self.assertEqual(len(client.capture_calls), 1)
+        self.assertTrue(any(command.startswith("AT_START_SEQ=") for command in client.commands))
 
     def test_run_pwm_identify_trial_keeps_pwm_above_4000(self):
         module = load_host_package_module("pwm_identify")
+        common = load_host_package_module("common")
 
         class FakeClient(object):
             def __init__(self):
                 self.commands = []
                 self.capture_calls = []
+                self.read_calls = 0
 
             def send_command(self, command):
                 self.commands.append(command)
+
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
+                del duration_seconds
+                self.read_calls += 1
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                if self.read_calls == 1:
+                    return [
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 6000.0, 0.0, expected_seq, 0.0, 0.0),
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 6000.0, 0.0, expected_seq, 0.0, 0.0),
+                    ]
+                return [
+                    common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 6000.0, 0.0, expected_seq, expected_seq, 2.0),
+                    common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 6000.0, 0.0, expected_seq, expected_seq, 2.0),
+                ]
 
             def capture_trial(self, duration_seconds, events=None):
                 self.capture_calls.append((duration_seconds, list(events or [])))
@@ -1177,20 +1460,14 @@ class SearchTests(unittest.TestCase):
             sleep_fn=lambda seconds: None,
         )
 
-        self.assertEqual(
-            client.commands[:5],
-            [
-                "AT_RESET",
-                "AT_TEST_MODE=1",
-                "L_TEST_PWM=6000",
-                "R_TEST_PWM=0",
-                "START",
-            ],
-        )
+        self.assertEqual(client.commands[:4], ["AT_RESET", "AT_TEST_MODE=1", "L_TEST_PWM=6000", "R_TEST_PWM=0"])
+        self.assertTrue(client.commands[4].startswith("AT_START_SEQ="))
+        self.assertEqual(client.commands[5], "START")
 
     def test_run_pwm_identify_trial_waits_for_ready_and_keeps_start_alive(self):
         module = load_host_package_module("pwm_identify")
         common = load_host_package_module("common")
+        test_case = self
 
         class FakeClient(object):
             def __init__(self):
@@ -1198,9 +1475,24 @@ class SearchTests(unittest.TestCase):
                 self.capture_calls = []
                 self.read_calls = []
                 self.drain_calls = 0
-                self._batches = [
-                    [],
-                    [
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
+                self.read_calls.append(duration_seconds)
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                if len(self.read_calls) == 1:
+                    test_case.assertEqual(self.commands.count("START"), 0)
+                    return [
                         common.TelemetrySample(
                             0.0,
                             0.0,
@@ -1212,20 +1504,60 @@ class SearchTests(unittest.TestCase):
                             2.0,
                             6000.0,
                             0.0,
-                        )
-                    ],
-                ]
-
-            def send_command(self, command):
-                self.commands.append(command)
-
-            def drain_input(self):
-                self.drain_calls += 1
-
-            def read_samples(self, duration_seconds):
-                self.read_calls.append(duration_seconds)
-                if self._batches:
-                    return self._batches.pop(0)
+                            expected_seq,
+                            0.0,
+                            0.0,
+                        ),
+                        common.TelemetrySample(
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            2.0,
+                            6000.0,
+                            0.0,
+                            expected_seq,
+                            0.0,
+                            0.0,
+                        ),
+                    ]
+                if len(self.read_calls) == 2:
+                    test_case.assertEqual(self.commands.count("START"), 1)
+                    return [
+                        common.TelemetrySample(
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            2.0,
+                            6000.0,
+                            0.0,
+                            expected_seq,
+                            expected_seq,
+                            2.0,
+                        ),
+                        common.TelemetrySample(
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            1.0,
+                            0.0,
+                            2.0,
+                            6000.0,
+                            0.0,
+                            expected_seq,
+                            expected_seq,
+                            2.0,
+                        ),
+                    ]
                 return []
 
             def capture_trial(self, duration_seconds, events=None):
@@ -1244,9 +1576,10 @@ class SearchTests(unittest.TestCase):
         )
 
         self.assertEqual(len(client.read_calls), 2)
-        self.assertEqual(client.commands.count("START"), 2)
+        self.assertEqual(client.commands.count("START"), 1)
         self.assertEqual(client.drain_calls, 1)
         self.assertEqual(len(client.capture_calls), 1)
+        self.assertTrue(any(command.startswith("AT_START_SEQ=") for command in client.commands))
         self.assertEqual(
             client.capture_calls[0][1],
             [
@@ -1261,6 +1594,34 @@ class SearchTests(unittest.TestCase):
         module = load_host_package_module("pwm_identify")
         common = load_host_package_module("common")
 
+        setup_sample = common.TelemetrySample(
+            0.0,
+            6.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            6000.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+        setup_sample_2 = common.TelemetrySample(
+            0.0,
+            8.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            6000.0,
+            0.0,
+            0.0,
+            0.0,
+        )
         ready_sample = common.TelemetrySample(
             0.0,
             6.0,
@@ -1271,6 +1632,22 @@ class SearchTests(unittest.TestCase):
             0.0,
             2.0,
             6000.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+        ready_sample_2 = common.TelemetrySample(
+            0.0,
+            8.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            2.0,
+            6000.0,
+            0.0,
+            0.0,
             0.0,
         )
         captured_sample = common.TelemetrySample(
@@ -1284,13 +1661,15 @@ class SearchTests(unittest.TestCase):
             2.0,
             6000.0,
             0.0,
+            0.0,
+            0.0,
         )
 
         class FakeClient(object):
             def __init__(self):
                 self.commands = []
                 self.drain_calls = 0
-                self._batches = [[ready_sample]]
+                self._batches = [[setup_sample, setup_sample_2], [ready_sample, ready_sample_2]]
 
             def send_command(self, command):
                 self.commands.append(command)
@@ -1299,9 +1678,34 @@ class SearchTests(unittest.TestCase):
                 self.drain_calls += 1
 
             def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
                 del duration_seconds
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
                 if self._batches:
-                    return self._batches.pop(0)
+                    batch = []
+                    for sample in self._batches.pop(0):
+                        batch.append(
+                            common.TelemetrySample(
+                                sample.target,
+                                sample.left_speed,
+                                sample.right_speed,
+                                sample.left_pwm,
+                                sample.right_pwm,
+                                sample.trial_active,
+                                sample.stop_flag,
+                                sample.mode_id,
+                                sample.left_cmd_pwm,
+                                sample.right_cmd_pwm,
+                                expected_seq,
+                                expected_seq if self.drain_calls > 0 else 0.0,
+                                2.0 if self.drain_calls > 0 else 0.0,
+                            )
+                        )
+                    return batch
                 return []
 
             def capture_trial(self, duration_seconds, events=None):
@@ -1320,8 +1724,576 @@ class SearchTests(unittest.TestCase):
         )
 
         self.assertEqual(client.drain_calls, 1)
-        self.assertEqual(samples[0], ready_sample)
-        self.assertEqual(samples[1], captured_sample)
+        self.assertEqual(samples[0].left_speed, ready_sample.left_speed)
+        self.assertEqual(samples[1].left_speed, ready_sample_2.left_speed)
+        self.assertEqual(samples[2].left_speed, captured_sample.left_speed)
+        self.assertGreater(samples[0].start_seq, 0.0)
+        self.assertEqual(samples[0].start_state, 2.0)
+
+    def test_run_pwm_map_trial_retries_once_after_confirmation_timeout(self):
+        module = load_host_package_module("pwm_map")
+        common = load_host_package_module("common")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.capture_calls = []
+                self.drain_calls = 0
+                self.read_calls = 0
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+                request_count = 0
+
+                del duration_seconds
+                self.read_calls += 1
+                for command in self.commands:
+                    if command.startswith("AT_START_SEQ="):
+                        request_count += 1
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                if request_count == 1:
+                    if self.read_calls == 1:
+                        return [
+                            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, 0.0, 0.0),
+                            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, 0.0, 0.0),
+                        ]
+                    return []
+                if request_count == 2:
+                    if self.read_calls == 2:
+                        return [
+                            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, 0.0, 0.0),
+                            common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, 0.0, 0.0),
+                        ]
+                    return [
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, expected_seq, 2.0),
+                        common.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 500.0, 0.0, expected_seq, expected_seq, 2.0),
+                    ]
+                return []
+
+            def capture_trial(self, duration_seconds, events=None):
+                self.capture_calls.append((duration_seconds, list(events or [])))
+                return []
+
+        client = FakeClient()
+        module.run_pwm_map_trial(
+            client,
+            "left",
+            500,
+            hold_ms=120,
+            tail_zero_ms=80,
+            rest_seconds=0.0,
+            sleep_fn=lambda seconds: None,
+        )
+
+        self.assertEqual(len(client.capture_calls), 1)
+        self.assertGreaterEqual(client.commands.count("AT_RESET"), 4)
+        self.assertGreaterEqual(sum([1 for command in client.commands if command.startswith("AT_START_SEQ=")]), 2)
+
+    def test_run_pwm_identify_trial_reports_state_after_two_confirmation_timeouts(self):
+        module = load_host_package_module("pwm_identify")
+        common = load_host_package_module("common")
+
+        class FakeClient(object):
+            def __init__(self):
+                self.commands = []
+                self.read_calls = 0
+
+            def send_command(self, command):
+                self.commands.append(command)
+
+            def drain_input(self):
+                return None
+
+            def read_samples(self, duration_seconds):
+                expected_seq = 0.0
+
+                del duration_seconds
+                self.read_calls += 1
+                for command in reversed(self.commands):
+                    if command.startswith("AT_START_SEQ="):
+                        expected_seq = float(command.split("=", 1)[1])
+                        break
+                return [
+                    common.TelemetrySample(
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        2.0,
+                        6000.0,
+                        0.0,
+                        expected_seq,
+                        1.0,
+                    )
+                ]
+
+            def capture_trial(self, duration_seconds, events=None):
+                del duration_seconds, events
+                return []
+
+        client = FakeClient()
+        with self.assertRaisesRegex(RuntimeError, "attempt=2"):
+            module.run_pwm_identify_trial(
+                client,
+                "left",
+                6000,
+                hold_ms=120,
+                tail_zero_ms=80,
+                rest_seconds=0.0,
+                sleep_fn=lambda seconds: None,
+            )
+
+    def _run_open_loop_chain_simulation(self, drop_ready_polls=None, persistent_capture_drop=False):
+        module = load_module()
+        common = load_host_package_module("common")
+
+        class MapArgs(object):
+            rest_seconds = 0.0
+            map_pwm_step = 500
+            map_pwm_max = 1000
+            map_repeat = 2
+            map_hold_ms = 120
+            map_tail_zero_ms = 80
+            map_output = ""
+            profile_path = ""
+
+        class IdentifyArgs(object):
+            rest_seconds = 0.0
+            identify_pwm_step = 500
+            identify_pwm_max = 2000
+            identify_repeat = 2
+            identify_hold_ms = 120
+            identify_tail_zero_ms = 80
+            apply_identify_seed = False
+            save_best = False
+            profile_path = ""
+
+        class FakeOpenLoopHardwareClient(object):
+            def __init__(self):
+                self.commands = []
+                self.drain_calls = 0
+                self.test_mode = 0
+                self.pending_left_pwm = 0
+                self.pending_right_pwm = 0
+                self.latched_left_pwm = 0
+                self.latched_right_pwm = 0
+                self.pending_seq = 0
+                self.latched_seq = 0
+                self.start_state = 0
+                self.poll_index = 0
+
+            def send_command(self, command):
+                self.commands.append(command)
+                if command == "AT_RESET":
+                    self.test_mode = 0
+                    self.pending_left_pwm = 0
+                    self.pending_right_pwm = 0
+                    self.latched_left_pwm = 0
+                    self.latched_right_pwm = 0
+                    self.pending_seq = 0
+                    self.latched_seq = 0
+                    self.start_state = 0
+                    self.poll_index = 0
+                    return
+                if command.startswith("AT_TEST_MODE="):
+                    self.test_mode = int(float(command.split("=", 1)[1]))
+                    return
+                if command.startswith("L_TEST_PWM="):
+                    self.pending_left_pwm = int(float(command.split("=", 1)[1]))
+                    return
+                if command.startswith("R_TEST_PWM="):
+                    self.pending_right_pwm = int(float(command.split("=", 1)[1]))
+                    return
+                if command.startswith("AT_START_SEQ="):
+                    self.pending_seq = int(float(command.split("=", 1)[1]))
+                    return
+                if command == "START" and self.test_mode == 1:
+                    self.latched_left_pwm = self.pending_left_pwm
+                    self.latched_right_pwm = self.pending_right_pwm
+                    self.latched_seq = self.pending_seq
+                    if self.start_state == 0:
+                        self.start_state = 1
+
+            def drain_input(self):
+                self.drain_calls += 1
+
+            def read_samples(self, duration_seconds):
+                del duration_seconds
+                self.poll_index += 1
+                if self.poll_index in set(drop_ready_polls or []):
+                    return []
+
+                if self.test_mode == 1 and self.start_state == 0:
+                    return [self._build_setup_sample(), self._build_setup_sample()]
+
+                if self.start_state == 1:
+                    if self.poll_index == 1:
+                        return [self._build_sample(1, 0.0)]
+                    self.start_state = 2
+                    return [self._build_sample(2, 0.0)]
+
+                if self.start_state == 2:
+                    return [self._build_sample(2, 0.0)]
+                return []
+
+            def capture_trial(self, duration_seconds, events=None):
+                del duration_seconds, events
+                responses = self._speed_series()
+                samples = []
+                for index, speed in enumerate(responses):
+                    if persistent_capture_drop and index == 1:
+                        continue
+                    samples.append(self._build_sample(2, speed))
+                return samples
+
+            def _wheel_name(self):
+                if self.latched_left_pwm != 0 or self.pending_right_pwm == 0:
+                    return "left"
+                return "right"
+
+            def _command_pwm(self):
+                if self.latched_left_pwm != 0:
+                    return self.latched_left_pwm
+                return self.latched_right_pwm
+
+            def _speed_series(self):
+                wheel_name = self._wheel_name()
+                command_pwm = self._command_pwm()
+
+                if command_pwm <= 0:
+                    return [0.0, 0.0, 0.0, 0.0]
+                if wheel_name == "left":
+                    if command_pwm == 500:
+                        return [0.0, 6.0, 8.0, 9.0]
+                    if command_pwm == 1000:
+                        return [0.0, 8.0, 14.0, 18.0, 20.0]
+                    if command_pwm == 1500:
+                        return [0.0, 10.0, 18.0, 24.0, 30.0]
+                    return [0.0, 12.0, 20.0, 28.0, 35.0]
+
+                if command_pwm == 500:
+                    return [0.0, 6.0, 7.0, 8.0]
+                if command_pwm == 1000:
+                    return [0.0, 7.0, 12.0, 16.0, 18.0]
+                if command_pwm == 1500:
+                    return [0.0, 9.0, 16.0, 22.0, 27.0]
+                return [0.0, 11.0, 18.0, 25.0, 32.0]
+
+            def _build_sample(self, start_state_value, speed_value):
+                left_cmd_pwm = float(self.latched_left_pwm)
+                right_cmd_pwm = float(self.latched_right_pwm)
+                start_seq_cmd = float(self.pending_seq)
+                start_seq = float(self.latched_seq)
+
+                if left_cmd_pwm != 0.0 or right_cmd_pwm == 0.0:
+                    return common.TelemetrySample(
+                        0.0,
+                        speed_value,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        2.0,
+                        left_cmd_pwm,
+                        right_cmd_pwm,
+                        start_seq_cmd,
+                        start_seq,
+                        float(start_state_value),
+                    )
+
+                return common.TelemetrySample(
+                    0.0,
+                    0.0,
+                    speed_value,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    2.0,
+                    left_cmd_pwm,
+                    right_cmd_pwm,
+                    start_seq_cmd,
+                    start_seq,
+                    float(start_state_value),
+                )
+
+            def _build_setup_sample(self):
+                left_cmd_pwm = float(self.pending_left_pwm)
+                right_cmd_pwm = float(self.pending_right_pwm)
+                start_seq_cmd = float(self.pending_seq)
+
+                return common.TelemetrySample(
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    2.0,
+                    left_cmd_pwm,
+                    right_cmd_pwm,
+                    start_seq_cmd,
+                    0.0,
+                    0.0,
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            map_args = MapArgs()
+            identify_args = IdentifyArgs()
+            client = FakeOpenLoopHardwareClient()
+
+            map_args.map_output = str(temp_path / "logs" / "sim_pwm_map.csv")
+            map_args.profile_path = str(temp_path / "logs" / "profile.json")
+            identify_args.profile_path = map_args.profile_path
+
+            module.run_pwm_map(client, map_args)
+            profile_after_map = common.load_tuning_profile(map_args.profile_path, required=True)
+            module.run_pwm_identify(client, identify_args)
+            final_profile = common.load_tuning_profile(map_args.profile_path, required=True)
+            return profile_after_map, final_profile
+
+    def test_pwm_map_to_identify_chain_survives_ready_poll_drops(self):
+        baseline_map, baseline_profile = self._run_open_loop_chain_simulation()
+        drop_map, drop_profile = self._run_open_loop_chain_simulation(drop_ready_polls=[2, 9, 16])
+
+        self.assertEqual(baseline_map["pwm_map"]["left"]["deadzone_break_pwm"], 500)
+        self.assertEqual(drop_map["pwm_map"]["left"]["deadzone_break_pwm"], 500)
+        self.assertEqual(baseline_map["pwm_map"]["right"]["deadzone_break_pwm"], 500)
+        self.assertEqual(drop_map["pwm_map"]["right"]["deadzone_break_pwm"], 500)
+        self.assertAlmostEqual(
+            baseline_profile["pwm_identify"]["seed_pi"]["left"]["kp"],
+            drop_profile["pwm_identify"]["seed_pi"]["left"]["kp"],
+            places=4,
+        )
+        self.assertAlmostEqual(
+            baseline_profile["pwm_identify"]["seed_pi"]["right"]["kp"],
+            drop_profile["pwm_identify"]["seed_pi"]["right"]["kp"],
+            places=4,
+        )
+
+    def test_pwm_map_to_identify_chain_fails_after_persistent_capture_drops(self):
+        module = load_module()
+        common = load_host_package_module("common")
+
+        class MapArgs(object):
+            rest_seconds = 0.0
+            map_pwm_step = 500
+            map_pwm_max = 1000
+            map_repeat = 2
+            map_hold_ms = 120
+            map_tail_zero_ms = 80
+            map_output = ""
+            profile_path = ""
+
+        class IdentifyArgs(object):
+            rest_seconds = 0.0
+            identify_pwm_step = 500
+            identify_pwm_max = 2000
+            identify_repeat = 2
+            identify_hold_ms = 120
+            identify_tail_zero_ms = 80
+            apply_identify_seed = False
+            save_best = False
+            profile_path = ""
+
+        class FakeOpenLoopHardwareClient(object):
+            def __init__(self):
+                self.commands = []
+                self.test_mode = 0
+                self.pending_left_pwm = 0
+                self.pending_right_pwm = 0
+                self.latched_left_pwm = 0
+                self.latched_right_pwm = 0
+                self.pending_seq = 0
+                self.latched_seq = 0
+                self.start_state = 0
+                self.poll_index = 0
+
+            def send_command(self, command):
+                self.commands.append(command)
+                if command == "AT_RESET":
+                    self.test_mode = 0
+                    self.pending_left_pwm = 0
+                    self.pending_right_pwm = 0
+                    self.latched_left_pwm = 0
+                    self.latched_right_pwm = 0
+                    self.pending_seq = 0
+                    self.latched_seq = 0
+                    self.start_state = 0
+                    self.poll_index = 0
+                    return
+                if command.startswith("AT_TEST_MODE="):
+                    self.test_mode = int(float(command.split("=", 1)[1]))
+                    return
+                if command.startswith("L_TEST_PWM="):
+                    self.pending_left_pwm = int(float(command.split("=", 1)[1]))
+                    return
+                if command.startswith("R_TEST_PWM="):
+                    self.pending_right_pwm = int(float(command.split("=", 1)[1]))
+                    return
+                if command.startswith("AT_START_SEQ="):
+                    self.pending_seq = int(float(command.split("=", 1)[1]))
+                    return
+                if command == "START" and self.test_mode == 1:
+                    self.latched_left_pwm = self.pending_left_pwm
+                    self.latched_right_pwm = self.pending_right_pwm
+                    self.latched_seq = self.pending_seq
+                    if self.start_state == 0:
+                        self.start_state = 1
+
+            def drain_input(self):
+                return None
+
+            def read_samples(self, duration_seconds):
+                del duration_seconds
+                self.poll_index += 1
+                if self.test_mode == 1 and self.start_state == 0:
+                    return [self._build_setup_sample(), self._build_setup_sample()]
+                if self.start_state == 1:
+                    if self.poll_index == 1:
+                        return [self._build_sample(1, 0.0)]
+                    self.start_state = 2
+                    return [self._build_sample(2, 0.0)]
+                if self.start_state == 2:
+                    return [self._build_sample(2, 0.0)]
+                return []
+
+            def capture_trial(self, duration_seconds, events=None):
+                del duration_seconds, events
+                responses = self._speed_series()
+                samples = []
+                for index, speed in enumerate(responses):
+                    if index == 1:
+                        continue
+                    samples.append(self._build_sample(2, speed))
+                return samples
+
+            def _wheel_name(self):
+                if self.latched_left_pwm != 0 or self.pending_right_pwm == 0:
+                    return "left"
+                return "right"
+
+            def _command_pwm(self):
+                if self.latched_left_pwm != 0:
+                    return self.latched_left_pwm
+                return self.latched_right_pwm
+
+            def _speed_series(self):
+                wheel_name = self._wheel_name()
+                command_pwm = self._command_pwm()
+
+                if command_pwm <= 0:
+                    return [0.0, 0.0, 0.0, 0.0]
+                if wheel_name == "left":
+                    if command_pwm == 500:
+                        return [0.0, 6.0, 8.0, 9.0]
+                    if command_pwm == 1000:
+                        return [0.0, 8.0, 14.0, 18.0, 20.0]
+                    if command_pwm == 1500:
+                        return [0.0, 10.0, 18.0, 24.0, 30.0]
+                    return [0.0, 12.0, 20.0, 28.0, 35.0]
+
+                if command_pwm == 500:
+                    return [0.0, 6.0, 7.0, 8.0]
+                if command_pwm == 1000:
+                    return [0.0, 7.0, 12.0, 16.0, 18.0]
+                if command_pwm == 1500:
+                    return [0.0, 9.0, 16.0, 22.0, 27.0]
+                return [0.0, 11.0, 18.0, 25.0, 32.0]
+
+            def _build_sample(self, start_state_value, speed_value):
+                left_cmd_pwm = float(self.latched_left_pwm)
+                right_cmd_pwm = float(self.latched_right_pwm)
+                start_seq_cmd = float(self.pending_seq)
+                start_seq = float(self.latched_seq)
+
+                if left_cmd_pwm != 0.0 or right_cmd_pwm == 0.0:
+                    return common.TelemetrySample(
+                        0.0,
+                        speed_value,
+                        0.0,
+                        0.0,
+                        0.0,
+                        1.0,
+                        0.0,
+                        2.0,
+                        left_cmd_pwm,
+                        right_cmd_pwm,
+                        start_seq_cmd,
+                        start_seq,
+                        float(start_state_value),
+                    )
+
+                return common.TelemetrySample(
+                    0.0,
+                    0.0,
+                    speed_value,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    2.0,
+                    left_cmd_pwm,
+                    right_cmd_pwm,
+                    start_seq_cmd,
+                    start_seq,
+                    float(start_state_value),
+                )
+
+            def _build_setup_sample(self):
+                left_cmd_pwm = float(self.pending_left_pwm)
+                right_cmd_pwm = float(self.pending_right_pwm)
+                start_seq_cmd = float(self.pending_seq)
+
+                return common.TelemetrySample(
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    2.0,
+                    left_cmd_pwm,
+                    right_cmd_pwm,
+                    start_seq_cmd,
+                    0.0,
+                    0.0,
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            map_args = MapArgs()
+            identify_args = IdentifyArgs()
+            client = FakeOpenLoopHardwareClient()
+
+            map_args.map_output = str(temp_path / "logs" / "persistent_drop_pwm_map.csv")
+            map_args.profile_path = str(temp_path / "logs" / "profile.json")
+            identify_args.profile_path = map_args.profile_path
+
+            module.run_pwm_map(client, map_args)
+            profile = common.load_tuning_profile(map_args.profile_path, required=True)
+
+            self.assertEqual(profile["pwm_map"]["left"]["deadzone_break_pwm"], 1000)
+            self.assertEqual(profile["pwm_map"]["right"]["deadzone_break_pwm"], 1000)
+
+            with self.assertRaisesRegex(RuntimeError, "identify process metrics are invalid"):
+                module.run_pwm_identify(client, identify_args)
 
     def test_extract_pwm_map_level_metrics_marks_deadzone_after_three_fast_samples(self):
         module = load_host_package_module("pwm_map")
@@ -1990,6 +2962,115 @@ class SearchTests(unittest.TestCase):
                     module.run_pwm_identify(FakeClient(), args)
         finally:
             pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
+
+    def test_run_pwm_identify_falls_back_one_step_when_deadzone_start_is_too_high(self):
+        module = load_module()
+        pwm_identify = load_host_package_module("pwm_identify")
+
+        original_run_pwm_identify_trial = pwm_identify.run_pwm_identify_trial
+        call_log = []
+
+        class FakeClient(object):
+            pass
+
+        class Args(object):
+            target_speed = 35.0
+            rest_seconds = 0.0
+            identify_pwm_step = 500
+            identify_pwm_max = 2000
+            identify_repeat = 1
+            identify_hold_ms = 160
+            identify_tail_zero_ms = 40
+            apply_identify_seed = False
+            save_best = False
+            profile_path = ""
+
+        invalid_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+            module.TelemetrySample(0.0, 3.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+            module.TelemetrySample(0.0, 4.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+        ]
+        valid_low_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1000.0, 0.0),
+            module.TelemetrySample(0.0, 6.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1000.0, 0.0),
+            module.TelemetrySample(0.0, 10.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1000.0, 0.0),
+            module.TelemetrySample(0.0, 12.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1000.0, 0.0),
+            module.TelemetrySample(0.0, 12.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1000.0, 0.0),
+        ]
+        valid_high_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+            module.TelemetrySample(0.0, 8.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+            module.TelemetrySample(0.0, 13.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+            module.TelemetrySample(0.0, 15.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+            module.TelemetrySample(0.0, 15.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 1500.0, 0.0),
+        ]
+        valid_right_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1000.0),
+            module.TelemetrySample(0.0, 0.0, 6.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1000.0),
+            module.TelemetrySample(0.0, 0.0, 10.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1000.0),
+            module.TelemetrySample(0.0, 0.0, 12.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1000.0),
+            module.TelemetrySample(0.0, 0.0, 12.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1000.0),
+        ]
+        valid_right_high_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1500.0),
+            module.TelemetrySample(0.0, 0.0, 8.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1500.0),
+            module.TelemetrySample(0.0, 0.0, 13.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1500.0),
+            module.TelemetrySample(0.0, 0.0, 15.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1500.0),
+            module.TelemetrySample(0.0, 0.0, 15.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 1500.0),
+        ]
+        valid_right_top_samples = [
+            module.TelemetrySample(0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 2000.0),
+            module.TelemetrySample(0.0, 0.0, 10.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 2000.0),
+            module.TelemetrySample(0.0, 0.0, 16.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 2000.0),
+            module.TelemetrySample(0.0, 0.0, 18.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 2000.0),
+            module.TelemetrySample(0.0, 0.0, 18.0, 0.0, 0.0, 1.0, 0.0, 2.0, 0.0, 2000.0),
+        ]
+
+        def fake_run_pwm_identify_trial(client, wheel_name, pwm_value, hold_ms, tail_zero_ms, rest_seconds, sleep_fn=None):
+            del client, hold_ms, tail_zero_ms, rest_seconds, sleep_fn
+            call_log.append((wheel_name, pwm_value))
+            if wheel_name == "left":
+                if pwm_value == 1500 and call_log.count(("left", 1500)) == 1:
+                    return list(invalid_samples)
+                if pwm_value == 1000:
+                    return list(valid_low_samples)
+                if pwm_value == 1500:
+                    return list(valid_high_samples)
+                return list(valid_high_samples)
+            if pwm_value == 1000:
+                return list(valid_right_samples)
+            if pwm_value == 1500:
+                return list(valid_right_high_samples)
+            return list(valid_right_top_samples)
+
+        pwm_identify.run_pwm_identify_trial = fake_run_pwm_identify_trial
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                profile_path = pathlib.Path(temp_dir) / "profile.json"
+                profile_path.write_text(
+                    json.dumps(
+                        {
+                            "meta": {"profile_version": 1},
+                            "pwm_map": {
+                                "left": {"deadzone_break_pwm": 1000},
+                                "right": {"deadzone_break_pwm": 1000},
+                            },
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                args = Args()
+                args.profile_path = str(profile_path)
+                result = module.run_pwm_identify(FakeClient(), args)
+                profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        finally:
+            pwm_identify.run_pwm_identify_trial = original_run_pwm_identify_trial
+
+        self.assertEqual(result, 0)
+        self.assertIn(("left", 1000), call_log)
+        self.assertNotIn(("right", 1000), call_log)
+        self.assertIn("seed_pi", profile["pwm_identify"])
 
     def test_main_routes_pwm_identify_mode(self):
         module = load_module()

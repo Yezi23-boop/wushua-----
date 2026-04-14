@@ -93,6 +93,10 @@ void speed_loop_autotune_print_info(void)
     printf("PWM Cmd: %d, %d\n",
            (int)test_left_pwm_cmd,
            (int)test_right_pwm_cmd);
+    printf("Start Session: %u, %u, %u\n",
+           (unsigned int)test_start_seq_cmd,
+           (unsigned int)test_start_seq_latched,
+           (unsigned int)test_start_state);
     printf("Trial: %u, %u, %d, %d\n",
            (unsigned int)test_trial_limit_ms,
            (unsigned int)test_trial_cooldown_ms,

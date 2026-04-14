@@ -15,6 +15,11 @@ volatile int16 test_left_pwm_cmd = 0;
 volatile int16 test_right_pwm_cmd = 0;
 volatile uint8 test_tick_5ms_count = 0;
 volatile uint8 test_control_mode = AUTOTUNE_TEST_MODE_SPEED;
+volatile uint16 test_start_seq_cmd = 0;
+volatile uint16 test_start_seq_latched = 0;
+volatile uint8 test_start_state = AUTOTUNE_START_STATE_IDLE;
+volatile int16 test_start_left_pwm_cmd = 0;
+volatile int16 test_start_right_pwm_cmd = 0;
 
 static int16 speed_loop_autotune_clamp_pwm(float value)
 {
@@ -27,6 +32,28 @@ static int16 speed_loop_autotune_clamp_pwm(float value)
         value = (float)PWM_DUTY_MAX;
     }
     return (int16)value;
+}
+
+static uint16 speed_loop_autotune_clamp_start_seq(float value)
+{
+    if (value < 0.0f)
+    {
+        value = 0.0f;
+    }
+    if (value > 65535.0f)
+    {
+        value = 65535.0f;
+    }
+    return (uint16)value;
+}
+
+static void speed_loop_autotune_clear_start_session(void)
+{
+    test_start_seq_cmd = 0;
+    test_start_seq_latched = 0;
+    test_start_state = AUTOTUNE_START_STATE_IDLE;
+    test_start_left_pwm_cmd = 0;
+    test_start_right_pwm_cmd = 0;
 }
 
 void speed_loop_autotune_force_stop_output(void)
@@ -51,6 +78,7 @@ void speed_loop_autotune_reset_runtime(uint8 keep_armed, uint8 start_cooldown)
     test_left_pwm_output = 0;
     test_right_pwm_output = 0;
     test_control_mode = AUTOTUNE_TEST_MODE_SPEED;
+    speed_loop_autotune_clear_start_session();
     speed_loop_autotune_force_stop_output();
     speed_loop_autotune_component_write_fuya(0);
 
@@ -66,6 +94,18 @@ void speed_loop_autotune_reset_runtime(uint8 keep_armed, uint8 start_cooldown)
 
 void speed_loop_autotune_start_drive(void)
 {
+    test_start_seq_latched = test_start_seq_cmd;
+    if (test_control_mode == AUTOTUNE_TEST_MODE_PWM_IDENTIFY)
+    {
+        test_start_left_pwm_cmd = test_left_pwm_cmd;
+        test_start_right_pwm_cmd = test_right_pwm_cmd;
+    }
+    else
+    {
+        test_start_left_pwm_cmd = 0;
+        test_start_right_pwm_cmd = 0;
+    }
+    test_start_state = AUTOTUNE_START_STATE_ACCEPTED;
     speed_loop_autotune_component_set_drive_enabled(1, 3);
 }
 
@@ -83,10 +123,16 @@ void speed_loop_autotune_set_test_mode(uint8 mode)
         test_right_pwm_cmd = 0;
         test_left_pwm_output = 0;
         test_right_pwm_output = 0;
+        speed_loop_autotune_clear_start_session();
         speed_loop_autotune_force_stop_output();
     }
 
     test_control_mode = mode;
+}
+
+void speed_loop_autotune_set_start_seq(float value)
+{
+    test_start_seq_cmd = speed_loop_autotune_clamp_start_seq(value);
 }
 
 void speed_loop_autotune_set_left_pwm_cmd(float value)
@@ -106,6 +152,20 @@ void speed_loop_autotune_set_pair_pwm_cmd(float value)
     pwm_value = speed_loop_autotune_clamp_pwm(value);
     test_left_pwm_cmd = pwm_value;
     test_right_pwm_cmd = pwm_value;
+}
+
+void speed_loop_autotune_mark_drive_running(void)
+{
+    if (test_start_state != AUTOTUNE_START_STATE_ACCEPTED)
+    {
+        return;
+    }
+    test_start_state = AUTOTUNE_START_STATE_RUNNING;
+}
+
+void speed_loop_autotune_mark_open_loop_running(void)
+{
+    speed_loop_autotune_mark_drive_running();
 }
 
 uint8 speed_loop_autotune_get_mode_id(void)
