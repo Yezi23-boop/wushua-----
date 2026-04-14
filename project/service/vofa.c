@@ -259,14 +259,20 @@ void vofa_service(void)
 void vofa_service_legacy(void)
 {
     static char vofa_cmd[64];
-    printf("%f,%f,%f,%f\n", test_angle_value, gyro_z, PID.angle.error, 1.0);
+	#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
+	 printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
+    #endif
+	#if MAIN_ENABLE_ISR_TEST_ANGLE_FUNC
+	printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
+    #endif
+    // printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     /* legacy 模式下只做旧命令兼容，不走新调参组件 */
     vofa_parse_from_fifo();
 
     while (vofa_get_command(vofa_cmd, 64))
     {
         vofa_handle_legacy_command(vofa_cmd);
-        //  printf("%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value);
+        //     printf("%f,%f,,%f,,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     }
 }
 
@@ -329,41 +335,34 @@ static void vofa_handle_legacy_command(char *cmd)
             else if (strcmp(param_name, "A_KP") == 0)
             {
                 PID.angle.Kp = value;
-                printf("Position Kp = %.2f\n", value);
             }
             else if (strcmp(param_name, "A_KD") == 0)
             {
                 PID.angle.Kd = value;
-                printf("Position Kd = %.2f\n", value);
             }
             else if (strcmp(param_name, "A_GYRO") == 0)
             {
                 PID.angle.Kp2 = value;
-                printf("Position limiting_Err (from Ki) = %.2f\n", value);
             }
             else if (strcmp(param_name, "TEST_angle") == 0)
             {
                 test_angle_value = value;
-                printf("TEST_angle = %f\n", value);
+            }
+            else if (strcmp(param_name, "TEST_speed") == 0)
+            {
+                test_speed_value = value;
             }
             else if (strcmp(param_name, "MOTOR") == 0)
             {
                 PID.left_speed.output = value;
                 PID.right_speed.output = value;
-                printf("Motor = %.2f,speed=%.2f\n", PID.right_speed.output, PID.right_speed.speed);
             }
             else if (strcmp(param_name, "SPEED_RUN") == 0)
             {
-                printf("Speed Run = %.2f\n", value);
             }
             else if (strcmp(param_name, "ERR") == 0)
             {
                 Err = value;
-                printf("Error = %.2f\n", value);
-            }
-            else
-            {
-                printf("Unknown parameter: %s = %.2f\n", param_name, value);
             }
         }
     }
@@ -376,16 +375,18 @@ static void vofa_handle_legacy_command(char *cmd)
         else if (strcmp(cmd, "SAVE") == 0)
         {
             eeprom_flash();
-            printf("Parameters saved\n");
         }
         else if (strcmp(cmd, "LOAD") == 0)
         {
             eeprom_init();
-            printf("Parameters loaded\n");
         }
-        else
+        else if (strcmp(cmd, "STOP") == 0)
         {
-            printf("Unknown command: %s\n", cmd);
+            stop = 1;
+        }
+        else if (strcmp(cmd, "START") == 0)
+        {
+            stop = 0;
         }
     }
 }

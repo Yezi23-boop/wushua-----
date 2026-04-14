@@ -21,8 +21,7 @@ volatile float run_left_target = 0.0f;  /* 当前左轮目标速度（用于菜�
 volatile float run_right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
 /* --- 周期任务内部变量 --- */
-static int steer_div_4 = 0;  /* 2ms 主环分频：用于每 4ms 更新一次转向环 */
-static int steer_div_8 = 0;  /* 2ms 主环分频：用于每 16ms 触发电感采样与转向更新 */
+static int steer_div_10 = 0; /* 2ms 主环分频：用于每 4ms 更新一次转向环 */
 static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 
 /**
@@ -35,43 +34,24 @@ void run_time_1(void)
     float right_target = run_right_target;
     int32 left_pwm;
     int32 right_pwm;
-    /* 调试脚位翻转预留（默认关闭）：可用于示波器测量环路耗时 */
+    steer_div_10++;
     /* P36 = 0; */
-    /* 1. 执行 IAP 保护，避免复位脚异常时进入错误状态 */
     a_run_apply_iap_guard();
-
-    /* 3. 采集编码器数据 */
+    read_AD();                                      /* 采集四路电感 ADC */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
 
-    /* 4. 转向环按 4ms 更新一次，角速度环和速度环继续保持 2ms */
-    steer_div_4++;
-    steer_div_8++;
-    if (steer_div_8 >= 4)
+    if (steer_div_10 > 2)
     {
-        fuya_set_percent((uint8)app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
-        /* 4.1 低频电感链路：读 ADC 并更新赛道偏差 */
-        read_AD();                         /* 采集四路电感 ADC */
         pid_steer_update(&PID.steer, Err); /* 根据赛道偏差更新转向环 */
-        steer_div_8 = 0;
     }
-    if (steer_div_4 >= 2)
-    {
-        /* 5. 根据飞坡/赛道状态修正当前目标速度 */
-        a_run_mode_update_fly_speed(&speed_active);
-        /* 2. 将四元数中断已缓存的原始陀螺仪 Z 轴转换为控制环使用量 */
-        imu_update_gyro_z_from_imu660rc();
-        /* 6. 串联角度环与速度环 */
-        /* 转向反馈环使用校准后的 gyro_z */
-        pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
-        // run_mode_update_angle_output(&PID.angle.output); /* 环岛阶段可覆盖角度环输出 */
-        /* 左右轮速度环目标 = 基础速度 ± 姿态补偿 */
-        /* 输出符号约定：左轮减姿态量，右轮加姿态量，实现差速转向 */
-        left_target = (float)speed_active - PID.angle.output;
-        right_target = (float)speed_active + PID.angle.output;
-        run_left_target = left_target;
-        run_right_target = right_target;
-        steer_div_4 = 0;
-    }
+//    a_run_mode_update_fly_speed(&speed_active);
+    imu_update_gyro_z_from_imu660rc();
+    pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
+    // run_mode_update_angle_output(&PID.angle.output); /* 环岛阶段可覆盖角度环输出 */
+    left_target = (float)speed_active - PID.angle.output;
+    right_target = (float)speed_active + PID.angle.output;
+    run_left_target = left_target;
+    run_right_target = right_target;
 
     /* 速度环保持高频更新，保证电机执行链路带宽 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
@@ -104,7 +84,10 @@ void run_time_2(void)
     /* 同步对外状态镜像，供显示与外部逻辑读取 */
     flat_statr = a_run_mode_get_start_state(); /* 同步当前启停状态到对外变量 */
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
-                                               //  fuya_set_percent(30);                 /* 运行态全力负压，其他状态关闭负压 */
+	if(flat_statr==1)
+	{
+      fuya_set_percent(30);                 /* 运行态全力负压，其他状态关闭负压 */
+	}
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
 }

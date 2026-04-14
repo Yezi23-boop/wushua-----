@@ -106,47 +106,28 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
  */
 void pid_speed_update(PID_Speed *pid, float target, float actual)
 {
-    int32 error_i;
-    int32 prev_error_i;
-    int32 prev2_error_i;
-    int32 kp_i;
-    int32 ki_i;
-    int32 kd_i;
-    int32 delta_i;
-    int32 output_i;
-    int32 max_output_i;
+    float delta_output;
 
-    /* 先求误差，再统一直接截断成整数参与计算 */
+    /* 全浮点增量式计算，确保 Kp/Ki/Kd 的小数调节可以实时生效 */
     pid->error = target - actual;
-    error_i = (int32)(pid->error);
-    prev_error_i = (int32)(pid->prev_error);
-    prev2_error_i = (int32)(pid->prev2_error);
 
-    kp_i = (int32)(pid->Kp);
-    ki_i = (int32)(pid->Ki);
-    kd_i = (int32)(pid->Kd);
+    delta_output = pid->Kp * (pid->error - pid->prev_error) + pid->Ki * pid->error + pid->Kd * (pid->error - 2.0f * pid->prev_error + pid->prev2_error);
+    pid->output += delta_output;
 
-    delta_i = kp_i * (error_i - prev_error_i);
-    delta_i += ki_i * error_i;
-    delta_i += kd_i * (error_i - prev_error_i - prev_error_i + prev2_error_i);
-
-    output_i = (int32)(pid->output);
-    output_i += delta_i;
-
-    max_output_i = (int32)(pid->max_output);
-    if (output_i > max_output_i)
+    // 更新输出并限幅
+    pid->output += delta_output;
+    if (pid->output > pid->max_output)
     {
-        output_i = max_output_i;
+        pid->output = pid->max_output;
     }
-    else if (output_i < -max_output_i)
+    else if (pid->output < -pid->max_output)
     {
-        output_i = -max_output_i;
+        pid->output = -pid->max_output;
     }
 
-    pid->output = (float)output_i;
-    pid->prev2_error = (float)prev_error_i;
-    pid->prev_error = (float)error_i;
-    pid->error = (float)error_i;
+    // 更新误差历史
+    pid->prev2_error = pid->prev_error;
+    pid->prev_error = pid->error;
 }
 
 /**
@@ -183,16 +164,16 @@ void pid_steer_update(PID_Steer *pid, float error)
 }
 
 /**
- * @brief 角度环 PID 更新（位置式算法）
+ * @brief 角速度环 PID 更新（位置式算法）
  * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
  * @param pid PID 结构指针
- * @param error 目标偏差（通常是 目标角度 - 当前角度）
+ * @param error 目标偏差（通常是角速度 - 当前角速度）
  * @param gyro Calibrated steering feedback value
  */
 void pid_angle_update(PID_Steer *pid, float error, float gyro)
 {
     /* 计算综合偏差 */
-    pid->error = error - gyro;
+    pid->error = error - gyro * 10;
 
     /* 位置式 PD 控制 */
     pid->output = pid->Kp * pid->error + pid->Kd * (pid->error - pid->prev_error);

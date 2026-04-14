@@ -17,7 +17,7 @@
 #define M_PI 3.14159265358979f
 #endif
 
-#define IMU_GYRO_Z_SCALE (0.004f)
+#define IMU_GYRO_Z_SCALE (0.005f)
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
 

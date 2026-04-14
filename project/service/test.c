@@ -1,6 +1,6 @@
 #include "zf_common_headfile.h"
 #include "test.h"
-
+static int8 time_test=0;
 /* 测试用的目标设定值 */
 float test_speed_value = 0;
 float test_angle_value = 0;
@@ -11,15 +11,16 @@ float test_angle_value = 0;
  */
 void test_angle_func(void)
 {
+	time_test++;
     a_run_apply_iap_guard();
+	fuya_set_percent(30); /* 运行态全力负压，其他状态关闭负压 */
     /* 1. 刷新四元数中断已缓存的陀螺仪 Z 轴反馈量 */
     imu_update_gyro_z_from_imu660rc();
-
+ /* 3. 直接使用校准后的 gyro_z 参与反馈控制 */
+    pid_angle_update(&PID.angle, test_angle_value, gyro_z);
     /* 2. 获取编码器反馈速度 */
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* 3. 直接使用校准后的 gyro_z 参与反馈控制 */
-    pid_angle_update(&PID.angle, test_angle_value, gyro_z);
 
     /* 4. 将角度控制器的输出作为差速调节量，叠加到速度环 */
     /* 注意：左右轮目标速度方向相反以实现原地或行进间转弯 */
