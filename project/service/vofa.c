@@ -262,7 +262,7 @@ void vofa_service_legacy(void)
 	#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
 	 printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     #endif
-	#if MAIN_ENABLE_ISR_TEST_ANGLE_FUNC
+	#if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
 	printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     #endif
     // printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
@@ -332,21 +332,9 @@ static void vofa_handle_legacy_command(char *cmd)
             {
                 PID.right_speed.Kd = value;
             }
-            else if (strcmp(param_name, "A_KP") == 0)
+            else if (strcmp(param_name, "TEST_DIFF") == 0)
             {
-                PID.angle.Kp = value;
-            }
-            else if (strcmp(param_name, "A_KD") == 0)
-            {
-                PID.angle.Kd = value;
-            }
-            else if (strcmp(param_name, "A_GYRO") == 0)
-            {
-                PID.angle.Kp2 = value;
-            }
-            else if (strcmp(param_name, "TEST_angle") == 0)
-            {
-                test_angle_value = value;
+                test_diff_value = value;
             }
             else if (strcmp(param_name, "TEST_speed") == 0)
             {

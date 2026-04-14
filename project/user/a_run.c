@@ -3,9 +3,9 @@
  * @brief 主控制任务调度与执行入口
  * @details
  * 本文件承接定时中断任务链，将“采样-解算-控制输出”组织为固定周期流程：
- * - run_time_1(): 高频控制环，负责电感/姿态/速度闭环与电机输出
+ * - run_time_1(): 高频控制环，负责电感/转向差速/速度闭环与电机输出
  * - run_time_2(): 低频状态环，负责保护检测、状态机与软定时器
- * - run_time_3(): 纯追踪实验链路，用于算法验证
+ * - run_time_3(): 差速实验链路，用于算法验证
  *
  * 该模块位于实时主链路，注释强调调用时序和数据依赖，便于赛道现场快速排障。
  */
@@ -17,8 +17,8 @@
 /* --- 运行状态变量 --- */
 volatile int flat_statr = 0;            /* 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */
 volatile int flat_fly = 0;              /* 飞坡状态标志位 */
-volatile float run_left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/调试显示） */
-volatile float run_right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
+volatile float left_target = 0.0f;      /* 当前左轮目标速度（用于菜单/调试显示） */
+volatile float right_target = 0.0f;     /* 当前右轮目标速度（用于菜单/调试显示） */
 
 /* --- 周期任务内部变量 --- */
 static int steer_div_10 = 0; /* 2ms 主环分频：用于每 4ms 更新一次转向环 */
@@ -30,28 +30,22 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
  */
 void run_time_1(void)
 {
-    float left_target = run_left_target;
-    float right_target = run_right_target;
-    int32 left_pwm;
-    int32 right_pwm;
+    float diff_output;
     steer_div_10++;
     /* P36 = 0; */
     a_run_apply_iap_guard();
     read_AD();                                      /* 采集四路电感 ADC */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
-
     if (steer_div_10 > 2)
     {
-        pid_steer_update(&PID.steer, Err); /* 根据赛道偏差更新转向环 */
+        pid_steer_update(&PID.steer, Err, gyro_z); /* 根据赛道偏差和 gyro 阻尼更新转向环 */
     }
-//    a_run_mode_update_fly_speed(&speed_active);
+    speed_active = (int)app.speed.speed_run;
     imu_update_gyro_z_from_imu660rc();
-    pid_angle_update(&PID.angle, PID.steer.output, gyro_z);
-    // run_mode_update_angle_output(&PID.angle.output); /* 环岛阶段可覆盖角度环输出 */
-    left_target = (float)speed_active - PID.angle.output;
-    right_target = (float)speed_active + PID.angle.output;
-    run_left_target = left_target;
-    run_right_target = right_target;
+    gyro_integrals();
+    diff_output = PID.steer.output;
+    left_target = (float)speed_active - diff_output;
+    right_target = (float)speed_active + diff_output;
 
     /* 速度环保持高频更新，保证电机执行链路带宽 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
@@ -60,9 +54,7 @@ void run_time_1(void)
     /* 7. 仅在运行态时允许电机输出 */
     if (a_run_mode_get_start_state() == 2)
     {
-        left_pwm = (int32)PID.left_speed.output;
-        right_pwm = (int32)PID.right_speed.output;
-        motor_output(left_pwm, right_pwm);
+        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
     /* P36 = 1; */
 }
@@ -75,6 +67,7 @@ void run_time_2(void)
 {
     /* 1. 更新电感动态最大值，用于归一化与标定 */
     scan_track_max_value();
+    circle_check_r();
 
     /* 2. 执行各类保护检测 */
     lost_lines();    /* 丢线保护 */
@@ -84,7 +77,7 @@ void run_time_2(void)
     /* 同步对外状态镜像，供显示与外部逻辑读取 */
     flat_statr = a_run_mode_get_start_state(); /* 同步当前启停状态到对外变量 */
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
-	if(flat_statr==1)
+	if(a_run_mode_get_start_state()==1)
 	{
       fuya_set_percent(30);                 /* 运行态全力负压，其他状态关闭负压 */
 	}
@@ -93,15 +86,12 @@ void run_time_2(void)
 }
 
 /**
- * @brief 纯追踪实验任务
- * @details 使用 Pure Pursuit 生成左右轮目标速度，并通过速度环完成闭环输出
+ * @brief 差速实验任务
+ * @details 使用电感偏差直接生成左右轮目标速度，并通过速度环完成闭环输出
  */
 void run_time_3(void)
 {
-    float left_target = 0.0f;
-    float right_target = 0.0f;
-    int32 left_pwm;
-    int32 right_pwm;
+    float diff_output;
 
     /* 试验链路同样遵循主链路顺序，便于与正式控制策略对比 */
     a_run_apply_iap_guard();
@@ -109,17 +99,11 @@ void run_time_3(void)
     read_AD();
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
-    /* 更新转向环 PD 输出 */
-    pid_steer_update(&PID.steer, Err);
-
-    /* 由纯追踪算法生成左右轮目标速度 */
-    {
-        float norm_err = Err / 100.0f; /* 将偏差缩放到算法所需量级 */
-        /* 该实验路径同样使用校准后的 gyro_z */
-        Pure_Pursuit_Gyro_Control(app.speed.speed_run, norm_err, gyro_z, &left_target, &right_target);
-        run_left_target = left_target;
-        run_right_target = right_target;
-    }
+    /* 更新转向差速输出 */
+    pid_steer_update(&PID.steer, Err, gyro_z);
+    diff_output = PID.steer.output;
+    left_target = app.speed.speed_run - diff_output;
+    right_target = app.speed.speed_run + diff_output;
 
     /* 将目标轮速送入左右速度环 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
@@ -127,17 +111,15 @@ void run_time_3(void)
 
     if (a_run_mode_get_start_state() == 2)
     {
-        left_pwm = (int32)PID.left_speed.output;
-        right_pwm = (int32)PID.right_speed.output;
-        motor_output(left_pwm, right_pwm);
+        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
 }
 
-void run_test_angle(void)
+void run_test_diff(void)
 {
     /* 仅用于实验调试：不参与常规竞速主链路 */
     a_run_apply_iap_guard();
-    test_angle_func();
+    test_diff_func();
     fuya_update_simple();
 }
 

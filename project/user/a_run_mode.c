@@ -159,16 +159,16 @@ void a_run_mode_update_fly_speed(int *speed)
     }
 }
 
-void run_mode_update_angle_output(float *angle)
+void run_mode_update_diff_output(float *diff_output)
 {
-    /* 环岛阶段可用 Gyroz_set 强制覆盖角度环输出，实现固定打角策略 */
-    if (ring_data.Gyroz_set != 0)
+    /* 环岛阶段可用 direct diff set 强制覆盖主链差速输出 */
+    if (ring_data.diff_set != 0)
     {
-        *angle = ring_data.Gyroz_set;
+        *diff_output = ring_data.diff_set;
     }
     else
     {
-        *angle = PID.angle.output;
+        *diff_output = PID.steer.output;
     }
 }
 
@@ -198,7 +198,7 @@ RingStruct ring_data = {0};
  * @brief 右环状态机更新
  * @details 根据电感特征、编码器累计和角速度累计结果推进右环流程
  */
-void circle_check_r()
+void circle_check_r(void)
 {
     /* 右环入口特征连续命中计数 */
     static uint8 count_start = 0;
@@ -234,27 +234,30 @@ void circle_check_r()
         break;
 
     case ring:
-        /* 清除环岛角速度给定，开始累计编码器距离 */
-        ring_data.Gyroz_set = 0;
+        /* 清除环岛直接差速给定，开始累计编码器距离 */
+        ring_data.diff_set = 0;
         ring_data.distance = 1; // 允许累计编码器里程
+        ring_data.Gyroz = 0;
 
         /* 累计距离达到阈值后进入预入环阶段 */
         if (ring_data.encoder >= app.ring.ring_encoder)
         {
             ring_data.distance = 0;
             ring_data.encoder = 0;
+            ring_data.gyro_flat = 1;
+            ring_data.Gyroz = 0;
             current_state = pre_ring; // 切换到预入环阶段
         }
         break;
 
     case pre_ring:
-        /* 给定预入环打角目标 */
-        ring_data.Gyroz_set = app.ring.pre_ring_Gyro_set;
+        /* 给定预入环直接差速目标 */
+        ring_data.diff_set = app.ring.pre_ring_Gyro_set;
 
         /* 角速度累计达到阈值并持续 50ms 后，认为已真正入环 */
         if (ring_data.Gyroz > 30 && timeadd(&ring_data.ing_ring_time, 50))
         {
-            ring_data.Gyroz_set = 0;               // 关闭预入环角速度给定
+            ring_data.diff_set = 0;                // 关闭预入环直接差速给定
             timedestroy(&ring_data.ing_ring_time); // 清空入环确认计时器
             current_state = in_ring;               // 切换到环内阶段
         }
@@ -270,13 +273,13 @@ void circle_check_r()
         break;
 
     case pre_out_ring:
-        /* 给定预出环打角目标 */
-        ring_data.Gyroz_set = app.ring.pre_out_ring_Gyro_set;
+        /* 给定预出环直接差速目标 */
+        ring_data.diff_set = app.ring.pre_out_ring_Gyro_set;
 
         /* 角速度回落并持续 50ms 后，进入正式出环阶段 */
         if (ring_data.Gyroz < app.ring.pre_out_ring_Gyroz && timeadd(&ring_data.out_ring_time, 50))
         {
-            ring_data.Gyroz_set = 0;               // 关闭预出环角速度给定
+            ring_data.diff_set = 0;                // 关闭预出环直接差速给定
             timedestroy(&ring_data.out_ring_time); // 清空出环确认计时器
             ring_data.gyro_flat = 0;               // 关闭角速度累计
             current_state = out_ring;              // 切换到出环确认阶段
@@ -290,7 +293,8 @@ void circle_check_r()
         {
             timedestroy(&ring_data.out_ring_time); // 清空出环确认定时器
             ring_data.flast_r = 0;                 // 清除右环过程标志
-            ring_data.Gyroz_set = 0;               // 清除环岛角速度给定
+            ring_data.diff_set = 0;                // 清除环岛直接差速给定
+            ring_data.Gyroz = 0;
             current_state = no_ring;               // 返回普通巡线状态
         }
         break;
@@ -302,7 +306,7 @@ void circle_check_r()
  * @details 根据使能标志累计 Z 轴角速度和编码器里程，用于环岛阶段切换判定
  * @note 这些累计量需要在环岛开始和结束阶段及时清零
  */
-void gyro_integrals()
+void gyro_integrals(void)
 {
     /* 角速度累计使能时，累加校准后的 gyro_z */
     if (ring_data.gyro_flat == 1)

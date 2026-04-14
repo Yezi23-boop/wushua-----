@@ -122,14 +122,14 @@ void TM0_IRQHandler() interrupt 1
 {
     TIM0_CLEAR_FLAG;
 // a_run_apply_iap_guard();
-/* 1. 获取编码器实时速度反馈 */
+///* 1. 获取编码器实时速度反馈 */
 // Encoder_get(&PID.left_speed, &PID.right_speed);
 // motor_output(5000, 5000);
 #if MAIN_ENABLE_ISR_RUN_TEST_SPEED
     run_test_speed();
 #endif
-#if MAIN_ENABLE_ISR_TEST_ANGLE_FUNC
-    test_angle_func();
+#if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
+    test_diff_func();
 #endif
 #if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
     test_speed_func();

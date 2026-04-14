@@ -11,7 +11,7 @@ typedef struct
 {
     float encoder;        // 环岛阶段的编码器累计量，用于出入环距离判定
     float Gyroz;          // Z 轴角速度累计量，用于阶段切换判定
-    float Gyroz_set;      // 环岛阶段下发给角度环的目标角速度
+    float diff_set;       // 环岛阶段下发给主控链的直接差速覆盖量
     int8 distance;        // 编码器累计使能：1-累计，0-停止累计
     uint32 time_r;        // 右环识别计时器
     uint32 time_l;        // 左环识别计时器
@@ -54,9 +54,12 @@ void a_run_mode_update_fuya_state(void);
 void a_run_mode_update_fly_speed(int *speed);
 
 /**
- * @brief 根据环岛状态更新转向输出
- * @param angle 指向角度输出的指针
+ * @brief 根据环岛状态更新最终差速输出
+ * @param diff_output 指向差速输出的指针
  */
-void run_mode_update_angle_output(float *angle);
+void run_mode_update_diff_output(float *diff_output);
+
+void circle_check_r(void);
+void gyro_integrals(void);
 
 #endif /* __A_RUN_MODE_H__ */

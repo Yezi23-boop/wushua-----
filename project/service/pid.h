@@ -22,14 +22,15 @@ typedef struct
 } PID_Speed;
 
 /**
- * @brief 转向环/角度环 PID 结构体（位置式）
- * @details 用于方向控制或姿态控制，支持传统 PD 和增强型非线性项
+ * @brief 转向差速 PID 结构体（位置式）
+ * @details 用于基于电感偏差生成左右轮差速量，支持传统 PD 和增强型非线性项
  */
 typedef struct
 {
     float Kp;         /**< 比例系数：主控项 */
     float Kd;         /**< 微分系数：阻尼项，抑制转向过冲 */
     float Kp2;        /**< 增强项系数：用于非线性控制或陀螺仪前馈 */
+    float gyro_damp;  /**< 陀螺仪阻尼系数：用于抑制高速摆振 */
     float error;      /**< 当前误差：赛道偏差或角度偏差 */
     float prev_error; /**< 上一次误差：计算微分项 */
     float output;     /**< 当前输出值：通常作为差速叠加量 */
@@ -45,8 +46,7 @@ typedef struct
 {
     PID_Speed left_speed;  /**< 左轮速度环控制器 */
     PID_Speed right_speed; /**< 右轮速度环控制器 */
-    PID_Steer steer;       /**< 转向环控制器（基于电感偏差） */
-    PID_Steer angle;       /**< 角度环控制器（基于陀螺仪） */
+    PID_Steer steer;       /**< 转向差速控制器（基于电感偏差） */
 } PID_Controllers;
 
 /* --- 函数声明 --- */
@@ -64,7 +64,7 @@ void pid_speed_reset(PID_Speed *pid);
 /**
  * @brief 初始化转向环 PID 参数
  */
-void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out, float min_out);
+void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_damp, float max_out, float min_out);
 
 /**
  * @brief 读取编码器数据并更新到 PID 结构体中
@@ -79,12 +79,7 @@ void pid_speed_update(PID_Speed *pid, float target, float actual);
 /**
  * @brief 更新转向环 PID 计算（位置式）
  */
-void pid_steer_update(PID_Steer *pid, float error);
-
-/**
- * @brief 更新角度环 PID 计算（位置式，带陀螺仪反馈）
- */
-void pid_angle_update(PID_Steer *pid, float error, float gyro);
+void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback);
 
 /**
  * @brief 差速分配逻辑
@@ -99,11 +94,6 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
  * @brief 纯追踪算法控制（电感偏差驱动）
  */
 void Pure_Pursuit_Control(float speed_ref, float norm_error, float *left_target, float *right_target);
-
-/**
- * @brief 纯追踪 + 陀螺仪闭环混合控制
- */
-void Pure_Pursuit_Gyro_Control(float speed_ref, float norm_error, float gyro_z, float *left_target, float *right_target);
 
 /* --- 全局变量外部声明 --- */
 extern float speed_l, speed_r;

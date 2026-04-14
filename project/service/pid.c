@@ -52,16 +52,17 @@ void pid_speed_reset(PID_Speed *pid)
  * @param max_out 正向输出限幅
  * @param min_out 反向输出限幅
  */
-void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float max_out, float min_out)
+void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_damp, float max_out, float min_out)
 {
     pid->Kp = kp;
     pid->Kd = kd;
+    pid->Kp2 = Kp2;
+    pid->gyro_damp = gyro_damp;
+    pid->error = 0.0f;
     pid->prev_error = 0.0f;
     pid->output = 0.0f;
     pid->max_output = max_out;
     pid->min_output = min_out;
-    pid->Kp2 = Kp2;
-    pid->error = 0.0f;
 }
 
 /**
@@ -135,19 +136,21 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
  * @details 用于基于电感偏差的转向控制
  * @param pid PID 结构指针
  * @param error 当前位置偏差（通常来自电感归一化计算）
+ * @param gyro_feedback 当前 gyro_z 反馈量，用于增加转向阻尼
  */
-void pid_steer_update(PID_Steer *pid, float error)
+void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback)
 {
     pid->error = error;
 
     /*
      * 位置式 PID 计算：
-     * 包含比例项、非线性项（error * |error|）和微分项
+     * 包含比例项、非线性项（error * |error|）、误差微分项和 gyro 阻尼项
      * 非线性项用于在误差较大时提供更强的回归力
      */
     pid->output = pid->Kp * pid->error +
                   pid->Kp2 * error * func_abs(error) +
-                  pid->Kd * (pid->error - pid->prev_error);
+                  pid->Kd * (pid->error - pid->prev_error) -
+                  pid->gyro_damp * gyro_feedback;
 
     /* 输出限幅 */
     if (pid->output > pid->max_output)
@@ -164,34 +167,6 @@ void pid_steer_update(PID_Steer *pid, float error)
 }
 
 /**
- * @brief 角速度环 PID 更新（位置式算法）
- * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
- * @param pid PID 结构指针
- * @param error 目标偏差（通常是角速度 - 当前角速度）
- * @param gyro Calibrated steering feedback value
- */
-void pid_angle_update(PID_Steer *pid, float error, float gyro)
-{
-    /* 计算综合偏差 */
-    pid->error = error - gyro * 10;
-
-    /* 位置式 PD 控制 */
-    pid->output = pid->Kp * pid->error + pid->Kd * (pid->error - pid->prev_error);
-
-    /* 限幅处理 */
-    if (pid->output > pid->max_output)
-    {
-        pid->output = pid->max_output;
-    }
-    else if (pid->output < -pid->min_output)
-    {
-        pid->output = -pid->min_output;
-    }
-
-    pid->prev_error = pid->error;
-}
-
-/**
  * @brief 差速分配函数
  * @details 将转向控制器的输出转化为左右轮的目标速度差
  * @param speed_run 基础运行速度（直道速度）
@@ -202,7 +177,7 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
 void Pid_Differential(float speed_run, float *left_target, float *right_target, float Scope)
 {
     float k;
-    float delta = PID.angle.output; /* 获取角度环/转向环的控制输出 */
+    float delta = PID.steer.output; /* 获取当前转向差速控制输出 */
 
     /* Scope 作为教程版 eleOut->k 的归一化范围，默认按 -100~100 处理 */
     if (Scope < 0.001f)
@@ -230,55 +205,3 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
     }
 }
 
-/* 纯追踪相关常量（建议放入头文件或配置结构体中） */
-#define TRACK_WIDTH 80.0f /* 轮距（参考值，单位 cm） */
-#define BASE_L 150.0f     /* 基础预瞄距离（参考值，单位 cm） */
-#define K_SPEED 0.5f      /* 速度相关的预瞄增益 */
-
-/**
- * @brief 纯追踪 + 陀螺仪闭环混合控制 (Pure Pursuit + Gyro Loop)
- * @details
- * 1. 利用纯追踪模型计算理论目标曲率和角速度
- * 2. 利用陀螺仪角速度作为反馈，进行内环闭环控制
- * 3. 实现更平滑的高速循迹和抗干扰能力
- * @param speed_ref 基础参考速度
- * @param norm_error 归一化后的赛道位置偏差
- * @param gyro_z Calibrated steering feedback value
- * @param left_target 输出：左轮目标速度
- * @param right_target 输出：右轮目标速度
- */
-void Pure_Pursuit_Gyro_Control(float speed_ref, float norm_error, float gyro_z, float *left_target, float *right_target)
-{
-    float look_ahead_L;
-    float curvature;
-    float target_omega; /* 目标角速度 */
-    float diff_output;  /* 最终差速输出量 */
-
-    /* 1. 计算自适应预瞄距离：随速度增大而增大，提高高速稳定性 */
-    look_ahead_L = BASE_L + K_SPEED * speed_ref;
-
-    /* 2. 根据纯追踪几何模型计算曲率：curvature = 2*sin(alpha) / L */
-    curvature = (2.0f * norm_error) / look_ahead_L;
-
-    /* 曲率限幅，防止计算出的转向过于剧烈 */
-    if (curvature > 0.1f)
-        curvature = 0.1f;
-    if (curvature < -0.1f)
-        curvature = -0.1f;
-
-    /* 3. 将曲率换算成目标转向角速度 */
-    /* 保留 57.3f 系数，维持当前工程已有的控制公式量纲 */
-    target_omega = speed_ref * curvature * 57.3f;
-
-    /* 4. 使用校准后的 gyro_z 做内环闭环反馈 */
-    /* 此处沿用当前工程对 gyro_z 的定义与单位 */
-    pid_steer_update(&PID.angle, target_omega - gyro_z);
-
-    /* 5. 获取 PID 控制器的输出作为差速调节量 */
-    diff_output = PID.angle.output;
-
-    /* 6. 将调节量叠加到基础速度上，实现差速转向 */
-    /* 差速逻辑：左转时 diff_output 为正，左轮减速，右轮加速 */
-    *left_target = speed_ref - diff_output;
-    *right_target = speed_ref + diff_output;
-}

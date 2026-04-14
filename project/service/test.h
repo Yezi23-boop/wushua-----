@@ -8,13 +8,13 @@
 void test_speed_func(void);
 
 /**
- * @brief 角度环闭环测试函数
- * @details 测试姿态控制器对车身角度偏差的响应
+ * @brief 直接差速测试函数
+ * @details 测试固定差速目标下左右轮与 gyro 采样链路的响应
  */
-void test_angle_func(void);
+void test_diff_func(void);
 
 /* --- 测试目标值全局变量 --- */
 extern float test_speed_value; /**< 测试用的目标速度 */
-extern float test_angle_value; /**< 测试用的目标角度 */
+extern float test_diff_value;  /**< 测试用的直接差速目标 */
 
 #endif /* _TEST_H_ */

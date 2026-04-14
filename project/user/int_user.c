@@ -5,7 +5,7 @@
 #include "../service/speed_loop_autotune_adapter.h"
 
 /* 定时器中断周期定义（单位：ms） */
-#define TIME_0 2  /* 主控控制环周期 */
+#define TIME_0 5  /* 主控控制环周期 */
 #define TIME_1 10 /* 按键与菜单服务周期 */
 
 /* 内部私有初始化函数声明 */
@@ -78,9 +78,8 @@ static void control_init(void)
     pid_speed_init(&PID.left_speed, 100.0f, 10.0f, 0.0f, 10000.0f, 10000.0f);
     pid_speed_init(&PID.right_speed, 100.0f, 10.0f, 0.0f, 10000.0f, 10000.0f);
 
-    /* 转向和角度环先清零，具体参数由 apply_config 从 EEPROM 同步 */
-    pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-    pid_steer_init(&PID.angle, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
+    pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
     /* 同步 EEPROM 参数 */
     control_apply_config();
@@ -109,17 +108,11 @@ void control_apply_config(void)
     PID.steer.Kp = app.speed.kp_Err;
     PID.steer.Kd = app.speed.kd_Err;
     PID.steer.Kp2 = app.speed.kp2_Err;
+    PID.steer.gyro_damp = app.speed.gyro_damp_Err;
     PID.steer.max_output = app.speed.limiting_Err;
     PID.steer.min_output = app.speed.limiting_Err;
     clamp_steer_output(&PID.steer);
 
-    /* 2. 同步角度环，保持二次项关闭 */
-    PID.angle.Kp = app.angle.kp_Angle;
-    PID.angle.Kd = app.angle.kd_Angle;
-    PID.angle.Kp2 = 0.0f;
-    PID.angle.max_output = app.angle.limiting_Angle;
-    PID.angle.min_output = app.angle.limiting_Angle;
-    clamp_steer_output(&PID.angle);
 }
 
 /**

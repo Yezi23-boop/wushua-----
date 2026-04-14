@@ -22,23 +22,21 @@ typedef struct
 {
     float kp_Err;       /**< 转向误差比例系数 Kp（响应电感偏差的力度） */
     float kd_Err;       /**< 转向误差微分系数 Kd（抑制电感偏差变化的速率） */
+    float gyro_damp_Err; /**< 转向环陀螺仪阻尼系数（抑制高速摆振） */
     float speed_run;    /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
     float limiting_Err; /**< 转向输出限幅值（防止舵机/电机过载） */
     float kp2_Err;      /**< 二次项系数（用于处理大角度弯道的非线性增强） */
 } AppSpeedConfig;
 
 /**
- * @brief 角度环/姿态 PID 相关配置结构体
- * @details 主要用于陀螺仪姿态维持和转向
+ * @brief 电感偏差解算参数结构体
+ * @details 主要用于四路电感差比和归一化解算
  */
 typedef struct
 {
-    float kp_Angle;       /**< 角度环比例系数 Kp（响应角度偏差的力度） */
-    float kd_Angle;       /**< 角度环微分系数 Kd（抑制角度变化的速率） */
-    float limiting_Angle; /**< 角度环输出限幅值（限制最大转向角） */
-    float A_1;            /**< 备用参数 A_1（可用于特殊赛道元素的调试） */
-    float B_1;            /**< 备用参数 B_1（可用于特殊赛道元素的调试） */
-    float C_l;            /**< 备用参数 C_l（可用于特殊赛道元素的调试） */
+    float A_1; /**< 主亮度权重，用于横向主差分归一化 */
+    float B_1; /**< 竖向差分权重，用于斜入/斜出姿态修正 */
+    float C_l; /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
 } AppAngleConfig;
 
 /**
@@ -47,9 +45,9 @@ typedef struct
 typedef struct
 {
     float ring_encoder;          /**< 入环判定阈值：编码器积分距离达到此值确认入环 */
-    float pre_ring_Gyro_set;     /**< 预入环姿态设定值（入环前的打角力度） */
+    float pre_ring_Gyro_set;     /**< 预入环直接差速设定值（入环前的打角力度） */
     float in_ring_Gyroz;         /**< 环内巡航角速度设定值（维持圆周运动的角速度） */
-    float pre_out_ring_Gyro_set; /**< 预出环姿态设定值（出环前的打角力度） */
+    float pre_out_ring_Gyro_set; /**< 预出环直接差速设定值（出环前的打角力度） */
     float pre_out_ring_Gyroz;    /**< 出环判定角速度阈值 */
     float pre_out_ring_encoder;  /**< 出环判定阈值：编码器积分距离达到此值确认出环 */
 } AppRingConfig;
@@ -74,7 +72,7 @@ typedef struct
 {
     AppStartConfig start; /**< 启动与基础配置 */
     AppSpeedConfig speed; /**< 速度与转向 PID 配置 */
-    AppAngleConfig angle; /**< 角度与姿态 PID 配置 */
+    AppAngleConfig angle; /**< 电感偏差解算配置 */
     AppRingConfig ring;   /**< 圆环处理策略配置 */
     AppFlyConfig fly;     /**< 飞坡处理策略配置 */
 } AppConfig;

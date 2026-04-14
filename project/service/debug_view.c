@@ -81,23 +81,23 @@ void printf_imu(void)
     ips114_show_float(0, 35, imu660rc_gyro_y, 6, 1);
     ips114_show_float(0, 55, imu660rc_gyro_z, 6, 1);
     ips114_show_float(0, 75, gyro_z, 6, 2);
-    //  ips114_show_float(0, 95, PID.angle.error, 6, 2);
+    /* 预留一行可按需显示更多 gyro 调试量 */
 }
 
 /**
- * @brief 速度与角度环综合测试显示
+ * @brief 速度与直接差速综合测试显示
  */
 void printf_speed_test(void)
 {
-    ips114_show_float(0, 0, test_angle_value, 6, 1);
-    ips114_show_float(0, 15, PID.angle.output, 6, 1);
+    ips114_show_float(0, 0, test_diff_value, 6, 1);
+    ips114_show_float(0, 15, PID.left_speed.output, 6, 1);
     ips114_show_float(0, 35, speed_l, 6, 1);
     ips114_show_float(0, 55, speed_r, 6, 1);
     ips114_show_float(0, 75, gyro_z, 6, 2);
-    ips114_show_float(0, 95, PID.angle.error, 6, 2);
+    ips114_show_float(0, 95, PID.right_speed.output, 6, 1);
 
     /* 串口同步上报测试数据 */
-    printf("%f,%f,%f,%f\n", test_angle_value, gyro_z, PID.angle.error, PID.angle.output);
+    printf("%f,%f,%f,%f\n", test_diff_value, gyro_z, speed_l, speed_r);
 }
 
 /**

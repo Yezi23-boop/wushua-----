@@ -34,23 +34,21 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 0.00f;
     config->speed.kd_Err = 0.00f;
+    config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 20.00f;     /* 默认基础速度 30 */
     config->speed.limiting_Err = 600.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.00f;
 
-    /* 角度环 PID 默认参数 */
-    config->angle.kp_Angle = 0.60f;
-    config->angle.kd_Angle = 0.60f;
-    config->angle.limiting_Angle = 10.00f;
+    /* 电感偏差解算默认参数 */
     config->angle.A_1 = 1.00f;
     config->angle.B_1 = 1.00f;
     config->angle.C_l = 1.00f;
 
     /* 圆环策略默认参数 */
     config->ring.ring_encoder = 15.00f;           /* 入环积分阈值 */
-    config->ring.pre_ring_Gyro_set = 210.00f;     /* 入环打角力度 */
+    config->ring.pre_ring_Gyro_set = 210.00f;     /* 入环直接差速力度 */
     config->ring.in_ring_Gyroz = 220.00f;         /* 环内角速度 */
-    config->ring.pre_out_ring_Gyro_set = 170.00f; /* 出环打角力度 */
+    config->ring.pre_out_ring_Gyro_set = 170.00f; /* 出环直接差速力度 */
     config->ring.pre_out_ring_Gyroz = 350.00f;    /* 出环角速度阈值 */
     config->ring.pre_out_ring_encoder = 30.00f;   /* 出环积分阈值 */
 
@@ -80,10 +78,9 @@ static void eeprom_read_config(AppConfig *config)
     config->speed.kp2_Err = read_float(7);
     config->speed.speed_run = read_float(8);
     config->speed.limiting_Err = read_float(9);
+    config->speed.gyro_damp_Err = read_float(10);
 
-    config->angle.kp_Angle = read_float(10);
-    config->angle.kd_Angle = read_float(11);
-    config->angle.limiting_Angle = read_float(12);
+    /* 11/12 为历史角速度环参数槽位，保留布局兼容但不再参与运行时映射 */
     config->angle.B_1 = read_float(13);
     config->angle.C_l = read_float(14);
     config->angle.A_1 = read_float(15);
@@ -139,10 +136,9 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->speed.kp2_Err, 7);
     save_float(config->speed.speed_run, 8);
     save_float(config->speed.limiting_Err, 9);
-
-    save_float(config->angle.kp_Angle, 10);
-    save_float(config->angle.kd_Angle, 11);
-    save_float(config->angle.limiting_Angle, 12);
+    save_float(config->speed.gyro_damp_Err, 10);
+    save_float(0.0f, 11);
+    save_float(0.0f, 12);
     save_float(config->angle.B_1, 13);
     save_float(config->angle.C_l, 14);
     save_float(config->angle.A_1, 15);
