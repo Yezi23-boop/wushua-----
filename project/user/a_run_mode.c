@@ -18,7 +18,7 @@ static int count_fly_1 = 0;     /* 飞坡进入判定计数 */
 static int count_fly_2 = 0;     /* 飞坡保持阶段计数 */
 
 /* --- 启停状态机参数 --- */
-#define START_DEBOUNCE_TIME 20 /* 启动按键消抖确认次数（10ms 调用周期下约 500ms） */
+#define START_DEBOUNCE_TIME 5 /* 启动按键消抖确认次数（10ms 调用周期下约 500ms） */
 
 enum StartState
 {

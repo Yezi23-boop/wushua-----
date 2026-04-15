@@ -4,7 +4,7 @@
 #include "zf_common_headfile.h"
 
 /* --- 电机输出限幅编译期配置（单位：PWM 占空比） --- */
-#define MOTOR_OUTPUT_PWM_LIMIT 9000
+#define MOTOR_OUTPUT_PWM_LIMIT 8000
 
 /**
  * @brief 电机控制与外设初始化

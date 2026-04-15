@@ -75,8 +75,8 @@ static void timer1_service_10ms(void)
 static void control_init(void)
 {
     /* 速度环初始化，默认提供一组安全基础参数 */
-    pid_speed_init(&PID.left_speed, 100.0f, 10.0f, 0.0f, 10000.0f, 10000.0f);
-    pid_speed_init(&PID.right_speed, 100.0f, 10.0f, 0.0f, 10000.0f, 10000.0f);
+    pid_speed_init(&PID.left_speed, 90.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.right_speed, 90.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);

@@ -29,7 +29,7 @@ static uint8 adc_measure_enable = 1;              /* 默认开启最大值动态
 /* 默认标定参数（若无 EEPROM 加载则使用此值） */
 static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
 static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
-static const int limit = 100;
+static const int limit = 10;
 
 /* 全局导出变量 */
 volatile uint16 RAW[NUM] = {0};
@@ -54,37 +54,32 @@ static void dispose(uint16 ad1, uint16 ad2, uint16 ad3, uint16 ad4);
  * 1) diff14 = ad1 - ad4：左右横向差分，反映主偏移方向
  * 2) diff23 = ad2 - ad3：竖向差分，辅助修正斜入/斜出姿态
  * 3) denom  = A_1*(ad1+ad4) + C_l*|diff23|：自适应归一化分母
- *
+ *  err=(A(L−R)+B(LM−RM))/(A(L+R)+C∣LM−RM∣)
  * 其中 C_l 项用于在竖向差异增大时提高分母，降低异常工况下的偏差放大。
  */
 static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 {
     float denom;
-    int16 diff14;
+    float numer;
     int16 diff23;
-    uint16 sum14;
 
-    /* 1) 构造横向/竖向差分特征 */
-    diff14 = (int16)ad11 - (int16)ad44;
+    /* 1) 先计算竖向差分，供分母修正项复用 */
     diff23 = (int16)ad22 - (int16)ad33;
-    sum14 = ad11 + ad44;
 
-    /* 2) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
-    denom = app.angle.A_1 * (float)sum14 +
+    /* 2) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
+    numer = app.angle.A_1 * (float)ad11 - (float)ad44 +
+            app.angle.B_1 * (float)ad22 - (float)ad33;
+    /* 3) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
+    denom = app.angle.A_1 * (float)ad11 + (float)ad44 +
             app.angle.C_l * (float)func_abs(diff23);
 
-    /* 3) 分母过小时直接归零，避免瞬态噪声被异常放大 */
+    /* 4) 分母过小时直接归零，避免瞬态噪声被异常放大 */
     if (denom < 1.0f)
     {
         Err = 0.0f;
         return;
     }
-
-    /* 4) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
-    Err = (float)limit *
-          (app.angle.A_1 * (float)diff14 +
-           app.angle.B_1 * (float)diff23) /
-          denom;
+    Err = (float)limit * numer / denom;
 }
 
 /**
@@ -214,11 +209,11 @@ void adc_measure_reset(void)
  */
 static void adc_read_channels(uint16 *raw_buffer)
 {
-//    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左横电感 */
-//    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
-//    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
-//    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
-	raw_buffer[0] = adc_convert(ADC_CH1_P11); /* 左横电感 */
+    //    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左横电感 */
+    //    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
+    //    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
+    //    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
+    raw_buffer[0] = adc_convert(ADC_CH1_P11); /* 左横电感 */
     raw_buffer[1] = adc_convert(ADC_CH0_P10); /* 左竖电感 */
     raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
     raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */

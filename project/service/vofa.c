@@ -258,7 +258,7 @@ void vofa_service(void)
  */
 void vofa_service_legacy(void)
 {
-    static char vofa_cmd[64];
+    static char vofa_cmd[32];
 	#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
 	 printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     #endif
@@ -269,7 +269,7 @@ void vofa_service_legacy(void)
     /* legacy 模式下只做旧命令兼容，不走新调参组件 */
     vofa_parse_from_fifo();
 
-    while (vofa_get_command(vofa_cmd, 64))
+    while (vofa_get_command(vofa_cmd, 32))
     {
         vofa_handle_legacy_command(vofa_cmd);
         //     printf("%f,%f,,%f,,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);

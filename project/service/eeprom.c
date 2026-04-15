@@ -32,17 +32,17 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
-    config->speed.kp_Err = 0.00f;
-    config->speed.kd_Err = 0.00f;
+    config->speed.kp_Err = 3.00f;
+    config->speed.kd_Err = 6.00f;
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 20.00f;     /* 默认基础速度 30 */
-    config->speed.limiting_Err = 600.00f; /* 转向限幅 */
+    config->speed.speed_run = 25.00f;     /* 默认基础速度 30 */
+    config->speed.limiting_Err = 30.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.00f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.A_1 = 1.00f;
+    config->angle.A_1 = 0.50f;
     config->angle.B_1 = 1.00f;
-    config->angle.C_l = 1.00f;
+    config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
     config->ring.ring_encoder = 15.00f;           /* 入环积分阈值 */
