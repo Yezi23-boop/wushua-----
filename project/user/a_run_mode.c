@@ -119,43 +119,34 @@ void a_run_mode_update_fuya_state(void)
  */
 void a_run_mode_update_fly_speed(int *speed)
 {
-    /* A. 满足电感特征时触发飞坡检测，避免重复进入 */
-    if (app.fly.fly_ramp_enable == 1 && ad1 < 40 && ad2 < 15 && ad3 < 15 && ad4 < 40 && flat_fly == 0)
+    /* A. 主环按 5ms 调用时，飞坡触发计数直接按 5ms 标尺累计。 */
+    if (app.fly.fly_ramp_enable == 1 &&
+        ad1 < 14 && ad2 < 5 && ad3 < 5 && ad4 < 14 &&
+        flat_fly == 0)
     {
         count_fly_1++;
         if (count_fly_1 >= app.fly.count_fly_time_1)
         {
             count_fly_1 = 0;
             flat_fly = 1; /* 进入飞坡阶段 */
+            count_fly_2 = 0;
         }
     }
 
-    /* B. 飞坡阶段覆盖速度与角度输出 */
+    /* B. 飞坡阶段每个控制周期都覆盖速度与目标角速度，实现“锁角”。 */
     if (flat_fly == 1)
     {
-        /* 使用配置中的飞坡速度和锁舵角 */
+        /* 外环在飞坡阶段冻结为固定目标，内环继续用 gyro 闭环跟踪。 */
         *speed = app.fly.count_fly_speed;
         PID.steer.output = (float)app.fly.count_fly_angle;
 
+        /* 飞坡保持时间同样按 5ms 调用周期累计。 */
         count_fly_2++;
-        /* 飞坡保持计时结束后自动退出 */
         if (count_fly_2 >= app.fly.count_fly_time_2)
         {
             count_fly_2 = 0;
             flat_fly = 0;
         }
-    }
-
-    /* 非飞坡阶段按赛道策略回退到基础巡线速度 */
-    if (ring_data.flast_r == 1)
-    {
-        /* C. 环岛阶段当前仍沿用基础速度 */
-        *speed = (int)app.speed.speed_run;
-    }
-    else
-    {
-        /* C. 普通巡线阶段沿用基础速度 */
-        *speed = (int)app.speed.speed_run;
     }
 }
 

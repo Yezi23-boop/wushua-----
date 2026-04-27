@@ -41,9 +41,9 @@ int display_codename = 0;
 
 static const int menu_have_sub[] = {
     0,
-    1, 11, 12, 13, 14,
+    1, 11, 12, 13, 14, 15,
     2, 21, 22, 23, 24, 25, 26,
-    3, 31, 32, 33,
+    3, 31, 32, 33, 34, 35, 36,
     4,
     5, 51, 52, 53, 54, 55, 56,
     6, 61, 62, 63, 64, 65};
@@ -184,11 +184,11 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 0:
         return MENU_HOME_ROW_MAX;
     case 1:
-        return 4 * MENU_ROW_HEIGHT;
+        return 5 * MENU_ROW_HEIGHT;
     case 2:
         return 6 * MENU_ROW_HEIGHT;
     case 3:
-        return 3 * MENU_ROW_HEIGHT;
+        return 6 * MENU_ROW_HEIGHT;
     case 4:
         return MENU_ROW_MIN;
     case 5:
@@ -295,7 +295,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
         break;
     case 11:
         Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
@@ -308,6 +308,9 @@ static void Menu_Render_Current_Page(void)
         break;
     case 14:
         Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
+        break;
+    case 15:
+        Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
         break;
     case 2:
         Menu_Draw_Speed(0);
@@ -333,7 +336,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 3:
         Menu_Draw_Model(0);
-        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         break;
     case 31:
         Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
@@ -343,6 +346,15 @@ static void Menu_Render_Current_Page(void)
         break;
     case 33:
         Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
+        break;
+    case 34:
+        Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
+        break;
+    case 35:
+        Menu_Draw_Model(5 * MENU_ROW_HEIGHT);
+        break;
+    case 36:
+        Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
         break;
     case 4:
         Menu_Draw_Sensor();
@@ -514,11 +526,13 @@ static void Menu_Draw_Start(int edit_line)
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "circle_flags");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.circle_flags, 3);
     ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
     ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
+    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -548,13 +562,19 @@ static void Menu_Draw_Speed(int edit_line)
 static void Menu_Draw_Model(int edit_line)
 {
     ips114_show_string(8, 0, "<<MODEL");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "A_1");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "B_1");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "C_l");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "kp_Ang");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "kd_Ang");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "lim_Ang");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "A_1");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "B_1");
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "C_l");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.angle.A_1, 3, 2);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.angle.B_1, 3, 2);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.angle.C_l, 3, 2);
+    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.angle.kp_Angle, 3, 3);
+    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.angle.kd_Angle, 3, 3);
+    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.angle.limiting_Angle, 3, 2);
+    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.angle.A_1, 3, 2);
+    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.B_1, 3, 2);
+    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.angle.C_l, 3, 2);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -776,11 +796,11 @@ static void Menu_Start_Process(void)
     {
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(4 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -799,6 +819,10 @@ static void Menu_Start_Process(void)
     case 14:
         Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.start.fuya_wall_percent, 1.0f);
+        break;
+    case 15:
+        Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.angle.gyro_feedback_scale, 0.1f);
         break;
     default:
         break;
@@ -858,24 +882,36 @@ static void Menu_Model_Process(void)
     {
     case 3:
         Menu_Draw_Model(0);
-        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(3 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
     case 31:
         Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.A_1, 0.01f);
+        Menu_Process_Float_Value(&app.angle.kp_Angle, 0.01f);
         break;
     case 32:
         Menu_Draw_Model(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.B_1, 0.01f);
+        Menu_Process_Float_Value(&app.angle.kd_Angle, 0.01f);
         break;
     case 33:
         Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.angle.limiting_Angle, 0.1f);
+        break;
+    case 34:
+        Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.angle.A_1, 0.01f);
+        break;
+    case 35:
+        Menu_Draw_Model(5 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.angle.B_1, 0.01f);
+        break;
+    case 36:
+        Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.angle.C_l, 0.01f);
         break;
     default:
@@ -1007,6 +1043,7 @@ void Keystroke_Menu(void)
     case 12:
     case 13:
     case 14:
+    case 15:
         Menu_Start_Process();
         break;
     case 2:
@@ -1022,6 +1059,9 @@ void Keystroke_Menu(void)
     case 31:
     case 32:
     case 33:
+    case 34:
+    case 35:
+    case 36:
         Menu_Model_Process();
         break;
     case 4:

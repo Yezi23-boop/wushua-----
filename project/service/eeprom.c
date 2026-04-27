@@ -28,18 +28,22 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 启动与基础配置默认值 */
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.circle_flags = 0;           /* 默认自动识别圆环方向 */
-    config->start.fuya_xili = 55.00f;         /* 默认平地负压百分比 */
+    config->start.fuya_xili = 50.00f;         /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
-    config->speed.kp_Err = 4.50f;//4.50
-    config->speed.kd_Err = 10.00f;//4.50
-    config->speed.gyro_damp_Err = 0.90f;
-    config->speed.speed_run = 38.00f;    /* 默认基础速度 30 *///4.50
-    config->speed.limiting_Err = 38.00f; /* 转向限幅 *///4.50
+    config->speed.kp_Err = 4.50f;  // 4.50
+    config->speed.kd_Err = 10.00f; // 4.50
+    config->speed.gyro_damp_Err = 0.00f;
+    config->speed.speed_run = 35.00f; /* 默认基础速度 30 */ // 4.50
+    config->speed.limiting_Err = 600.00f; /* 转向限幅 */    // 4.50
     config->speed.kp2_Err = 0.00f;
 
     /* 电感偏差解算默认参数 */
+    config->angle.kp_Angle = 0.80f;
+    config->angle.kd_Angle = 0.20f;
+    config->angle.gyro_feedback_scale = 1.00f;
+    config->angle.limiting_Angle = 35.00f;
     config->angle.A_1 = 0.80f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
@@ -53,11 +57,11 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.pre_out_ring_encoder = 30.00f;   /* 出环积分阈值 */
 
     /* 飞坡策略默认参数 */
-    config->fly.count_fly_speed = 15;  /* 飞坡慢速值 */
-    config->fly.count_fly_time_1 = 3;  /* 触发检测次数 */
-    config->fly.count_fly_time_2 = 50; /* 状态保持时间 (50 * 10ms = 500ms) */
-    config->fly.count_fly_angle = 0;   /* 舵机锁死角度 */
-    config->fly.fly_ramp_enable = 0;   /* 默认关闭飞坡检测，防止误触发 */
+    config->fly.count_fly_speed = 15;   /* 飞坡慢速值 */
+    config->fly.count_fly_time_1 = 6;   /* 触发检测次数 (6 * 5ms = 30ms) */
+    config->fly.count_fly_time_2 = 100; /* 状态保持时间 (100 * 5ms = 500ms) */
+    config->fly.count_fly_angle = 0;    /* 舵机锁死角度 */
+    config->fly.fly_ramp_enable = 1;    /* 默认关闭飞坡检测，防止误触发 */
 }
 
 /**
@@ -80,10 +84,22 @@ static void eeprom_read_config(AppConfig *config)
     config->speed.limiting_Err = read_float(9);
     config->speed.gyro_damp_Err = read_float(10);
 
-    /* 11/12 为历史角速度环参数槽位，保留布局兼容但不再参与运行时映射 */
+    /* 槽位 3 复用为角速度内环限幅；旧版本可能为未初始化值，需做范围回退 */
+    config->angle.limiting_Angle = read_float(3);
+
+    /* 11/12 映射为角速度内环参数，保留原 EEPROM 布局以兼容旧数据 */
+    config->angle.kp_Angle = read_float(11);
+    config->angle.kd_Angle = read_float(12);
     config->angle.B_1 = read_float(13);
     config->angle.C_l = read_float(14);
     config->angle.A_1 = read_float(15);
+    config->angle.gyro_feedback_scale = read_float(28);
+
+    if (config->angle.gyro_feedback_scale < 1.0f ||
+        config->angle.gyro_feedback_scale > 50.0f)
+    {
+        config->angle.gyro_feedback_scale = 10.0f;
+    }
 
     config->ring.ring_encoder = read_float(16);
     config->ring.pre_ring_Gyro_set = read_float(17);
@@ -129,6 +145,7 @@ static void eeprom_write_config(const AppConfig *config)
 {
     save_int(config->start.start_flag, 1);
     save_int(config->start.circle_flags, 2);
+    save_float(config->angle.limiting_Angle, 3);
 
     save_float(config->speed.kp_Err, 4);
     save_float(clamp_percent_value(config->start.fuya_xili, 20.0f), 5);
@@ -137,11 +154,12 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->speed.speed_run, 8);
     save_float(config->speed.limiting_Err, 9);
     save_float(config->speed.gyro_damp_Err, 10);
-    save_float(0.0f, 11);
-    save_float(0.0f, 12);
+    save_float(config->angle.kp_Angle, 11);
+    save_float(config->angle.kd_Angle, 12);
     save_float(config->angle.B_1, 13);
     save_float(config->angle.C_l, 14);
     save_float(config->angle.A_1, 15);
+    save_float(config->angle.gyro_feedback_scale, 28);
 
     save_float(config->ring.ring_encoder, 16);
     save_float(config->ring.pre_ring_Gyro_set, 17);

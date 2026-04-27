@@ -48,7 +48,8 @@ void a_run_mode_update_fuya_state(void);
 
 /**
  * @brief 飞坡速度修正
- * @details 根据四路电感特征判断是否进入飞坡阶段，并在飞坡期间覆盖速度和转向输出
+ * @details 根据四路电感特征判断是否进入飞坡阶段，并在飞坡期间覆盖速度和目标角速度输出。
+ *          该接口设计为 5ms 主环调用，飞坡触发与保持计时均按 5ms 标尺生效。
  * @param speed 输出的目标速度指针
  */
 void a_run_mode_update_fly_speed(int *speed);

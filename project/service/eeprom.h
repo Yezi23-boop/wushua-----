@@ -8,9 +8,9 @@
  */
 typedef struct
 {
-    int16 start_flag;   /**< 启动标志位：1-启动运行，0-停止待机 */
-    int16 circle_flags; /**< 圆环方向标志：1-强制左环，-1-强制右环，0-自动识别 */
-    float fuya_xili;    /**< 平地负压百分比，范围 0~100 */
+    int16 start_flag;        /**< 启动标志位：1-启动运行，0-停止待机 */
+    int16 circle_flags;      /**< 圆环方向标志：1-强制左环，-1-强制右环，0-自动识别 */
+    float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
 } AppStartConfig;
 
@@ -20,12 +20,12 @@ typedef struct
  */
 typedef struct
 {
-    float kp_Err;       /**< 转向误差比例系数 Kp（响应电感偏差的力度） */
-    float kd_Err;       /**< 转向误差微分系数 Kd（抑制电感偏差变化的速率） */
+    float kp_Err;        /**< 转向误差比例系数 Kp（响应电感偏差的力度） */
+    float kd_Err;        /**< 转向误差微分系数 Kd（抑制电感偏差变化的速率） */
     float gyro_damp_Err; /**< 转向环陀螺仪阻尼系数（抑制高速摆振） */
-    float speed_run;    /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
-    float limiting_Err; /**< 转向输出限幅值（防止舵机/电机过载） */
-    float kp2_Err;      /**< 二次项系数（用于处理大角度弯道的非线性增强） */
+    float speed_run;     /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
+    float limiting_Err;  /**< 转向输出限幅值（防止舵机/电机过载） */
+    float kp2_Err;       /**< 二次项系数（用于处理大角度弯道的非线性增强） */
 } AppSpeedConfig;
 
 /**
@@ -34,9 +34,13 @@ typedef struct
  */
 typedef struct
 {
-    float A_1; /**< 主亮度权重，用于横向主差分归一化 */
-    float B_1; /**< 竖向差分权重，用于斜入/斜出姿态修正 */
-    float C_l; /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
+    float kp_Angle;            /**< 角速度内环比例系数 Kp（跟踪转向目标角速度） */
+    float kd_Angle;            /**< 角速度内环微分系数 Kd（抑制角速度过冲） */
+    float gyro_feedback_scale; /**< 角速度反馈缩放系数 N（匹配 gyro_z 与目标角速度量级） */
+    float limiting_Angle;      /**< 角速度内环输出限幅（差速目标限幅） */
+    float A_1;                 /**< 主亮度权重，用于横向主差分归一化 */
+    float B_1;                 /**< 竖向差分权重，用于斜入/斜出姿态修正 */
+    float C_l;                 /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
 } AppAngleConfig;
 
 /**
@@ -58,8 +62,8 @@ typedef struct
 typedef struct
 {
     int count_fly_speed;   /**< 飞坡状态下的目标速度（通常为慢速以保安全） */
-    int count_fly_time_1;  /**< 飞坡检测确认时间（连续多少次检测到特征才触发） */
-    int count_fly_time_2;  /**< 飞坡状态持续时间（触发后保持该状态的时长，单位：10ms） */
+    int count_fly_time_1;  /**< 飞坡检测确认时间（按 5ms 主环累计的触发次数） */
+    int count_fly_time_2;  /**< 飞坡状态持续时间（触发后保持该状态的时长，单位：5ms） */
     int count_fly_angle;   /**< 飞坡状态下的强制锁死舵机角度（0为不锁死） */
     int16 fly_ramp_enable; /**< 飞坡模式功能开关：1-开启检测，0-关闭检测 */
 } AppFlyConfig;

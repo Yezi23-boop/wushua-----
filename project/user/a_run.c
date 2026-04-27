@@ -41,10 +41,15 @@ void run_time_1(void)
     imu_update_gyro_z_from_imu660rc();
     if (steer_div_10 > 2)
     {
-        pid_steer_update(&PID.steer, Err, gyro_z); /* 根据赛道偏差和 gyro 阻尼更新转向环 */
+        /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
+        pid_steer_update(&PID.steer, Err, 0.0f);
     }
     speed_active = (int)app.speed.speed_run;
-    diff_output = PID.steer.output;
+    /* 飞坡阶段在外环与角速度内环之间锁定目标角速度，同时覆盖目标速度。 */
+    a_run_mode_update_fly_speed(&speed_active);
+    pid_angle_update(&PID.angle, PID.steer.output,
+                     gyro_z * app.angle.gyro_feedback_scale);
+    diff_output = PID.angle.output;
     left_target = (float)speed_active - diff_output;
     right_target = (float)speed_active + diff_output;
 

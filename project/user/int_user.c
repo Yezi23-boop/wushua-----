@@ -13,6 +13,7 @@ static void hardware_init(void);
 static void control_init(void);
 static void app_init(void);
 static void clamp_steer_output(PID_Steer *pid);
+static float clamp_gyro_feedback_scale(float value);
 static float clamp_config_percent(float value);
 static void timer1_service_10ms(void);
 
@@ -52,10 +53,10 @@ static void hardware_init(void)
 
     /* ADC 通道初始化 */
     adc_init(ADC_CH13_P05, ADC_8BIT); /* 电池电压采样 */
-    adc_init(ADC_CH0_P10, ADC_10BIT); /* 电感 1 */
-    adc_init(ADC_CH1_P11, ADC_10BIT); /* 电感 2 */
-    adc_init(ADC_CH8_P00, ADC_10BIT); /* 电感 3 */
-    adc_init(ADC_CH9_P01, ADC_10BIT); /* 电感 4 */
+    adc_init(ADC_CH0_P10, ADC_12BIT); /* 电感 1 */
+    adc_init(ADC_CH1_P11, ADC_12BIT); /* 电感 2 */
+    adc_init(ADC_CH8_P00, ADC_12BIT); /* 电感 3 */
+    adc_init(ADC_CH9_P01, ADC_12BIT); /* 电感 4 */
 
     /* 应用层模块 */
     motor_Init();         /* 电机驱动 PWM 输出 */
@@ -85,6 +86,8 @@ static void control_init(void)
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+    /* 角速度内环控制器独立实例，避免与外环共享状态 */
+    pid_steer_init(&PID.angle, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
     /* 同步 EEPROM 参数 */
     control_apply_config();
@@ -107,6 +110,8 @@ static void app_init(void)
  */
 void control_apply_config(void)
 {
+    float angle_limit;
+
     app.start.fuya_xili = clamp_config_percent(app.start.fuya_xili);
     app.start.fuya_wall_percent = clamp_config_percent(app.start.fuya_wall_percent);
 
@@ -118,6 +123,18 @@ void control_apply_config(void)
     PID.steer.max_output = app.speed.limiting_Err;
     PID.steer.min_output = app.speed.limiting_Err;
     clamp_steer_output(&PID.steer);
+
+    /* 2. 同步角速度内环，直接使用独立限幅参数 */
+    angle_limit = app.angle.limiting_Angle;
+    app.angle.gyro_feedback_scale = clamp_gyro_feedback_scale(app.angle.gyro_feedback_scale);
+
+    PID.angle.Kp = app.angle.kp_Angle;
+    PID.angle.Kd = app.angle.kd_Angle;
+    PID.angle.Kp2 = 0.0f;
+    PID.angle.gyro_damp = 0.0f;
+    PID.angle.max_output = angle_limit;
+    PID.angle.min_output = angle_limit;
+    clamp_steer_output(&PID.angle);
 }
 
 /**
@@ -155,5 +172,14 @@ static float clamp_config_percent(float value)
         return 0.0f;
     if (value > 100.0f)
         return 100.0f;
+    return value;
+}
+
+static float clamp_gyro_feedback_scale(float value)
+{
+    if (value < 1.0f)
+        return 1.0f;
+    if (value > 50.0f)
+        return 50.0f;
     return value;
 }

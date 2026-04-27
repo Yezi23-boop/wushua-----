@@ -116,7 +116,7 @@ void lost_lines(void)
      * ad1~ad4 为全局电感采样值
      * 阈值 3 为根据实际环境标定的最小有效电感强度
      */
-    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3)
+    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && flat_fly == 0)
     {
         count++;
     }
@@ -145,7 +145,7 @@ void dianya_jiance(void)
     /* 执行 ADC 转换 */
     adc_raw = adc_convert(ADC_CH13_P05);
     /* 转换公式：ADC值 * 转换系数（0.0092 需要根据分压电路电阻比例计算） */
-    dianya = (float)adc_raw * 0.0092f*4;
+    dianya = (float)adc_raw * 0.0092f * 4;
 
     /* 锂电池欠压判定：低于 11.3V（假设为 3S 锂电） */
     if (dianya < 11.2f)
