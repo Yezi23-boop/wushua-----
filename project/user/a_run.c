@@ -25,9 +25,9 @@ static int steer_div_10 = 0; /* 2ms 主环分频：用于每 4ms 更新一次转
 static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 
 /**
- * @brief 主控制核心任务 (运行于 TM0 2ms 中断)
+ * @brief 主控制核心任务 (运行于 TM0 5ms 中断)
  * @details 串行执行传感器采集 -> 姿态获取 -> 转向偏差融合 -> 速度设定 -> 电机执行链路。
- * 必须始终保证函数总体耗时远小于 2ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
+ * 必须始终保证函数总体耗时远小于 5ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
  * 任何超时都会导致电机脱管、失控。
  */
 void run_time_1(void)
@@ -83,7 +83,7 @@ void run_time_2(void)
     {
         fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
     }
- //   fuya_update_cylinder_peak_10ms(2);
+    //   fuya_update_cylinder_peak_10ms(2);
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
 }

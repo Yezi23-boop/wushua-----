@@ -62,4 +62,4 @@ void run_mode_update_diff_output(float *diff_output);
 void circle_check_r(void);
 void gyro_integrals(void);
 
-#endif /* __A_RUN_MODE_H__ */
+#endif

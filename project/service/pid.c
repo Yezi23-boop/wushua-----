@@ -74,27 +74,27 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-//    int32 fixed_left_count;
-//    int32 fixed_right_count;
+    //    int32 fixed_left_count;
+    //    int32 fixed_right_count;
 
-//    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
-//                                                        &encoder_filter_left);
-//    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
-//                                                         &encoder_filter_right);
+    //    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
+    //                                                        &encoder_filter_left);
+    //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
+    //                                                         &encoder_filter_right);
     speed_l = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.2f;
     speed_r = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.2f;
-	if(speed_l<0)
-	{
-	speed_l=-speed_l;
-	}
-	if(speed_r<0)
-	{
-	speed_r=-speed_r;
-	}
+    if (speed_l < 0)
+    {
+        speed_l = -speed_l;
+    }
+    if (speed_r < 0)
+    {
+        speed_r = -speed_r;
+    }
     low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);
     low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);
-//    speed_l = (float)fixed_left_count * 0.2f;
-//    speed_r = (float)fixed_right_count * 0.2f;
+    //    speed_l = (float)fixed_left_count * 0.2f;
+    //    speed_r = (float)fixed_right_count * 0.2f;
 
     left->speed = speed_l;
     right->speed = speed_r;
@@ -122,7 +122,7 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
     pid->output += delta_output;
 
     // 更新输出并限幅
-    pid->output += delta_output;
+    //   pid->output += delta_output;
     if (pid->output > pid->max_output)
     {
         pid->output = pid->max_output;
@@ -169,6 +169,34 @@ void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback)
     }
 
     /* 记录误差用于下次微分计算 */
+    pid->prev_error = pid->error;
+}
+
+/**
+ * @brief 角度环 PID 更新（位置式算法）
+ * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
+ * @param pid PID 结构指针
+ * @param error 目标偏差（通常是 目标角度 - 当前角度）
+ * @param gyro Calibrated steering feedback value
+ */
+void pid_angle_update(PID_Steer *pid, float error, float gyro)
+{
+    /* 计算综合偏差 */
+    pid->error = error - gyro;
+
+    /* 位置式 PD 控制 */
+    pid->output = pid->Kp * pid->error + pid->Kd * (pid->error - pid->prev_error);
+
+    /* 限幅处理 */
+    if (pid->output > pid->max_output)
+    {
+        pid->output = pid->max_output;
+    }
+    else if (pid->output < -pid->min_output)
+    {
+        pid->output = -pid->min_output;
+    }
+
     pid->prev_error = pid->error;
 }
 
