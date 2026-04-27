@@ -28,20 +28,20 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 启动与基础配置默认值 */
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.circle_flags = 0;           /* 默认自动识别圆环方向 */
-    config->start.fuya_xili = 20.00f;         /* 默认平地负压百分比 */
+    config->start.fuya_xili = 50.00f;         /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
-    config->speed.kp_Err = 3.00f;
-    config->speed.kd_Err = 6.00f;
-    config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 25.00f;     /* 默认基础速度 30 */
-    config->speed.limiting_Err = 30.00f; /* 转向限幅 */
+    config->speed.kp_Err = 4.50f;
+    config->speed.kd_Err = 12.00f;
+    config->speed.gyro_damp_Err = 0.30f;
+    config->speed.speed_run = 38.00f;    /* 默认基础速度 30 */
+    config->speed.limiting_Err = 36.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.00f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.A_1 = 0.50f;
-    config->angle.B_1 = 1.00f;
+    config->angle.A_1 = 0.80f;
+    config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
@@ -196,8 +196,9 @@ void eeprom_init(void)
 
 /**
  * @brief 执行 Flash 刷写操作
- * @details 将当前 `app` 全局变量中的所有参数保存到 Flash 中。
- * 通常在菜单中修改参数并确认保存后调用此函数。
+ * @details
+ * 将当前 `app` 全局变量中的所有参数序列化并保存到 Flash 中。
+ * 警告：Flash 擦写会产生极长耗时并可能短暂挂起总线，只能在断脱电机的安全状态下执行，严禁在运行态调用！
  */
 void eeprom_flash(void)
 {

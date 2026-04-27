@@ -1,7 +1,10 @@
 /**
  * @file vofa.c
- * @brief VOFA 串口命令解析与调参服务
+ * @brief VOFA+ 串口通信与指令解析协议栈
  * @details
+ * 提供无线串口 (USART1/2/3/4) 在线联机调试协议：向上位机按规定格式发送浮点遥测，
+ * 并支持异步解析基于字节流指令下发的调参动作。
+ *
  * 功能包含：
  * 1) 从无线串口 FIFO 按字节解析命令帧（'!' 结尾）；
  * 2) 使用固定深度环形队列缓存完整命令，避免主循环瞬时堵塞；
@@ -21,7 +24,9 @@ static void vofa_handle_legacy_command(char *cmd);
 
 /**
  * @brief VOFA 解析器初始化
- * @details 清空解析缓存与命令队列，重置状态统计。
+ * @details
+ * 在开机 init_user 时调用，清空解析缓存与命令队列，重置状态统计。
+ * 保证首次串口接收状态不被遗留垃圾数据干扰。
  */
 void vofa_init(void)
 {
@@ -55,7 +60,9 @@ void vofa_init(void)
 }
 
 /**
- * @brief 从无线串口 FIFO 持续取数并解析
+ * @brief 从无线串口 FIFO 取数并触发帧解析
+ * @details
+ * 通常在主循环的 debug_vofa_service() 中调用，防止因耗时过长导致控制环中断延迟。
  */
 void vofa_parse_from_fifo(void)
 {
@@ -70,9 +77,9 @@ void vofa_parse_from_fifo(void)
 /**
  * @brief 单字节解析状态机
  * @details
- * - 以 '!' 为帧结束符；
- * - 超长帧进入 discard 模式直到遇到下一个结束符；
- * - 完整帧入队后状态置为 COMPLETE。
+ * - 以 '!' 为帧结束符界定指令长度；
+ * - 遇到超长帧则进入 discard 模式，直到遇到下一个结束符，丢弃整个异常帧；
+ * - 正常解析完成后，加尾零入队，将读取负荷与后续解析解耦。
  */
 static void vofa_parse_byte(uint8 dat)
 {
@@ -120,8 +127,10 @@ static void vofa_parse_byte(uint8 dat)
 }
 
 /**
- * @brief 将完整命令入队
- * @details 队列满时丢弃并累计 queue_overflow_count。
+ * @brief 将完整命令入环形缓冲队列
+ * @details
+ * 队列深度(VOFA_CMD_QUEUE_DEPTH)上限时则直接丢包，避免串口指令洪塞引起系统 OOM 或死锁。
+ * 单包长度通过宏固定，内存静态分配无越界风险。
  */
 static void vofa_enqueue_command(const uint8 *cmd, uint8 len)
 {
@@ -259,12 +268,12 @@ void vofa_service(void)
 void vofa_service_legacy(void)
 {
     static char vofa_cmd[32];
-	#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
-	 printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
-    #endif
-	#if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
-	printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
-    #endif
+#if MAIN_ENABLE_ISR_TEST_SPEED_FUNC
+    printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value, PID.left_speed.Kp, PID.left_speed.Ki);
+#endif
+#if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
+    printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value, PID.left_speed.Kp, PID.left_speed.Ki);
+#endif
     // printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     /* legacy 模式下只做旧命令兼容，不走新调参组件 */
     vofa_parse_from_fifo();

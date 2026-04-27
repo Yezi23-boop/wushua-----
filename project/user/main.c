@@ -18,7 +18,8 @@ void main()
         int_user();
         Menu_Set_Service_Enable((uint8)MAIN_ENABLE_MENU);
 
-        /* 5. 主循环任务分发 */
+        /* 5. 守护死循环，处理无法放入严格时间轴断点的底级UI和后台监控通信包，
+   因无法保证时序确定性，不能在此处安放赛道跟踪高频控制算法 */
         while (1)
         {
                 /* A. 处理 VOFA+ 指令解析与数据上报 */
@@ -36,10 +37,11 @@ void main()
                 /* C. 处理速度测试数据的定时打印 */
 #if MAIN_ENABLE_SPEED_TEST
 
-                printf("%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, speed_l, speed_r);
-                ips114_show_float(4 * 24, 18 * 0, P46, 4, 1);
-                ips114_show_float(4 * 24, 18 * 1, P42, 4, 1);
-                //      printf_imu();
+			printf("%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, 0.0, speed_r);
+			ips114_show_float(4 * 24, 18 * 0,PID.left_speed.speed, 4, 1);
+			ips114_show_float(4 * 24, 18 * 1,PID.right_speed.speed, 4, 1);
+//			system_delay_ms(200);
+//          printf_imu();
 //			printf_adc();
 //			printf_speed_test();
 #endif

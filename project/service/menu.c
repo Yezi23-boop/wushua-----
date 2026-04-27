@@ -1,3 +1,10 @@
+/**
+ * @file menu.c
+ * @brief 屏幕菜单与交互状态机实现
+ * @details
+ * 负责通过 IPS 屏幕和独立按键进行小车所有实时环境参数（速度、PID、摄像头、环岛阈值等）的就地修改和 EEPROM 同步。
+ * 大部分时间以阻塞形式（或状态机驻留形式）独占 CPU 的前台任务，但在调整参数时中断服务依然照常运作。
+ */
 #include "zf_common_headfile.h"
 #include "menu.h"
 
@@ -19,6 +26,7 @@
 #define MENU_STEP_X (14 * 8)
 #define MENU_STEP_INT_X (15 * 8)
 #define EEPROM_MODE 1
+#define MENU_SAVE_PROMPT_DELAY_MS 300
 
 static uint8 menu_service_enabled = 0;
 static int cursor_row = MENU_ROW_MIN;
@@ -53,6 +61,7 @@ static int Menu_Load_Page_Position(int page_id);
 static int Menu_Have_Sub_Menu(int menu_id);
 static void Menu_Draw_Navigation_Cursor(int row_max);
 static void Menu_Cursor_Update(int row_max);
+static void Menu_Render_Current_Page(void);
 static void Menu_Next_Back(void);
 static void Menu_Handle_Common_Key(int label);
 static void Menu_Show_Save_Prompt(void);
@@ -276,6 +285,114 @@ static void Menu_Cursor_Update(int row_max)
     previous_cursor_row = cursor_row;
 }
 
+static void Menu_Render_Current_Page(void)
+{
+    switch (display_codename)
+    {
+    case 0:
+        Menu_Draw_Home();
+        Menu_Draw_Navigation_Cursor(MENU_HOME_ROW_MAX);
+        break;
+    case 1:
+        Menu_Draw_Start(0);
+        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        break;
+    case 11:
+        Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
+        break;
+    case 12:
+        Menu_Draw_Start(2 * MENU_ROW_HEIGHT);
+        break;
+    case 13:
+        Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
+        break;
+    case 14:
+        Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
+        break;
+    case 2:
+        Menu_Draw_Speed(0);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        break;
+    case 21:
+        Menu_Draw_Speed(1 * MENU_ROW_HEIGHT);
+        break;
+    case 22:
+        Menu_Draw_Speed(2 * MENU_ROW_HEIGHT);
+        break;
+    case 23:
+        Menu_Draw_Speed(3 * MENU_ROW_HEIGHT);
+        break;
+    case 24:
+        Menu_Draw_Speed(4 * MENU_ROW_HEIGHT);
+        break;
+    case 25:
+        Menu_Draw_Speed(5 * MENU_ROW_HEIGHT);
+        break;
+    case 26:
+        Menu_Draw_Speed(6 * MENU_ROW_HEIGHT);
+        break;
+    case 3:
+        Menu_Draw_Model(0);
+        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        break;
+    case 31:
+        Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
+        break;
+    case 32:
+        Menu_Draw_Model(2 * MENU_ROW_HEIGHT);
+        break;
+    case 33:
+        Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
+        break;
+    case 4:
+        Menu_Draw_Sensor();
+        break;
+    case 5:
+        Menu_Draw_Ring(0);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        break;
+    case 51:
+        Menu_Draw_Ring(1 * MENU_ROW_HEIGHT);
+        break;
+    case 52:
+        Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
+        break;
+    case 53:
+        Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
+        break;
+    case 54:
+        Menu_Draw_Ring(4 * MENU_ROW_HEIGHT);
+        break;
+    case 55:
+        Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
+        break;
+    case 56:
+        Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);
+        break;
+    case 6:
+        Menu_Draw_Fly(0);
+        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
+        break;
+    case 61:
+        Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
+        break;
+    case 62:
+        Menu_Draw_Fly(2 * MENU_ROW_HEIGHT);
+        break;
+    case 63:
+        Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
+        break;
+    case 64:
+        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
+        break;
+    case 65:
+        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
+        break;
+    default:
+        break;
+    }
+}
+
 static void Menu_Next_Back(void)
 {
     int current_page;
@@ -316,6 +433,8 @@ static void Menu_Next_Back(void)
     cursor_row = Menu_Normalize_Row(display_codename, cursor_row);
     previous_cursor_row = -1;
     menu_next_flag = 0;
+    Menu_Render_Current_Page();
+    Menu_Clear_Pending_Key_Events();
 }
 
 static void Menu_Handle_Common_Key(int label)
@@ -335,6 +454,8 @@ static void Menu_Handle_Common_Key(int label)
             cursor_row = Menu_Load_Page_Position(display_codename);
         Menu_Clear_Page();
         previous_cursor_row = -1;
+        Menu_Render_Current_Page();
+        Menu_Clear_Pending_Key_Events();
         break;
     case KEYSTROKE_THREE:
         keystroke_three_count++;
@@ -350,8 +471,14 @@ static void Menu_Handle_Common_Key(int label)
 static void Menu_Show_Save_Prompt(void)
 {
     Menu_Clear_Page();
-    ips114_show_string(MENU_CENTER_X - 24, 3 * MENU_ROW_HEIGHT, "SAVED OK!");
+    /* 保存完成后短暂停留，避免提示一闪而过看不清。 */
+    ips114_show_string(MENU_CENTER_X - 16, 3 * MENU_ROW_HEIGHT, "save");
     previous_cursor_row = -1;
+    Menu_Clear_Pending_Key_Events();
+    system_delay_ms(MENU_SAVE_PROMPT_DELAY_MS);
+    /* 提示结束后先清屏，避免返回首页时残留 save 字样。 */
+    Menu_Clear_Page();
+    Menu_Clear_Pending_Key_Events();
 }
 
 static void Menu_Draw_Home(void)
@@ -460,6 +587,11 @@ static void Menu_Draw_Sensor(void)
     ips114_show_int32(176, 2 * MENU_ROW_HEIGHT, MA[1], 4);
     ips114_show_int32(176, 3 * MENU_ROW_HEIGHT, MA[2], 4);
     ips114_show_int32(176, 4 * MENU_ROW_HEIGHT, MA[3], 4);
+
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "peak");
+    ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, fuya_cylinder_peak_flag, 1);
+    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "vzc");
+    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, fuya_last_vzc, 2, 3);
 
     ips114_show_float(56, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
 }

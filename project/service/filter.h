@@ -8,11 +8,11 @@
  * 若现场需要微调，可直接改这些宏，不影响主控制链路。
  */
 #ifndef ENC_ZERO_DEADBAND
-#define ENC_ZERO_DEADBAND 1
+#define ENC_ZERO_DEADBAND 5
 #endif
 
 #ifndef ENC_SIGN_FIX_MIN
-#define ENC_SIGN_FIX_MIN 6
+#define ENC_SIGN_FIX_MIN 8
 #endif
 
 #ifndef ENC_SIGN_MAG_TOL

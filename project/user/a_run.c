@@ -25,8 +25,10 @@ static int steer_div_10 = 0; /* 2ms 主环分频：用于每 4ms 更新一次转
 static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 
 /**
- * @brief 2ms 主控制任务
- * @details 按“采样 -> 解算 -> PID -> 输出”的顺序完成一轮核心控制
+ * @brief 主控制核心任务 (运行于 TM0 2ms 中断)
+ * @details 串行执行传感器采集 -> 姿态获取 -> 转向偏差融合 -> 速度设定 -> 电机执行链路。
+ * 必须始终保证函数总体耗时远小于 2ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
+ * 任何超时都会导致电机脱管、失控。
  */
 void run_time_1(void)
 {
@@ -34,9 +36,9 @@ void run_time_1(void)
     steer_div_10++;
     /* P36 = 0; */
     a_run_apply_iap_guard();
-    read_AD();                                      /* 采集四路电感 ADC */
+    read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
-	imu_update_gyro_z_from_imu660rc();
+    imu_update_gyro_z_from_imu660rc();
     if (steer_div_10 > 2)
     {
         pid_steer_update(&PID.steer, Err, gyro_z); /* 根据赛道偏差和 gyro 阻尼更新转向环 */
@@ -55,12 +57,13 @@ void run_time_1(void)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
-    /* P36 = 1; */
+    /* 结束执行时机：利用 IO 引脚翻转作示波器测时剖面，因无特殊需求已注释隐藏 */
 }
 
 /**
- * @brief 10ms 状态管理任务
- * @details 完成赛道检测、启停状态更新和软件定时器维护
+ * @brief 10ms 状态管理任务 (运行于 TM1 中断)
+ * @details 完成赛道检测、大周期系统状态机更新、异常保护与软件定时器。
+ * 此时序对实时性要求稍低，但仍需避免长延时阻塞操作影响主控制环中断。
  */
 void run_time_2(void)
 {
@@ -80,6 +83,7 @@ void run_time_2(void)
     {
         fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
     }
+ //   fuya_update_cylinder_peak_10ms(2);
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
 }
@@ -123,8 +127,8 @@ void run_test_diff(void)
 }
 
 /**
- * @brief IAP 保护处理
- * @details 当 P32 被拉低时，写入 STC 约定值，确保 ISP/IAP 控制状态正确切换
+ * @brief IAP 下载保护处理
+ * @details 监听 P32 引脚状态，拉低时将触发复位到系统 ISP 监控区，必须极低耗时。
  */
 void a_run_apply_iap_guard(void)
 {

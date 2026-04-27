@@ -11,7 +11,7 @@
  * 供主控制环、负压控制与调试链路复用。
  */
 
-extern float gyro_z; /* 当前 Z 轴角速度反馈量 */
+extern volatile float gyro_z; /* 当前 Z 轴角速度反馈量 (中断与主循环共享) */
 
 /**
  * @brief 上电标定 gyro_z 零偏
@@ -28,8 +28,13 @@ void imu_calibrate_gyro_z_zero_drift(void);
 void imu_update_gravity_vector_from_quaternion(float *vx, float *vy, float *vz);
 
 /**
- * @brief 更新全局 gyro_z
- * @details 从 imu660rc 原始陀螺仪数据转换得到控制环使用量纲。
+ * @brief 更新并计算用于控制的 Z 轴角速度率 (gyro_z)
+ *
+ * @details
+ * 从 imu660rc 硬件驱动中读取当前 z 轴角速度原始值，按预定系数转换为
+ * 带工程量纲的 float 数据，并消除上电记录的零偏。
+ *
+ * @note 必须在高频入口 (2ms) 更新，提供给转向差速阻尼项使用。
  */
 void imu_update_gyro_z_from_imu660rc(void);
 

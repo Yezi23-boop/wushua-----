@@ -14,14 +14,14 @@ void motor_Init(void)
      * 左电机 PWM 初始化
      * 使用 PWMB 通道 2，引脚 P13，频率 24kHz（避开人耳听觉频率，减小啸叫）
      */
-    pwm_init(PWMB_CH2_P13, 24000, 0);
+    pwm_init(PWMB_CH2_P13, 17000, 0);
     /* 左电机方向控制引脚 P14，设置为推挽输出 */
-    gpio_init(IO_P14, GPO, 1, GPO_PUSH_PULL);
+    gpio_init(IO_P14, GPO, 0, GPO_PUSH_PULL);
     /*
      * 右电机 PWM 初始化
      * 使用 PWMB 通道 3，引脚 P52，频率 24kHz
      */
-    pwm_init(PWMB_CH3_P52, 24000, 0);
+    pwm_init(PWMB_CH3_P52, 17000, 0);
     /* 右电机方向控制引脚 P53，设置为推挽输出 */
     gpio_init(IO_P53, GPO, 1, GPO_PUSH_PULL);
 }
@@ -63,12 +63,12 @@ void motor_output(int32 lpwm, int32 rpwm)
         /* --- 右电机控制逻辑 (硬件映射可能交叉) --- */
         if (lpwm_limited > 0)
         {
-            P14 = 0;                                  /* 设置方向：正转 */
+            P14 = 1;                                  /* 设置方向：正转 */
             pwm_set_duty(PWMB_CH2_P13, lpwm_limited); /* 设置 PWM 占空比 */
         }
         else if (lpwm_limited < 0)
         {
-            P14 = 1;                                   /* 设置方向：反转 */
+            P14 = 0;                                   /* 设置方向：反转 */
             pwm_set_duty(PWMB_CH2_P13, -lpwm_limited); /* 取绝对值输出 PWM */
         }
         else
@@ -79,12 +79,12 @@ void motor_output(int32 lpwm, int32 rpwm)
         /* --- 左电机控制逻辑 --- */
         if (rpwm_limited > 0)
         {
-            P53 = 0; /* 设置方向：正转 */
+            P53 = 1; /* 设置方向：正转 */
             pwm_set_duty(PWMB_CH3_P52, rpwm_limited);
         }
         else if (rpwm_limited < 0)
         {
-            P53 = 1; /* 设置方向：反转 */
+            P53 = 0; /* 设置方向：反转 */
             pwm_set_duty(PWMB_CH3_P52, -rpwm_limited);
         }
         else
@@ -145,10 +145,10 @@ void dianya_jiance(void)
     /* 执行 ADC 转换 */
     adc_raw = adc_convert(ADC_CH13_P05);
     /* 转换公式：ADC值 * 转换系数（0.0092 需要根据分压电路电阻比例计算） */
-    dianya = (float)adc_raw * 0.0092f;
+    dianya = (float)adc_raw * 0.0092f*4;
 
     /* 锂电池欠压判定：低于 11.3V（假设为 3S 锂电） */
-    if (dianya < 11.3f)
+    if (dianya < 11.2f)
     {
         dianya_count++;
     }

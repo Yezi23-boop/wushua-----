@@ -1,3 +1,13 @@
+/**
+ * @file debug_view.c
+ * @brief 调试视图与屏幕输出统筹
+ * @details
+ * 负责在 IPS 显示屏上提供多组数据监控页面（电感、外设、IMU、控制输出等）。
+ *
+ * 资源提醒：
+ * 刷屏函数具有可观的延迟开销（约几毫秒量级），本模块只能在主循环空闲期间被调用，
+ * 严禁放置于任何硬件中断（TM0/TM1）中，否则将引发严重的高频控制环丢帧。
+ */
 #include "zf_common_headfile.h"
 
 #define DEBUG_VIEW_ENABLE_SPEED_LOOP_AUTOTUNE 0

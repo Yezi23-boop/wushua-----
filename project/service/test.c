@@ -1,3 +1,11 @@
+/**
+ * @file test.c
+ * @brief 直立辅助功能测试与功能性验证包
+ * @details
+ * 封装各种孤立于主发版竞速代码的联调方法和驱动实验组件：
+ * 主要包括直接设定给定轮速、使用硬编码电感阈值执行基础巡线策略。
+ * 本模块设计为离线诊断排障用，在实竞中不要将其宏使能。
+ */
 #include "zf_common_headfile.h"
 #include "test.h"
 static int8 time_test = 0;

@@ -73,7 +73,7 @@ void a_run_mode_update_start_state(void)
                     current_start_state = START_STATE_2;
                 }
 
-                /* 锁存本次按下，避免长按期间重复切换 */
+                /* 原因：不重复触发按下的去抖。防止用户在物理抖动瞬间或持续按下时系统在连续多个状态间极速切换。 */
                 key_released = 0;
                 press_debounce_cnt = 0;
             }
@@ -195,8 +195,9 @@ enum RingStep current_state = no_ring;
 RingStruct ring_data = {0};
 
 /**
- * @brief 右环状态机更新
- * @details 根据电感特征、编码器累计和角速度累计结果推进右环流程
+ * @brief 环岛状态机更新
+ * @details 根据电感特征、编码器累计和角速度累计结果推进右环流程。
+ * 注意此部分为高层状态机，不涉及高频浮点解算，但条件判断需防抖。
  */
 void circle_check_r(void)
 {
@@ -295,7 +296,7 @@ void circle_check_r(void)
             ring_data.flast_r = 0;                 // 清除右环过程标志
             ring_data.diff_set = 0;                // 清除环岛直接差速给定
             ring_data.Gyroz = 0;
-            current_state = no_ring;               // 返回普通巡线状态
+            current_state = no_ring; // 返回普通巡线状态
         }
         break;
     }

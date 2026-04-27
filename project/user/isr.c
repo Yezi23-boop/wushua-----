@@ -25,7 +25,8 @@ void DMA_UART1_IRQHandler(void) interrupt 4
         DMA_UR1R_STA &= ~0x01;
         uart_rx_start_buff(UART_1); /* 准备下一次接收 */
 
-        /* 程序自动下载逻辑：检测连续的 0x7F 特征码 */
+        /* 原因：STC 单片机特定 ISP 在线下载时特征码序列。在正常运行时监测到该序列长驻则执行自我热重启跳转。 
+ * 若误将正常通信当做烧录特征，可能引发运行中不预期掉电重启。 */
         if (uart_rx_buff[UART_1][0] == 0x7F)
         {
             if (dwon_count++ > 20)
@@ -34,7 +35,7 @@ void DMA_UART1_IRQHandler(void) interrupt 4
         else
             dwon_count = 0;
 
-        /* 调用用户自定义串口回调 */
+        /* 回调给外部上层注册的响应器（若非空），保障模块间的弱耦合 */
         if (uart1_irq_handler != NULL)
             uart1_irq_handler(uart_rx_buff[UART_1][0]);
     }
@@ -115,8 +116,9 @@ void INT1_IRQHandler(void) interrupt 2
 }
 
 /**
- * @brief PIT0 定时器中断 (2ms)
- * @details 触发核心控制环任务 run_time_1
+ * @brief PIT0 定时器中断 (系统控制环中断)
+ * @details 触发核心控制环任务 run_time_1，周期见 int_user.c 的 TIME_0 定义（通常为 5ms）。
+ * 注意：此函数必须保持极低耗时，不可执行阻塞操作。
  */
 void TM0_IRQHandler() interrupt 1
 {
@@ -142,8 +144,8 @@ void TM0_IRQHandler() interrupt 1
 }
 
 /**
- * @brief PIT1 定时器中断 (10ms)
- * @details 触发系统管理任务 run_time_2
+ * @brief PIT1 定时器中断 (系统管理中断)
+ * @details 触发系统管理任务 run_time_2，周期见 int_user.c 的 TIME_1 定义（通常为 10ms）。
  */
 void TM1_IRQHandler() interrupt 3
 {

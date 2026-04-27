@@ -17,11 +17,12 @@
 #define M_PI 3.14159265358979f
 #endif
 
+/**< Z 轴陀螺仪向外输出前缩放乘数：由底盘转向几何、硬件灵敏度及控制目标共同决定的经验值 */
 #define IMU_GYRO_Z_SCALE (0.005f)
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
 
-float gyro_z = 0;
+volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
 
 /**
@@ -145,6 +146,7 @@ double my_atan2(double y, double x)
  * @brief 快速反平方根近似
  * @details
  * 使用经典位级近似 + 一次牛顿迭代，适合对速度敏感且可容忍小误差的场景。
+ * 避开了标准库 sqrt 的多次循环开销，能够将计算周期控制在极短时间内。
  */
 float invSqrt(float x)
 {

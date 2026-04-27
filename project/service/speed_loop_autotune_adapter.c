@@ -1,3 +1,10 @@
+/**
+ * @file speed_loop_autotune_adapter.c
+ * @brief 自动调参系统串口与数据采集适配桥
+ * @details
+ * 提供 Python AI 调参套件所需的数据接口与下放序列化采集。
+ * 这个文件不涉及实际高速控制逻辑的改变，而是统一收拢上报或指令解析层调用。
+ */
 #include "zf_common_headfile.h"
 #include "motor.h"
 #include "pid.h"

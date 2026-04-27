@@ -32,6 +32,9 @@ void int_user(void)
 
 /**
  * @brief 硬件平台与底层驱动初始化
+ * @details 包含时钟频率设定（要求 40MHz）、各类外设及传感器的启动配置。
+ * 初始化过程严格遵循芯片寄存器开销及时序依赖。
+ * 无 RTOS，所有外设通过裸机驱动接入；初始化过程顺序需稳定，避免总线访问冲突。
  */
 static void hardware_init(void)
 {
@@ -49,10 +52,10 @@ static void hardware_init(void)
 
     /* ADC 通道初始化 */
     adc_init(ADC_CH13_P05, ADC_8BIT); /* 电池电压采样 */
-    adc_init(ADC_CH0_P10, ADC_12BIT); /* 电感 1 */
-    adc_init(ADC_CH1_P11, ADC_12BIT); /* 电感 2 */
-    adc_init(ADC_CH8_P00, ADC_12BIT); /* 电感 3 */
-    adc_init(ADC_CH9_P01, ADC_12BIT); /* 电感 4 */
+    adc_init(ADC_CH0_P10, ADC_10BIT); /* 电感 1 */
+    adc_init(ADC_CH1_P11, ADC_10BIT); /* 电感 2 */
+    adc_init(ADC_CH8_P00, ADC_10BIT); /* 电感 3 */
+    adc_init(ADC_CH9_P01, ADC_10BIT); /* 电感 4 */
 
     /* 应用层模块 */
     motor_Init();         /* 电机驱动 PWM 输出 */
@@ -71,12 +74,14 @@ static void timer1_service_10ms(void)
 
 /**
  * @brief 控制参数与 PID 实例初始化
+ * @details 基于出厂安全参数完成所有算法环、控制结构（速度、转向差速环）的默认启动值。
+ *          同时需进行 EEPROM 加载同步以保障非易失性数据下发。
  */
 static void control_init(void)
 {
     /* 速度环初始化，默认提供一组安全基础参数 */
-    pid_speed_init(&PID.left_speed, 90.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);
-    pid_speed_init(&PID.right_speed, 90.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.left_speed, 100.0f, 20.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.right_speed, 100.0f, 20.0f, 0.0f, 9000.0f, 9000.0f);
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
@@ -88,6 +93,7 @@ static void control_init(void)
 
 /**
  * @brief 应用层启动逻辑
+ * @details 进行高层逻辑相关的依赖初始化或预处理，如上电初始静态环境标定（IMU 陀螺仪 Z 轴零偏采集）。
  */
 static void app_init(void)
 {
@@ -112,7 +118,6 @@ void control_apply_config(void)
     PID.steer.max_output = app.speed.limiting_Err;
     PID.steer.min_output = app.speed.limiting_Err;
     clamp_steer_output(&PID.steer);
-
 }
 
 /**

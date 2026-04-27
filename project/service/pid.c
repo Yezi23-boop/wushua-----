@@ -74,19 +74,27 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-    //    int32 fixed_left_count;
-    //    int32 fixed_right_count;
+//    int32 fixed_left_count;
+//    int32 fixed_right_count;
 
-    //    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
-    //                                                        &encoder_filter_left);
-    //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
-    //                                                         &encoder_filter_right);
+//    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
+//                                                        &encoder_filter_left);
+//    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
+//                                                         &encoder_filter_right);
     speed_l = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.2f;
     speed_r = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.2f;
-    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.8f);
-    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.8f);
-    //    speed_l = (float)fixed_left_count * 0.2f;
-    //    speed_r = (float)fixed_right_count * 0.2f;
+	if(speed_l<0)
+	{
+	speed_l=-speed_l;
+	}
+	if(speed_r<0)
+	{
+	speed_r=-speed_r;
+	}
+    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);
+    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);
+//    speed_l = (float)fixed_left_count * 0.2f;
+//    speed_r = (float)fixed_right_count * 0.2f;
 
     left->speed = speed_l;
     right->speed = speed_r;

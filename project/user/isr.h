@@ -9,7 +9,7 @@
  * 注意：高频中断路径应保持轻量，避免在此处开启重型调试逻辑。
  */
 /* --- 功能模块开关控制 --- */
-#define MAIN_ENABLE_VOFA 0       /* 是否使能 VOFA+ 上位机串口交互 */
+#define MAIN_ENABLE_VOFA 0       /**< 是否使能 VOFA+ 串口交互 (可能耗费主循环时间) */
 #define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 

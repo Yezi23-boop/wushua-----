@@ -15,10 +15,12 @@ typedef enum
 /**
  * @brief 负压系统全局变量
  */
-extern volatile int fuya_date;             /**< 当前平滑后的输出脉宽，范围 500~1000 */
-extern volatile int fuya_target_pwm;       /**< 当前目标脉宽，范围 500~1000 */
-extern volatile uint8 fuya_target_percent; /**< 当前目标百分比，范围 0~100 */
-extern volatile uint8 fuya_surface_state;  /**< 当前识别到的表面状态 */
+extern volatile int fuya_date;                 /**< 当前平滑后的输出脉宽，范围 500~1000 */
+extern volatile int fuya_target_pwm;           /**< 当前目标脉宽，范围 500~1000 */
+extern volatile uint8 fuya_target_percent;     /**< 当前目标百分比，范围 0~100 */
+extern volatile uint8 fuya_surface_state;      /**< 当前识别到的表面状态 */
+extern volatile uint8 fuya_cylinder_peak_flag; /**< 圆筒最高点通过标志：1-已过顶待落地，0-普通状态 */
+extern volatile float fuya_last_vzc;           /**< 最近一次限幅后的重力向量 Z 分量 */
 
 /**
  * @brief 负压吸附系统初始化
@@ -43,9 +45,23 @@ void fuya_set_percent(uint8 percent);
 void fuya_force_stop(void);
 
 /**
- * @brief 两态负压更新逻辑
- * @details 基于 IMU 重力向量识别平地/墙面，并平滑切换输出
+ * @brief 负压状态识别与输出平滑更新
+ *
+ * @details
+ * 基于 IMU 的重力向量 Z 分量识别平地/墙面工况。通过软斜坡的方式输出目标占空比，
+ * 避免直接突变导致外接电池瞬态压降或控制链路干扰。
+ *
+ * @note 无阻塞，允许在 10ms 中断或主循环中调用。
  */
 void fuya_update_simple(void);
+
+/**
+ * @brief 10ms 圆筒最高点检测
+ * @details
+ * 仅在运行态工作。检测到圆筒最高点后置标志位，并临时覆盖角度参数；
+ * 回到平地后自动恢复原参数并清除标志位。
+ * @param start_state 当前运行状态：2 为允许运行，其余状态视为停用
+ */
+void fuya_update_cylinder_peak_10ms(int8 start_state);
 
 #endif /* __FUYA_H__ */

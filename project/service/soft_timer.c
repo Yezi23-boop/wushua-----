@@ -1,3 +1,10 @@
+/**
+ * @file soft_timer.c
+ * @brief 软件定时器管理器
+ * @details
+ * 提供一个简单的软件定时组件，支持倒计时检测。
+ * 所提供的回调应当无阻塞，本模块依赖外部硬件中断（如 10ms 的 run_time_2）的固定周期调用步进。
+ */
 #include "soft_timer.h"
 
 #define MAX_SOFT_TIMERS 10

@@ -1,3 +1,10 @@
+/**
+ * @file filter.c
+ * @brief 编码器异常梳理与基础软滤波
+ * @details
+ * 提供对于带有噪声的反馈信号（特别是原始编码器）的低通滤波、中值滤波与强制符号纠错功能。
+ * 由于是在高频中断 (run_time_1) 中直接调用，所有数字滤波运算都要求极低延迟且不得阻塞。
+ */
 #include "zf_common_headfile.h"
 
 /**
@@ -196,7 +203,8 @@ int32 CorrectEncoderSignByHistory(int32 raw_now, EncoderSignFixState *state)
         {
             hist_abs_avg = (encoder_abs_int32(h0) +
                             encoder_abs_int32(h1) +
-                            encoder_abs_int32(h2)) / 3;
+                            encoder_abs_int32(h2)) /
+                           3;
             mag_delta = encoder_abs_int32(encoder_abs_int32(raw_now) - hist_abs_avg);
 
             if (mag_delta <= ENC_SIGN_MAG_TOL)

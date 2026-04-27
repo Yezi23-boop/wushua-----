@@ -31,14 +31,14 @@ static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
 static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 static const int limit = 10;
 
-/* 全局导出变量 */
+/* 全局导出变量：这些变量将在定时器中断和主循环菜单/串口任务间共享，故用 volatile 修饰 */
 volatile uint16 RAW[NUM] = {0};
 volatile uint16 MA[NUM] = {0};
 volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
-uint16 ad1 = 0;
-uint16 ad2 = 0;
-uint16 ad3 = 0;
-uint16 ad4 = 0;
+volatile uint16 ad1 = 0;
+volatile uint16 ad2 = 0;
+volatile uint16 ad3 = 0;
+volatile uint16 ad4 = 0;
 volatile float Err = 0.0f;
 
 /* 内部私有函数声明 */
@@ -51,11 +51,8 @@ static void dispose(uint16 ad1, uint16 ad2, uint16 ad3, uint16 ad4);
  * @details 采用四路电感的差比和算法，并支持参数 A_1, B_1, C_l 的加权修正
  *
  * 公式说明：
- * 1) diff14 = ad1 - ad4：左右横向差分，反映主偏移方向
- * 2) diff23 = ad2 - ad3：竖向差分，辅助修正斜入/斜出姿态
- * 3) denom  = A_1*(ad1+ad4) + C_l*|diff23|：自适应归一化分母
  *  err=(A(L−R)+B(LM−RM))/(A(L+R)+C∣LM−RM∣)
- * 其中 C_l 项用于在竖向差异增大时提高分母，降低异常工况下的偏差放大。
+ *
  */
 static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 {
@@ -117,7 +114,7 @@ void read_AD(void)
     uint16 raw_buffer[NUM];
     uint16 AD_ONE[NUM];
 
-    /* 1. 多次采样填充缓冲区 */
+    /* 1) 连续多次采样，填充窗口数组，供后续排序去极值 */
     for (i = 0; i < SORT_LENGTH; i++)
     {
         adc_read_channels(raw_buffer);
@@ -125,7 +122,7 @@ void read_AD(void)
             AD_value[j][i] = raw_buffer[j];
     }
 
-    /* 2. 对每个通道进行排序和基础滤波 */
+    /* 2) 对每一路采集的窗口数据进行选择排序，丢弃过大过小的异常毛刺，提升稳定性 */
     for (i = 0; i < NUM; i++)
     {
         /* 2.1 选择排序：通道样本数固定很小，复杂度可控且实现稳定 */
@@ -209,7 +206,7 @@ void adc_measure_reset(void)
  */
 static void adc_read_channels(uint16 *raw_buffer)
 {
-    //    raw_buffer[0] = adc_convert(ADC_CH9_P01); /* 左横电感 */
+    /* 历史硬件接线：raw_buffer[0] = adc_convert(ADC_CH9_P01); // 左横电感 */
     //    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
     //    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
     //    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
