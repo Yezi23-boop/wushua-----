@@ -9,7 +9,7 @@
 typedef struct
 {
     int16 start_flag;        /**< 启动标志位：1-启动运行，0-停止待机 */
-    int16 circle_flags;      /**< 圆环方向标志：1-强制左环，-1-强制右环，0-自动识别 */
+    int16 circle_flags;      /**< 圆环识别开关：1-开启，0-关闭 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
 } AppStartConfig;
@@ -49,9 +49,9 @@ typedef struct
 typedef struct
 {
     float ring_encoder;          /**< 入环判定阈值：编码器积分距离达到此值确认入环 */
-    float pre_ring_Gyro_set;     /**< 预入环直接差速设定值（入环前的打角力度） */
+    float pre_ring_Gyro_set;     /**< 预入环固定目标角速度（入环前的打角力度） */
     float in_ring_Gyroz;         /**< 环内巡航角速度设定值（维持圆周运动的角速度） */
-    float pre_out_ring_Gyro_set; /**< 预出环直接差速设定值（出环前的打角力度） */
+    float pre_out_ring_Gyro_set; /**< 预出环固定目标角速度（出环前的打角力度） */
     float pre_out_ring_Gyroz;    /**< 出环判定角速度阈值 */
     float pre_out_ring_encoder;  /**< 出环判定阈值：编码器积分距离达到此值确认出环 */
 } AppRingConfig;
@@ -64,7 +64,6 @@ typedef struct
     int count_fly_speed;   /**< 飞坡状态下的目标速度（通常为慢速以保安全） */
     int count_fly_time_1;  /**< 飞坡检测确认时间（按 5ms 主环累计的触发次数） */
     int count_fly_time_2;  /**< 飞坡状态持续时间（触发后保持该状态的时长，单位：5ms） */
-    int count_fly_angle;   /**< 飞坡状态下的强制锁死舵机角度（0为不锁死） */
     int16 fly_ramp_enable; /**< 飞坡模式功能开关：1-开启检测，0-关闭检测 */
 } AppFlyConfig;
 

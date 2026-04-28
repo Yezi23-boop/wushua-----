@@ -7,6 +7,7 @@
  */
 #include "zf_common_headfile.h"
 #include "menu.h"
+#include "../user/a_run_mode.h"
 
 /* 按键事件编码，与 key 模块保持一致。 */
 #define KEYSTROKE_ONE 1
@@ -46,7 +47,7 @@ static const int menu_have_sub[] = {
     3, 31, 32, 33, 34, 35, 36,
     4,
     5, 51, 52, 53, 54, 55, 56,
-    6, 61, 62, 63, 64, 65};
+    6, 61, 62, 63, 64};
 
 static void Menu_Clear_Pending_Key_Events(void);
 static void Menu_Clear_Page(void);
@@ -194,7 +195,7 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 5:
         return 6 * MENU_ROW_HEIGHT;
     case 6:
-        return 5 * MENU_ROW_HEIGHT;
+        return 4 * MENU_ROW_HEIGHT;
     default:
         return MENU_ROW_MIN;
     }
@@ -383,7 +384,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
         break;
     case 61:
         Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
@@ -396,9 +397,6 @@ static void Menu_Render_Current_Page(void)
         break;
     case 64:
         Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
-        break;
-    case 65:
-        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
         break;
     default:
         break;
@@ -523,7 +521,7 @@ static void Menu_Draw_Start(int edit_line)
 {
     ips114_show_string(8, 0, "<<START");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "Start_Flag");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "circle_flags");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ring_en");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
@@ -619,19 +617,31 @@ static void Menu_Draw_Sensor(void)
 static void Menu_Draw_Ring(int edit_line)
 {
     ips114_show_string(8, 0, "<<RING");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "ring_en");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "ring_enc");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "pre_r_G");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "in_r_G");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "pre_o_G");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "pre_o_Gz");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "pre_o_en");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.ring.ring_encoder, 3, 2);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_set, 3, 2);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_set, 3, 2);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_encoder, 3, 2);
+    ips114_show_float(88, 1 * MENU_ROW_HEIGHT, app.ring.ring_encoder, 3, 2);
+    ips114_show_float(88, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_set, 3, 2);
+    ips114_show_float(88, 3 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
+    ips114_show_float(88, 4 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_set, 3, 2);
+    ips114_show_float(88, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
+    ips114_show_float(88, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_encoder, 3, 2);
+
+    /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
+    ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
+    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_mode_get_ring_state(), 1);
+    ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "G");
+    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.Gyroz, 4, 0);
+    ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
+    ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
+    ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
+    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
+    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "P");
+    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_ring_pose_flat(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -643,14 +653,12 @@ static void Menu_Draw_Fly(int edit_line)
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_time_1");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fly_time_2");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fly_angle");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "fly_en");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fly_en");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.count_fly_speed, 4);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.count_fly_time_1, 4);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.count_fly_angle, 4);
-    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.fly_ramp_enable, 4);
+    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_ramp_enable, 4);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -662,7 +670,7 @@ static void Menu_Process_Special_Value(int16 *parameter)
     uint8 changed;
 
     changed = 0;
-    ips114_show_string(MENU_STEP_X, 0, "SPCL");
+    ips114_show_string(MENU_STEP_X, 0, "0/1");
 
     event_code = Menu_Read_Key_Event();
     if (event_code == 0)
@@ -679,7 +687,7 @@ static void Menu_Process_Special_Value(int16 *parameter)
         break;
     case KEYSTROKE_TWO:
     case KEYSTROKE_TWO_LONG:
-        *parameter = -1;
+        *parameter = 0;
         changed = 1;
         break;
     default:
@@ -995,11 +1003,11 @@ static void Menu_Fly_Process(void)
     {
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(4 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -1017,10 +1025,6 @@ static void Menu_Fly_Process(void)
         break;
     case 64:
         Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_angle, 1);
-        break;
-    case 65:
-        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.fly_ramp_enable, 1);
         break;
     default:
@@ -1081,7 +1085,6 @@ void Keystroke_Menu(void)
     case 62:
     case 63:
     case 64:
-    case 65:
         Menu_Fly_Process();
         break;
     default:

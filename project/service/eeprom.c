@@ -27,7 +27,7 @@ static void eeprom_load_defaults(AppConfig *config)
 {
     /* 启动与基础配置默认值 */
     config->start.start_flag = 1;             /* 默认启动 */
-    config->start.circle_flags = 0;           /* 默认自动识别圆环方向 */
+    config->start.circle_flags = 1;           /* 默认关闭圆环识别 */
     config->start.fuya_xili = 50.00f;         /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
@@ -43,25 +43,24 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.kp_Angle = 0.80f;
     config->angle.kd_Angle = 0.20f;
     config->angle.gyro_feedback_scale = 1.00f;
-    config->angle.limiting_Angle = 35.00f;
+    config->angle.limiting_Angle = 33.00f;
     config->angle.A_1 = 0.80f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_encoder = 15.00f;           /* 入环积分阈值 */
-    config->ring.pre_ring_Gyro_set = 210.00f;     /* 入环直接差速力度 */
-    config->ring.in_ring_Gyroz = 220.00f;         /* 环内角速度 */
-    config->ring.pre_out_ring_Gyro_set = 170.00f; /* 出环直接差速力度 */
+    config->ring.ring_encoder = 2.00f;           /* 入环积分阈值 */
+    config->ring.pre_ring_Gyro_set = 50.00f;     /* 入环固定目标角速度 */
+    config->ring.in_ring_Gyroz = 250.00f;         /* 环内角速度 */
+    config->ring.pre_out_ring_Gyro_set = 50.00f; /* 出环固定目标角速度 */
     config->ring.pre_out_ring_Gyroz = 350.00f;    /* 出环角速度阈值 */
     config->ring.pre_out_ring_encoder = 30.00f;   /* 出环积分阈值 */
 
     /* 飞坡策略默认参数 */
     config->fly.count_fly_speed = 15;   /* 飞坡慢速值 */
-    config->fly.count_fly_time_1 = 6;   /* 触发检测次数 (6 * 5ms = 30ms) */
-    config->fly.count_fly_time_2 = 100; /* 状态保持时间 (100 * 5ms = 500ms) */
-    config->fly.count_fly_angle = 0;    /* 舵机锁死角度 */
-    config->fly.fly_ramp_enable = 1;    /* 默认关闭飞坡检测，防止误触发 */
+    config->fly.count_fly_time_1 = 3;  /* 触发检测次数 (3 * 5ms = 15ms) */
+    config->fly.count_fly_time_2 = 10; /* 状态保持时间 (10 * 5ms = 50ms) */
+    config->fly.fly_ramp_enable = 1;    /* 默认开启飞坡检测 */
 }
 
 /**
@@ -75,6 +74,10 @@ static void eeprom_read_config(AppConfig *config)
 
     config->start.start_flag = (int16)read_int(1);
     config->start.circle_flags = (int16)read_int(2);
+    if (config->start.circle_flags != 1)
+    {
+        config->start.circle_flags = 0;
+    }
 
     config->speed.kp_Err = read_float(4);
     config->start.fuya_xili = read_float(5);
@@ -111,7 +114,6 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.count_fly_speed = (int)read_int(22);
     config->fly.count_fly_time_1 = (int)read_int(23);
     config->fly.count_fly_time_2 = (int)read_int(24);
-    config->fly.count_fly_angle = (int)read_int(25);
     config->fly.fly_ramp_enable = (int16)read_int(26);
     config->start.fuya_wall_percent = read_float(27);
 
@@ -171,7 +173,6 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.count_fly_speed, 22);
     save_int(config->fly.count_fly_time_1, 23);
     save_int(config->fly.count_fly_time_2, 24);
-    save_int(config->fly.count_fly_angle, 25);
     save_int(config->fly.fly_ramp_enable, 26);
     save_float(clamp_percent_value(config->start.fuya_wall_percent, 70.0f), 27);
 }

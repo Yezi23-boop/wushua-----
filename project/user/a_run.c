@@ -16,7 +16,7 @@
 
 /* --- 运行状态变量 --- */
 volatile int flat_statr = 0;        /* 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */
-volatile int flat_fly = 0;          /* 飞坡状态标志位 */
+volatile int flat_fly = 0;          /* 飞坡阶段状态：0-普通巡线，1-保持，2-恢复，3-冷却 */
 volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/调试显示） */
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
@@ -33,6 +33,7 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 void run_time_1(void)
 {
     float diff_output;
+//	    circle_check_l();
     steer_div_10++;
     /* P36 = 0; */
     a_run_apply_iap_guard();
@@ -44,14 +45,14 @@ void run_time_1(void)
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
         pid_steer_update(&PID.steer, Err, 0.0f);
     }
-    speed_active = (int)app.speed.speed_run;
+    speed_active = app.speed.speed_run;
     /* 飞坡阶段在外环与角速度内环之间锁定目标角速度，同时覆盖目标速度。 */
-    a_run_mode_update_fly_speed(&speed_active);
-    pid_angle_update(&PID.angle, PID.steer.output,
-                     gyro_z * app.angle.gyro_feedback_scale);
+//    a_run_mode_update_fly_speed(&speed_active);
+    run_mode_update_angle_target(&PID.steer.output);
+    pid_angle_update(&PID.angle, PID.steer.output,gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
-    left_target = (float)speed_active - diff_output;
-    right_target = (float)speed_active + diff_output;
+    left_target = speed_active - diff_output;
+    right_target = speed_active + diff_output;
 
     /* 速度环保持高频更新，保证电机执行链路带宽 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
@@ -70,12 +71,13 @@ void run_time_1(void)
  * @details 完成赛道检测、大周期系统状态机更新、异常保护与软件定时器。
  * 此时序对实时性要求稍低，但仍需避免长延时阻塞操作影响主控制环中断。
  */
+int ll = 0;
 void run_time_2(void)
 {
     /* 1. 更新电感动态最大值，用于归一化与标定 */
     scan_track_max_value();
-    circle_check_r();
-
+    circle_check_l();
+    gyro_integrals();
     /* 2. 执行各类保护检测 */
     lost_lines();    /* 丢线保护 */
     dianya_jiance(); /* 电池电压检测 */
@@ -88,6 +90,7 @@ void run_time_2(void)
     {
         fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
     }
+    ll += (PID.left_speed.speed + PID.right_speed.speed) * 0.058;
     //   fuya_update_cylinder_peak_10ms(2);
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();

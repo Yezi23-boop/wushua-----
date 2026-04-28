@@ -13,12 +13,23 @@
 #include "a_run_mode.h"
 
 /* --- 飞坡状态内部变量 --- */
-static int flat_statr_date = 0; /* 启动状态缓存，当前保留未使用 */
-static int count_fly_1 = 0;     /* 飞坡进入判定计数 */
-static int count_fly_2 = 0;     /* 飞坡保持阶段计数 */
+static int fly_detect_count = 0; /* 飞坡入口连续弱磁确认计数 */
+static int fly_state_count = 0;  /* 飞坡保持、恢复和冷却阶段的 5ms 计数 */
 
 /* --- 启停状态机参数 --- */
 #define START_DEBOUNCE_TIME 5 /* 启动按键消抖确认次数（10ms 调用周期下约 500ms） */
+
+/* --- 飞坡状态机参数（run_time_1 以 5ms 调用） --- */
+#define FLY_AD_SIDE_LOST_TH 14u  /* 横向电感低于该值时认为主线信号正在消失 */
+#define FLY_AD_CENTER_LOST_TH 5u /* 竖向电感阈值更低，避免普通弱弯误触发飞坡 */
+#define FLY_HOLD_ANGLE 0         /* 飞坡离线阶段固定目标角速度，0 表示直行锁角 */
+#define FLY_RAMP_BLOCK_VZ 0.95f  /* 低于该重力 Z 分量时认为车身已明显离开平面姿态 */
+#define FLY_RECOVER_COUNT 2      /* 落地恢复窗口，单位 5ms，默认约 20ms */
+#define FLY_COOLDOWN_COUNT 20    /* 退出冷却窗口，单位 5ms，默认约 100ms */
+
+/* --- 圆环姿态门控参数（run_time_2 以 10ms 调用） --- */
+#define RING_FLAT_BLOCK_VZ 0.985f   /* 低于该重力 Z 分量时认为已进入桶/墙/坡面姿态 */
+#define RING_FLAT_RELEASE_VZ 0.99f /* 回到该重力 Z 分量以上才重新允许圆环识别 */
 
 enum StartState
 {
@@ -32,14 +43,89 @@ static int press_debounce_cnt = 0;                          // 按下消抖计�
 static int8 key_released = 1;                               // 按键释放锁存：1-已释放，0-仍按下
 
 /**
+ * @brief 判断车身是否已经明显离开平面姿态。
+ *
+ * 平地丢线时四路电感也可能同时很低，因此飞坡入口不能只依赖电感。
+ * 重力向量 Z 分量低于阈值时，认为车身已经进入坡面或飞坡姿态。
+ *
+ * @return int8 1-姿态满足飞坡触发条件，0-仍近似平面。
+ */
+static int8 fly_is_vzc_ramp_pose(void)
+{
+    float vzc;
+
+    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+
+    if (vzc < FLY_RAMP_BLOCK_VZ)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 判断当前电感是否满足飞坡入口弱磁特征。
+ *
+ * 飞坡入口通常表现为四路归一化电感同时快速跌低，并伴随重力 Z 分量下降。
+ * 姿态条件用于过滤平地丢线，避免把普通弱磁或赛道断线误判为飞坡。
+ *
+ * @return int8 1-满足飞坡入口特征，0-不满足。
+ *
+ * @note 由 5ms 主控制环调用，只做常量比较，避免增加实时链路负担。
+ */
+static int8 fly_is_ramp_lost_signal(void)
+{
+    if (ad1 < FLY_AD_SIDE_LOST_TH &&
+        ad2 < FLY_AD_CENTER_LOST_TH &&
+        ad3 < FLY_AD_CENTER_LOST_TH &&
+        ad4 < FLY_AD_SIDE_LOST_TH &&
+        fly_is_vzc_ramp_pose())
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 判断飞坡落地恢复是否已回到中线附近。
+ *
+ * 中线在控制链路中对应 Err 为 0，同时用 ad1/ad2 差值约束电感平衡。
+ * 原因是落地后单看 Err 可能受瞬态计算影响，双条件可以减少偏线误退出。
+ *
+ * @return int8 1-已接近中线，0-仍需继续低速回正。
+ */
+static int8 fly_is_center_line(void)
+{
+    if (func_abs((int)ad1 - (int)ad2) < 10 &&
+        Err > -1.0f && Err < 1.0f)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 复位飞坡状态机内部计数并回到普通巡线。
+ *
+ * 关闭飞坡开关或现场调试强制退出时，需要同时清掉阶段计数，避免重新开启后
+ * 沿用上一次弱磁窗口中的残留计数而误入飞坡。
+ */
+static void fly_reset_state(void)
+{
+    fly_detect_count = 0;
+    fly_state_count = 0;
+    flat_fly = FLY_STATE_IDLE;
+}
+
+/**
  * @brief 启动状态机更新
  * @details 10ms 调用一次，检测 P36 启动按键或外部命令，在停止、预启动、运行之间切换
  */
 void a_run_mode_update_start_state(void)
 {
-    /* 记录外部镜像状态，供后续扩展状态迁移诊断使用 */
-    flat_statr_date = flat_statr;
-
     /* 外部命令可直接请求进入运行态，flat_statr == 3 为一次性触发 */
     if (flat_statr == 3)
     {
@@ -114,52 +200,96 @@ void a_run_mode_update_fuya_state(void)
 
 /**
  * @brief 飞坡速度修正
- * @details 根据四路电感特征判断是否进入飞坡阶段，并在飞坡期间覆盖速度和转向输出
+ * @details 根据四路电感特征推进飞坡状态机，并在高风险阶段覆盖速度和转向输出。
  * @param speed 输出的目标速度指针
  */
 void a_run_mode_update_fly_speed(int *speed)
 {
-    /* A. 主环按 5ms 调用时，飞坡触发计数直接按 5ms 标尺累计。 */
-    if (app.fly.fly_ramp_enable == 1 &&
-        ad1 < 14 && ad2 < 5 && ad3 < 5 && ad4 < 14 &&
-        flat_fly == 0)
+    if (app.fly.fly_ramp_enable != 1)
     {
-        count_fly_1++;
-        if (count_fly_1 >= app.fly.count_fly_time_1)
-        {
-            count_fly_1 = 0;
-            flat_fly = 1; /* 进入飞坡阶段 */
-            count_fly_2 = 0;
-        }
+        fly_reset_state();
+        return;
     }
 
-    /* B. 飞坡阶段每个控制周期都覆盖速度与目标角速度，实现“锁角”。 */
-    if (flat_fly == 1)
+    switch (flat_fly)
     {
-        /* 外环在飞坡阶段冻结为固定目标，内环继续用 gyro 闭环跟踪。 */
-        *speed = app.fly.count_fly_speed;
-        PID.steer.output = (float)app.fly.count_fly_angle;
-
-        /* 飞坡保持时间同样按 5ms 调用周期累计。 */
-        count_fly_2++;
-        if (count_fly_2 >= app.fly.count_fly_time_2)
+    case FLY_STATE_IDLE:
+        if (fly_is_ramp_lost_signal())
         {
-            count_fly_2 = 0;
-            flat_fly = 0;
+            fly_detect_count++;
+            if (fly_detect_count >= app.fly.count_fly_time_1)
+            {
+                fly_detect_count = 0;
+                fly_state_count = 0;
+                flat_fly = FLY_STATE_HOLD;
+            }
         }
+        else
+        {
+            fly_detect_count = 0;
+        }
+
+        if (flat_fly != FLY_STATE_HOLD)
+        {
+            break;
+        }
+        /* 触发成立的同一控制周期立即锁角，避免飞坡入口多放行一个 5ms 周期。 */
+
+    case FLY_STATE_HOLD:
+        /* 离地/弱磁期间冻结外环目标，避免 Err 瞬态失真把车头拉偏。 */
+        *speed = app.fly.count_fly_speed;
+        PID.steer.output = (float)FLY_HOLD_ANGLE;
+
+        fly_state_count++;
+        if (fly_state_count >= app.fly.count_fly_time_2)
+        {
+            fly_state_count = 0;
+            flat_fly = FLY_STATE_RECOVER;
+        }
+        break;
+
+    case FLY_STATE_RECOVER:
+        /*
+         * 下地后第一件事是用飞坡低速回到中线。这里不再锁角，
+         * 让电感外环按 Err 回正，直到有效线信号下 Err 接近 0。
+         */
+        *speed = app.fly.count_fly_speed;
+        if (fly_is_center_line())
+        {
+            fly_state_count++;
+            if (fly_state_count >= FLY_RECOVER_COUNT)
+            {
+                fly_state_count = 0;
+                flat_fly = FLY_STATE_COOLDOWN;
+            }
+        }
+        else
+        {
+            fly_state_count = 0;
+        }
+        break;
+
+    case FLY_STATE_COOLDOWN:
+        /* 冷却期只禁止重复触发，不覆盖控制输出，给普通巡线一个稳定接管窗口。 */
+        fly_state_count++;
+        if (fly_state_count >= FLY_COOLDOWN_COUNT)
+        {
+            fly_reset_state();
+        }
+        break;
+
+    default:
+        fly_reset_state();
+        break;
     }
 }
 
-void run_mode_update_diff_output(float *diff_output)
+void run_mode_update_angle_target(float *angle_target)
 {
-    /* 环岛阶段可用 direct diff set 强制覆盖主链差速输出 */
+    /* 环岛阶段固定目标角速度，最终差速仍交给角速度内环闭环输出。 */
     if (ring_data.diff_set != 0)
     {
-        *diff_output = ring_data.diff_set;
-    }
-    else
-    {
-        *diff_output = PID.steer.output;
+        *angle_target = ring_data.diff_set;
     }
 }
 
@@ -184,49 +314,172 @@ enum RingStep current_state = no_ring;
 
 // 环岛过程数据，保存累计量和阶段标志
 RingStruct ring_data = {0};
+static int8 ring_pose_flat = 1; /* 姿态门控结果：1-允许圆环识别，0-桶/墙/坡面段禁止圆环 */
 
 /**
- * @brief 环岛状态机更新
- * @details 根据电感特征、编码器累计和角速度累计结果推进右环流程。
+ * @brief 读取当前环岛状态机阶段。
+ * @return int8 当前阶段编号：0-no_ring，1-ring，2-pre_ring，3-in_ring，4-pre_out_ring，5-out_ring。
+ *
+ * @note 仅供菜单和调试显示读取，不应由外部模块直接驱动状态迁移。
+ */
+int8 a_run_mode_get_ring_state(void)
+{
+    return (int8)current_state;
+}
+
+/**
+ * @brief 读取当前圆环姿态门控结果。
+ * @return int8 1-姿态接近平地，允许圆环识别；0-疑似桶/墙/坡面姿态，禁止圆环识别。
+ */
+int8 a_run_mode_get_ring_pose_flat(void)
+{
+    return ring_pose_flat;
+}
+
+/**
+ * @brief 复位环岛状态机和环岛输出覆盖量。
+ * @details 菜单关闭圆环时立即清掉阶段、计时和目标角速度覆盖，避免关闭后残留控制量继续影响主控链路。
+ */
+static void ring_reset_state(void)
+{
+    timedestroy(&ring_data.time_l);
+    timedestroy(&ring_data.time_r);
+    timedestroy(&ring_data.ing_ring_time);
+    timedestroy(&ring_data.out_ring_time);
+
+    ring_data.flast_l = 0;
+    ring_data.flast_r = 0;
+    ring_data.star_l = 0;
+    ring_data.star_r = 0;
+    ring_data.condition = 0;
+    ring_data.last_yaw = 0;
+    ring_data.diff_set = 0;
+    ring_data.distance = 0;
+    ring_data.encoder = 0;
+    ring_data.gyro_flat = 0;
+    ring_data.Gyroz = 0;
+    current_state = no_ring;
+}
+
+/**
+ * @brief 判断当前姿态是否允许圆环入口识别。
+ *
+ * 立体桶、墙面和坡面会改变车身重力方向，电感形态可能短暂接近圆环入口。
+ * 这里仅使用重力向量 Z 分量做滞回判断，避免 pitch 方向定义变化影响圆环门控。
+ *
+ * @return int8 1-接近平地，允许圆环识别；0-非平地姿态，禁止圆环识别。
+ */
+static int8 ring_is_flat_pose(void)
+{
+    float vzc;
+
+    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+
+    if (ring_pose_flat != 0)
+    {
+        if (vzc < RING_FLAT_BLOCK_VZ)
+        {
+            ring_pose_flat = 0;
+        }
+    }
+    else
+    {
+        if (vzc >= RING_FLAT_RELEASE_VZ)
+        {
+            ring_pose_flat = 1;
+        }
+    }
+
+    return ring_pose_flat;
+}
+
+/**
+ * @brief 判断左环入口电感特征是否命中。
+ * @return int8 1-命中左环入口特征，0-未命中。
+ *
+ * @note ad2/ad3 为 uint16，必须先转为 int 再求差值，避免无符号下溢影响差值判断。
+ */
+static int8 ring_is_left_entry_signal(void)
+{
+    int diff23;
+
+    diff23 = (int)ad2 - (int)ad3;
+
+    if (ad1 > 40 &&
+        ad2 > 15 &&
+        ad3 > 15 &&
+        ad4 > 40 &&ad1 <50&&ad2 <30&&ad3 <30&&ad4 <50)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 左环状态机更新
+ * @details 根据电感特征、编码器累计和角速度累计结果推进左环流程。
  * 注意此部分为高层状态机，不涉及高频浮点解算，但条件判断需防抖。
  */
-void circle_check_r(void)
+void circle_check_l(void)
 {
-    /* 右环入口特征连续命中计数 */
+    /* 左环入口特征连续命中计数 */
     static uint8 count_start = 0;
+
+    if (app.start.circle_flags != 1)
+    {
+        if (count_start != 0 || current_state != no_ring ||
+            ring_data.diff_set != 0 || ring_data.distance != 0 ||
+            ring_data.gyro_flat != 0 || ring_data.flast_l != 0 ||
+            ring_data.flast_r != 0)
+        {
+            count_start = 0;
+            ring_reset_state();
+        }
+        return;
+    }
 
     /* 状态机每次只推进一步，确保计时与传感器判定可追踪 */
     switch (current_state)
     {
     case no_ring:
-        /* 1. 根据电感特征识别右环入口 */
-        if (ad1 > 30 && ad2 < 50 && ad3 > 80 && ad4 > 90)
+        /* 1. 根据电感特征识别左环入口 (对称翻转原右环特征) */
+        if (ring_is_flat_pose() != 0 &&
+            ring_is_left_entry_signal() != 0)
         {
+            stop = 1;
             count_start++;
+        }
+        else
+        {
+            count_start = 0;
+            timedestroy(&ring_data.time_l);
         }
 
         /* 2. 在限定时间内连续命中多次才确认进入环岛 */
         if (count_start > 0)
         {
-            /* 在 1000ms 窗口内达到 3 次，判定右环成立 */
-            if (count_start >= 3)
+            /* 在 1000ms 窗口内达到 5 次，判定左环成立 */
+            if (count_start >= 1)
             {
+				stop=1;
                 count_start = 0;
-                timedestroy(&ring_data.time_r); // 清空右环识别定时器
-                ring_data.flast_r = 1;          // 置位右环过程标志
+                timedestroy(&ring_data.time_l); // 清空左环识别定时器
+                ring_data.flast_l = 1;          // 置位左环过程标志
                 /* 从入口识别切到 ring，后续进入距离累计阶段 */
                 current_state = ring; // 切换到环岛准备阶段
             }
             /* 超过 1000ms 仍未满足次数，丢弃本次识别 */
-            else if (timeadd(&ring_data.time_r, 1000))
+            else if (timeadd(&ring_data.time_l, 1000))
             {
                 count_start = 0;
+                timedestroy(&ring_data.time_l);
             }
         }
         break;
 
     case ring:
-        /* 清除环岛直接差速给定，开始累计编码器距离 */
+        /* 入环前先恢复普通循迹角速度目标，开始累计入口距离。 */
         ring_data.diff_set = 0;
         ring_data.distance = 1; // 允许累计编码器里程
         ring_data.Gyroz = 0;
@@ -236,6 +489,7 @@ void circle_check_r(void)
         {
             ring_data.distance = 0;
             ring_data.encoder = 0;
+            ring_data.last_yaw = imu660rc_yaw; // 记录预入环阶段初始航向角
             ring_data.gyro_flat = 1;
             ring_data.Gyroz = 0;
             current_state = pre_ring; // 切换到预入环阶段
@@ -243,68 +497,93 @@ void circle_check_r(void)
         break;
 
     case pre_ring:
-        /* 给定预入环直接差速目标 */
+        /* 给定预入环固定目标角速度，左环实测 Gyroz 为负。 */
         ring_data.diff_set = app.ring.pre_ring_Gyro_set;
 
-        /* 角速度累计达到阈值并持续 50ms 后，认为已真正入环 */
-        if (ring_data.Gyroz > 30 && timeadd(&ring_data.ing_ring_time, 50))
+        /* 相对预入环起点的偏航角累计达到入环阈值并确认 50ms 后，认为已真正入环。 */
+        /* 由于累加的角度自带符号，这里直接取绝对值判断是否转够30度即可，不论左右环。 */
+        if (ring_data.Gyroz < -40 && timeadd(&ring_data.ing_ring_time, 100))
         {
-            ring_data.diff_set = 0;                // 关闭预入环直接差速给定
-            timedestroy(&ring_data.ing_ring_time); // 清空入环确认计时器
-            current_state = in_ring;               // 切换到环内阶段
+            ring_data.diff_set = 0;
+            timedestroy(&ring_data.ing_ring_time);
+            current_state = in_ring;
         }
         break;
 
     case in_ring:
-        /* 环内角速度达到出环阈值后，进入预出环阶段 */
-        if (ring_data.Gyroz >= app.ring.pre_out_ring_Gyroz)
+        /* 左环 Gyroz 为负，必须达到负向环内阈值后才进入预出环。 */
+        if (ring_data.Gyroz <= -app.ring.in_ring_Gyroz)
         {
-            /* 进入预出环后由目标角速度引导车辆平顺回线 */
-            current_state = pre_out_ring; // 切换到预出环阶段
+            current_state = pre_out_ring;
         }
         break;
 
     case pre_out_ring:
-        /* 给定预出环直接差速目标 */
+        /* 给定预出环固定目标角速度，继续沿左环方向修正车身。 */
         ring_data.diff_set = app.ring.pre_out_ring_Gyro_set;
 
-        /* 角速度回落并持续 50ms 后，进入正式出环阶段 */
-        if (ring_data.Gyroz < app.ring.pre_out_ring_Gyroz && timeadd(&ring_data.out_ring_time, 50))
+        /* 预出环继续沿左环方向打到更大的出环角度，避免过早回线导致压线不稳。 */
+        if (ring_data.Gyroz < -app.ring.pre_out_ring_Gyroz && timeadd(&ring_data.out_ring_time, 50))
         {
-            ring_data.diff_set = 0;                // 关闭预出环直接差速给定
-            timedestroy(&ring_data.out_ring_time); // 清空出环确认计时器
-            ring_data.gyro_flat = 0;               // 关闭角速度累计
-            current_state = out_ring;              // 切换到出环确认阶段
+            ring_data.diff_set = 0;
+            timedestroy(&ring_data.out_ring_time);
+            ring_data.gyro_flat = 0;
+            ring_data.Gyroz = 0;
+            current_state = out_ring;
         }
-
         break;
 
     case out_ring:
         /* 1000ms 内电感重新平衡，则认为已完全驶离环岛 */
-        if (func_abs((int)(ad1 - ad4)) < 10 && timeadd(&ring_data.out_ring_time, 1000))
+        if (func_abs((int)(ad1 - ad4)) < 10 && timeadd(&ring_data.out_ring_time, 500))
         {
             timedestroy(&ring_data.out_ring_time); // 清空出环确认定时器
-            ring_data.flast_r = 0;                 // 清除右环过程标志
-            ring_data.diff_set = 0;                // 清除环岛直接差速给定
-            ring_data.Gyroz = 0;
-            current_state = no_ring; // 返回普通巡线状态
+            ring_data.flast_l = 0;                 // 清除左环过程标志
+            ring_data.last_yaw = 0;                // 清除初始航向角缓存
+            ring_data.diff_set = 0;                // 清零环岛目标角速度覆盖
+            ring_data.distance = 0;                // 关闭里程累计
+            ring_data.encoder = 0;                 // 清零里程累计量
+            ring_data.gyro_flat = 0;               // 关闭相对偏航角更新
+            ring_data.Gyroz = 0;                   // 清零相对偏航角差
+            current_state = no_ring;               // 返回普通巡线状态
         }
         break;
     }
 }
 
 /**
- * @brief 更新环岛判定所需的累计量
- * @details 根据使能标志累计 Z 轴角速度和编码器里程，用于环岛阶段切换判定
- * @note 这些累计量需要在环岛开始和结束阶段及时清零
+ * @brief 更新环岛判定所需的里程与偏航量
+ * @details
+ * `encoder` 继续按速度估计累计里程；`Gyroz` 现在使用前后两次yaw的差值进行增量累加。
+ * 这种方式可以避免跨0点跳变，并且累加出来的是实际转过的总角度量，符合转角触发阈值。
+ *
+ * @note 该函数依赖进入 `pre_ring` 时已经正确记录 `last_yaw`。
  */
 void gyro_integrals(void)
 {
-    /* 角速度累计使能时，累加校准后的 gyro_z */
+    /* 环岛阶段只关心相对转过多少角，通过前后两次yaw的差值进行增量累加。 */
     if (ring_data.gyro_flat == 1)
     {
-        /* Gyroz 为离散累加量，阈值需与采样周期共同校准 */
-        ring_data.Gyroz += gyro_z; // 用于判断是否完成入环/出环转向
+        /* 计算当前yaw与上一次yaw的差值。 */
+        float delta_yaw = imu660rc_yaw - ring_data.last_yaw;
+
+        /* 处理跨越0点（或360点）的情况，将角差折返到 -180~180。 */
+        if (delta_yaw > 180.0f)
+        {
+            delta_yaw -= 360.0f;
+        }
+        else if (delta_yaw < -180.0f)
+        {
+            delta_yaw += 360.0f;
+        }
+
+        /* 增量累加到总角度。这里取绝对值，因为我们只关心“转了多少度”。 */
+        /* 如果要分左右环区分正负，则根据打角方向进行符号处理，或者就直接累加。*/
+        /* 考虑到之前逻辑左环(pre_ring_Gyro_set>0)转角为正，右环(pre_ring_Gyro_set<0)转角为负：*/
+        ring_data.Gyroz += delta_yaw;
+
+        /* 更新 last_yaw 供下一次计算使用 */
+        ring_data.last_yaw = imu660rc_yaw;
     }
 
     /* 编码器累计使能时，累加当前前进距离估计 */
