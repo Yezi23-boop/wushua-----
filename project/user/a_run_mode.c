@@ -373,22 +373,12 @@ int8 a_run_mode_get_expected_element(void)
     return (int8)expected_element;
 }
 
-int8 a_run_mode_get_track_mode(void)
-{
-    if (app.start.track_mode == TRACK_MODE_LEFT_RING_CYLINDER)
-    {
-        return TRACK_MODE_LEFT_RING_CYLINDER;
-    }
-
-    return TRACK_MODE_LEFT_RING_CYLINDER;
-}
-
 int8 a_run_mode_get_cylinder_state(void)
 {
     return (int8)cylinder_state;
 }
 
-uint8 a_run_mode_take_ring_finish_event(void)
+static uint8 ring_take_finish_event(void)
 {
     uint8 event;
 
@@ -503,7 +493,7 @@ static void cylinder_reset_state(void)
     cylinder_ground_count = 0;
     cylinder_stable_count = 0;
     cylinder_state = CYL_IDLE;
-    fuya_exit_cylinder_peak_mode();
+    fuya_restore_cylinder_peak_angle();
 }
 
 static void cylinder_start_wait_top(void)
@@ -512,7 +502,7 @@ static void cylinder_start_wait_top(void)
     cylinder_ground_count = 0;
     cylinder_stable_count = 0;
     cylinder_state = CYL_WAIT_TOP;
-    fuya_exit_cylinder_peak_mode();
+    fuya_restore_cylinder_peak_angle();
 }
 
 static uint8 cylinder_update_10ms(void)
@@ -537,7 +527,7 @@ static uint8 cylinder_update_10ms(void)
                 cylinder_top_count = 0;
                 cylinder_ground_count = 0;
                 cylinder_stable_count = 0;
-                fuya_enter_cylinder_peak_mode();
+                fuya_apply_cylinder_peak_angle();
                 cylinder_state = CYL_WAIT_GROUND;
             }
         }
@@ -569,7 +559,7 @@ static uint8 cylinder_update_10ms(void)
         if (cylinder_stable_count >= CYLINDER_STABLE_DELAY_COUNT)
         {
             cylinder_stable_count = 0;
-            fuya_exit_cylinder_peak_mode();
+            fuya_restore_cylinder_peak_angle();
             cylinder_state = CYL_IDLE;
             return 1;
         }
@@ -607,7 +597,7 @@ void a_run_mode_update_track_element_gate(void)
     if (expected_element == ELEMENT_LEFT_RING)
     {
         circle_check_l(1);
-        if (a_run_mode_take_ring_finish_event() != 0)
+        if (ring_take_finish_event() != 0)
         {
             expected_element = ELEMENT_CYLINDER;
             cylinder_start_wait_top();
@@ -618,7 +608,7 @@ void a_run_mode_update_track_element_gate(void)
     if (expected_element == ELEMENT_CYLINDER)
     {
         circle_check_l(0);
-        (void)a_run_mode_take_ring_finish_event();
+        (void)ring_take_finish_event();
         cylinder_done = cylinder_update_10ms();
         if (cylinder_done != 0)
         {

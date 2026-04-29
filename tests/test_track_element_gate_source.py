@@ -23,15 +23,13 @@ def test_track_element_gate_contract_is_wired():
 
     assert "void circle_check_l(uint8 allow_entry);" in header
     assert "void a_run_mode_update_track_element_gate(void);" in header
-    assert "uint8 a_run_mode_take_ring_finish_event(void);" in header
     assert "int8 a_run_mode_get_expected_element(void);" in header
-    assert "int8 a_run_mode_get_track_mode(void);" in header
     assert "int8 a_run_mode_get_cylinder_state(void);" in header
 
     assert "enum TrackElement" in source
     assert "enum CylinderStep" in source
     assert "ring_finish_event = 1;" in source
-    assert "uint8 a_run_mode_take_ring_finish_event(void)" in source
+    assert "static uint8 ring_take_finish_event(void)" in source
     assert "void a_run_mode_update_track_element_gate(void)" in source
     assert "circle_check_l(1);" in source
     assert "circle_check_l(0);" in source
@@ -46,13 +44,13 @@ def test_cylinder_peak_angle_api_is_split_from_element_state_machine():
     fuya_source = _read(FUYA_C)
     run_mode_source = _read(A_RUN_MODE_C)
 
-    assert "void fuya_enter_cylinder_peak_mode(void);" in fuya_header
-    assert "void fuya_exit_cylinder_peak_mode(void);" in fuya_header
-    assert "void fuya_enter_cylinder_peak_mode(void)" in fuya_source
-    assert "void fuya_exit_cylinder_peak_mode(void)" in fuya_source
+    assert "void fuya_apply_cylinder_peak_angle(void);" in fuya_header
+    assert "void fuya_restore_cylinder_peak_angle(void);" in fuya_header
+    assert "void fuya_apply_cylinder_peak_angle(void)" in fuya_source
+    assert "void fuya_restore_cylinder_peak_angle(void)" in fuya_source
 
-    assert "fuya_enter_cylinder_peak_mode();" in run_mode_source
-    assert "fuya_exit_cylinder_peak_mode();" in run_mode_source
+    assert "fuya_apply_cylinder_peak_angle();" in run_mode_source
+    assert "fuya_restore_cylinder_peak_angle();" in run_mode_source
     assert "#define CYLINDER_TOP_VZ -0.85f" in run_mode_source
     assert "#define CYLINDER_GROUND_VZ 0.98f" in run_mode_source
     assert "CYLINDER_STABLE_DELAY_COUNT 10" in run_mode_source

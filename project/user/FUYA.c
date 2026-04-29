@@ -63,8 +63,6 @@ static float fuya_angle_backup_b1 = 0.0f;    /* 过顶前 B_1 备份 */
 static float fuya_angle_backup_cl = 0.0f;    /* 过顶前 C_l 备份 */
 
 static float fuya_read_vzc(void);
-static void fuya_apply_cylinder_peak_angle(void);
-static void fuya_restore_cylinder_peak_angle(void);
 static int fuya_ramp_pwm_with_step(int current_pwm, int target_pwm, int up_step);
 static int fuya_ramp_pwm_startup(int current_pwm, int target_pwm);
 
@@ -219,7 +217,7 @@ static int fuya_ramp_pwm_startup(int current_pwm, int target_pwm)
  * @brief 进入圆筒最高点处理窗口
  * @details 首次触发时备份 angle 参数，并覆盖为过顶专用权重。
  */
-static void fuya_apply_cylinder_peak_angle(void)
+void fuya_apply_cylinder_peak_angle(void)
 {
     if (!fuya_cylinder_peak_flag)
     {
@@ -239,7 +237,7 @@ static void fuya_apply_cylinder_peak_angle(void)
  * @brief 恢复圆筒最高点触发前的 angle 参数
  * @details 退出运行态或回到平地时统一调用，避免临时参数残留。
  */
-static void fuya_restore_cylinder_peak_angle(void)
+void fuya_restore_cylinder_peak_angle(void)
 {
     if (fuya_cylinder_peak_flag)
     {
@@ -251,16 +249,6 @@ static void fuya_restore_cylinder_peak_angle(void)
     fuya_cylinder_top_count = 0;
     fuya_cylinder_ground_count = 0;
     fuya_cylinder_peak_flag = 0;
-}
-
-void fuya_enter_cylinder_peak_mode(void)
-{
-    fuya_apply_cylinder_peak_angle();
-}
-
-void fuya_exit_cylinder_peak_mode(void)
-{
-    fuya_restore_cylinder_peak_angle();
 }
 
 /**

@@ -98,22 +98,10 @@ int8 a_run_mode_get_ring_pose_flat(void);
 int8 a_run_mode_get_expected_element(void);
 
 /**
- * @brief 读取当前有效赛道模式。
- * @return int8 当前生效模式，未实现模式回退为 0。
- */
-int8 a_run_mode_get_track_mode(void);
-
-/**
  * @brief 读取当前圆筒状态机阶段。
  * @return int8 0-空闲，1-等顶部，2-等回平，3-稳定延迟。
  */
 int8 a_run_mode_get_cylinder_state(void);
-
-/**
- * @brief 读取并清除圆环完成事件。
- * @return uint8 1-本次读取消费到圆环完成事件，0-无事件。
- */
-uint8 a_run_mode_take_ring_finish_event(void);
 
 void circle_check_l(uint8 allow_entry);
 void gyro_integrals(void);
