@@ -33,6 +33,8 @@ def test_track_element_gate_contract_is_wired():
     assert "void a_run_mode_update_track_element_gate(void)" in source
     assert "circle_check_l(1);" in source
     assert "circle_check_l(0);" in source
+    assert "if (app.start.circle_flags != 1)" in source
+    assert "start_state != START_STATE_2 || app.start.circle_flags != 1" not in source
 
     assert "a_run_mode_update_track_element_gate();" in runner
     assert "gyro_integrals();" in runner

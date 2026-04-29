@@ -582,11 +582,9 @@ static void track_element_reset_state(void)
 
 void a_run_mode_update_track_element_gate(void)
 {
-    int8 start_state;
     uint8 cylinder_done;
 
-    start_state = a_run_mode_get_start_state();
-    if (start_state != START_STATE_2 || app.start.circle_flags != 1)
+    if (app.start.circle_flags != 1)
     {
         track_element_reset_state();
         return;
