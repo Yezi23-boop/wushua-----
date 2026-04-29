@@ -145,7 +145,7 @@ void dianya_jiance(void)
     /* 执行 ADC 转换 */
     adc_raw = adc_convert(ADC_CH13_P05);
     /* 转换公式：ADC值 * 转换系数（0.0092 需要根据分压电路电阻比例计算） */
-    dianya = (float)adc_raw * 0.0092f * 4;
+    dianya = (float)adc_raw * 0.0092f;
 
     /* 锂电池欠压判定：低于 11.3V（假设为 3S 锂电） */
     if (dianya < 11.2f)

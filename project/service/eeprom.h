@@ -49,12 +49,12 @@ typedef struct
  */
 typedef struct
 {
-    float ring_encoder;          /**< 入环判定阈值：编码器积分距离达到此值确认入环 */
-    float pre_ring_Gyro_set;     /**< 预入环固定目标角速度（入环前的打角力度） */
-    float in_ring_Gyroz;         /**< 环内巡航角速度设定值（维持圆周运动的角速度） */
-    float pre_out_ring_Gyro_set; /**< 预出环固定目标角速度（出环前的打角力度） */
-    float pre_out_ring_Gyroz;    /**< 出环判定角速度阈值 */
-    float pre_out_ring_encoder;  /**< 出环判定阈值：编码器积分距离达到此值确认出环 */
+    float ring_entry_encoder;       /**< ring阶段编码器积分阈值，达到后进入pre_ring */
+    float pre_ring_Gyro_target;     /**< pre_ring阶段固定目标角速度 */
+    float pre_ring_Gyroz;           /**< pre_ring阶段累计转角阈值，达到后进入in_ring */
+    float in_ring_Gyroz;            /**< in_ring阶段累计转角阈值，达到后进入pre_out_ring */
+    float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
+    float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入out_ring */
 } AppRingConfig;
 
 /**

@@ -50,18 +50,18 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_encoder = 2.00f;           /* 入环积分阈值 */
-    config->ring.pre_ring_Gyro_set = 50.00f;     /* 入环固定目标角速度 */
-    config->ring.in_ring_Gyroz = 250.00f;         /* 环内角速度 */
-    config->ring.pre_out_ring_Gyro_set = 50.00f; /* 出环固定目标角速度 */
-    config->ring.pre_out_ring_Gyroz = 350.00f;    /* 出环角速度阈值 */
-    config->ring.pre_out_ring_encoder = 30.00f;   /* 出环积分阈值 */
+    config->ring.ring_entry_encoder = 0.50f;        /* ring->pre_ring编码器积分阈值 */
+    config->ring.pre_ring_Gyro_target = 20.00f;     /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
+    config->ring.in_ring_Gyroz = 270.00f;           /* in_ring->pre_out_ring累计转角阈值 */
+    config->ring.pre_out_ring_Gyro_target = 10.00f; /* pre_out_ring固定目标角速度 */
+    config->ring.pre_out_ring_Gyroz = 330.00f;      /* pre_out_ring->out_ring累计转角阈值 */
 
     /* 飞坡策略默认参数 */
-    config->fly.count_fly_speed = 15;   /* 飞坡慢速值 */
+    config->fly.count_fly_speed = 15;  /* 飞坡慢速值 */
     config->fly.count_fly_time_1 = 3;  /* 触发检测次数 (3 * 5ms = 15ms) */
     config->fly.count_fly_time_2 = 10; /* 状态保持时间 (10 * 5ms = 50ms) */
-    config->fly.fly_ramp_enable = 1;    /* 默认开启飞坡检测 */
+    config->fly.fly_ramp_enable = 1;   /* 默认开启飞坡检测 */
 }
 
 /**
@@ -105,12 +105,12 @@ static void eeprom_read_config(AppConfig *config)
         config->angle.gyro_feedback_scale = 10.0f;
     }
 
-    config->ring.ring_encoder = read_float(16);
-    config->ring.pre_ring_Gyro_set = read_float(17);
-    config->ring.in_ring_Gyroz = read_float(18);
-    config->ring.pre_out_ring_Gyro_set = read_float(19);
-    config->ring.pre_out_ring_Gyroz = read_float(20);
-    config->ring.pre_out_ring_encoder = read_float(21);
+    config->ring.ring_entry_encoder = read_float(16);
+    config->ring.pre_ring_Gyro_target = read_float(17);
+    config->ring.pre_ring_Gyroz = read_float(18);
+    config->ring.in_ring_Gyroz = read_float(19);
+    config->ring.pre_out_ring_Gyro_target = read_float(20);
+    config->ring.pre_out_ring_Gyroz = read_float(21);
 
     config->fly.count_fly_speed = (int)read_int(22);
     config->fly.count_fly_time_1 = (int)read_int(23);
@@ -169,12 +169,12 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->angle.A_1, 15);
     save_float(config->angle.gyro_feedback_scale, 28);
 
-    save_float(config->ring.ring_encoder, 16);
-    save_float(config->ring.pre_ring_Gyro_set, 17);
-    save_float(config->ring.in_ring_Gyroz, 18);
-    save_float(config->ring.pre_out_ring_Gyro_set, 19);
-    save_float(config->ring.pre_out_ring_Gyroz, 20);
-    save_float(config->ring.pre_out_ring_encoder, 21);
+    save_float(config->ring.ring_entry_encoder, 16);
+    save_float(config->ring.pre_ring_Gyro_target, 17);
+    save_float(config->ring.pre_ring_Gyroz, 18);
+    save_float(config->ring.in_ring_Gyroz, 19);
+    save_float(config->ring.pre_out_ring_Gyro_target, 20);
+    save_float(config->ring.pre_out_ring_Gyroz, 21);
 
     save_int(config->fly.count_fly_speed, 22);
     save_int(config->fly.count_fly_time_1, 23);
