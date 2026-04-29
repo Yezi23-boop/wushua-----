@@ -56,6 +56,18 @@ void fuya_force_stop(void);
 void fuya_update_simple(void);
 
 /**
+ * @brief 进入圆筒过顶专用角度参数模式。
+ * @details 首次进入时备份 app.angle 参数，并切换为圆筒过顶专用权重。
+ */
+void fuya_enter_cylinder_peak_mode(void);
+
+/**
+ * @brief 退出圆筒过顶专用角度参数模式。
+ * @details 恢复进入圆筒过顶前备份的 app.angle 参数。
+ */
+void fuya_exit_cylinder_peak_mode(void);
+
+/**
  * @brief 10ms 圆筒最高点检测
  * @details
  * 仅在运行态工作。检测到圆筒最高点后置标志位，并临时覆盖角度参数；

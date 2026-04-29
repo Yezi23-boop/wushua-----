@@ -30,6 +30,15 @@ static int fly_state_count = 0;  /* 飞坡保持、恢复和冷却阶段的 5ms 
 /* --- 圆环姿态门控参数（run_time_2 以 10ms 调用） --- */
 #define RING_FLAT_BLOCK_VZ 0.985f   /* 低于该重力 Z 分量时认为已进入桶/墙/坡面姿态 */
 #define RING_FLAT_RELEASE_VZ 0.99f /* 回到该重力 Z 分量以上才重新允许圆环识别 */
+#define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，10ms 调用下约 30ms */
+
+/* --- 赛道元素仲裁与圆筒状态参数（run_time_2 以 10ms 调用） --- */
+#define TRACK_MODE_LEFT_RING_CYLINDER 0
+#define CYLINDER_TOP_VZ -0.85f
+#define CYLINDER_GROUND_VZ 0.98f
+#define CYLINDER_TOP_CONFIRM_COUNT 2u
+#define CYLINDER_GROUND_CONFIRM_COUNT 3u
+#define CYLINDER_STABLE_DELAY_COUNT 10u
 
 enum StartState
 {
@@ -309,12 +318,35 @@ enum RingStep
     out_ring      // 出环确认阶段
 };
 
+enum TrackElement
+{
+    ELEMENT_NONE = 0,
+    ELEMENT_LEFT_RING = 1,
+    ELEMENT_RIGHT_RING = 2,
+    ELEMENT_CYLINDER = 3
+};
+
+enum CylinderStep
+{
+    CYL_IDLE = 0,
+    CYL_WAIT_TOP = 1,
+    CYL_WAIT_GROUND = 2,
+    CYL_STABLE_DELAY = 3
+};
+
 // 当前环岛状态机状态
 enum RingStep current_state = no_ring;
 
 // 环岛过程数据，保存累计量和阶段标志
 RingStruct ring_data = {0};
 static int8 ring_pose_flat = 1; /* 姿态门控结果：1-允许圆环识别，0-桶/墙/坡面段禁止圆环 */
+static uint8 ring_entry_count = 0;
+static uint8 ring_finish_event = 0;
+static enum TrackElement expected_element = ELEMENT_LEFT_RING;
+static enum CylinderStep cylinder_state = CYL_IDLE;
+static uint8 cylinder_top_count = 0;
+static uint8 cylinder_ground_count = 0;
+static uint8 cylinder_stable_count = 0;
 
 /**
  * @brief 读取当前环岛状态机阶段。
@@ -334,6 +366,36 @@ int8 a_run_mode_get_ring_state(void)
 int8 a_run_mode_get_ring_pose_flat(void)
 {
     return ring_pose_flat;
+}
+
+int8 a_run_mode_get_expected_element(void)
+{
+    return (int8)expected_element;
+}
+
+int8 a_run_mode_get_track_mode(void)
+{
+    if (app.start.track_mode == TRACK_MODE_LEFT_RING_CYLINDER)
+    {
+        return TRACK_MODE_LEFT_RING_CYLINDER;
+    }
+
+    return TRACK_MODE_LEFT_RING_CYLINDER;
+}
+
+int8 a_run_mode_get_cylinder_state(void)
+{
+    return (int8)cylinder_state;
+}
+
+uint8 a_run_mode_take_ring_finish_event(void)
+{
+    uint8 event;
+
+    event = ring_finish_event;
+    ring_finish_event = 0;
+
+    return event;
 }
 
 /**
@@ -358,6 +420,8 @@ static void ring_reset_state(void)
     ring_data.encoder = 0;
     ring_data.gyro_flat = 0;
     ring_data.Gyroz = 0;
+    ring_entry_count = 0;
+    ring_finish_event = 0;
     current_state = no_ring;
 }
 
@@ -397,18 +461,17 @@ static int8 ring_is_flat_pose(void)
  * @brief 判断左环入口电感特征是否命中。
  * @return int8 1-命中左环入口特征，0-未命中。
  *
- * @note ad2/ad3 为 uint16，必须先转为 int 再求差值，避免无符号下溢影响差值判断。
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    int diff23;
-
-    diff23 = (int)ad2 - (int)ad3;
-
     if (ad1 > 40 &&
         ad2 > 15 &&
         ad3 > 15 &&
-        ad4 > 40 &&ad1 <50&&ad2 <30&&ad3 <30&&ad4 <50)
+        ad4 > 40 &&
+        ad1 < 50 &&
+        ad2 < 30 &&
+        ad3 < 30 &&
+        ad4 < 50)
     {
         return 1;
     }
@@ -416,24 +479,171 @@ static int8 ring_is_left_entry_signal(void)
     return 0;
 }
 
+static float cylinder_read_vzc(void)
+{
+    float vzc;
+
+    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+    if (vzc > 1.0f)
+    {
+        vzc = 1.0f;
+    }
+    else if (vzc < -1.0f)
+    {
+        vzc = -1.0f;
+    }
+
+    fuya_last_vzc = vzc;
+    return vzc;
+}
+
+static void cylinder_reset_state(void)
+{
+    cylinder_top_count = 0;
+    cylinder_ground_count = 0;
+    cylinder_stable_count = 0;
+    cylinder_state = CYL_IDLE;
+    fuya_exit_cylinder_peak_mode();
+}
+
+static void cylinder_start_wait_top(void)
+{
+    cylinder_top_count = 0;
+    cylinder_ground_count = 0;
+    cylinder_stable_count = 0;
+    cylinder_state = CYL_WAIT_TOP;
+    fuya_exit_cylinder_peak_mode();
+}
+
+static uint8 cylinder_update_10ms(void)
+{
+    float vzc;
+
+    if (cylinder_state == CYL_IDLE)
+    {
+        cylinder_start_wait_top();
+    }
+
+    vzc = cylinder_read_vzc();
+
+    switch (cylinder_state)
+    {
+    case CYL_WAIT_TOP:
+        if (vzc <= CYLINDER_TOP_VZ)
+        {
+            cylinder_top_count++;
+            if (cylinder_top_count >= CYLINDER_TOP_CONFIRM_COUNT)
+            {
+                cylinder_top_count = 0;
+                cylinder_ground_count = 0;
+                cylinder_stable_count = 0;
+                fuya_enter_cylinder_peak_mode();
+                cylinder_state = CYL_WAIT_GROUND;
+            }
+        }
+        else
+        {
+            cylinder_top_count = 0;
+        }
+        break;
+
+    case CYL_WAIT_GROUND:
+        if (vzc >= CYLINDER_GROUND_VZ)
+        {
+            cylinder_ground_count++;
+            if (cylinder_ground_count >= CYLINDER_GROUND_CONFIRM_COUNT)
+            {
+                cylinder_ground_count = 0;
+                cylinder_stable_count = 0;
+                cylinder_state = CYL_STABLE_DELAY;
+            }
+        }
+        else
+        {
+            cylinder_ground_count = 0;
+        }
+        break;
+
+    case CYL_STABLE_DELAY:
+        cylinder_stable_count++;
+        if (cylinder_stable_count >= CYLINDER_STABLE_DELAY_COUNT)
+        {
+            cylinder_stable_count = 0;
+            fuya_exit_cylinder_peak_mode();
+            cylinder_state = CYL_IDLE;
+            return 1;
+        }
+        break;
+
+    default:
+        cylinder_reset_state();
+        break;
+    }
+
+    return 0;
+}
+
+static void track_element_reset_state(void)
+{
+    expected_element = ELEMENT_LEFT_RING;
+    ring_reset_state();
+    cylinder_reset_state();
+}
+
+void a_run_mode_update_track_element_gate(void)
+{
+    int8 start_state;
+    uint8 cylinder_done;
+
+    start_state = a_run_mode_get_start_state();
+    if (start_state != START_STATE_2 || app.start.circle_flags != 1)
+    {
+        track_element_reset_state();
+        return;
+    }
+
+    /* 未实现的右环相关模式在运行时按模式 0 执行，避免现场误选后关闭特殊元素。 */
+
+    if (expected_element == ELEMENT_LEFT_RING)
+    {
+        circle_check_l(1);
+        if (a_run_mode_take_ring_finish_event() != 0)
+        {
+            expected_element = ELEMENT_CYLINDER;
+            cylinder_start_wait_top();
+        }
+        return;
+    }
+
+    if (expected_element == ELEMENT_CYLINDER)
+    {
+        circle_check_l(0);
+        (void)a_run_mode_take_ring_finish_event();
+        cylinder_done = cylinder_update_10ms();
+        if (cylinder_done != 0)
+        {
+            expected_element = ELEMENT_LEFT_RING;
+        }
+        return;
+    }
+
+    expected_element = ELEMENT_LEFT_RING;
+}
+
 /**
  * @brief 左环状态机更新
  * @details 根据电感特征、编码器累计和角速度累计结果推进左环流程。
  * 注意此部分为高层状态机，不涉及高频浮点解算，但条件判断需防抖。
  */
-void circle_check_l(void)
+void circle_check_l(uint8 allow_entry)
 {
-    /* 左环入口特征连续命中计数 */
-    static uint8 count_start = 0;
-
     if (app.start.circle_flags != 1)
     {
-        if (count_start != 0 || current_state != no_ring ||
+        if (ring_entry_count != 0 || current_state != no_ring ||
             ring_data.diff_set != 0 || ring_data.distance != 0 ||
             ring_data.gyro_flat != 0 || ring_data.flast_l != 0 ||
             ring_data.flast_r != 0)
         {
-            count_start = 0;
             ring_reset_state();
         }
         return;
@@ -444,26 +654,27 @@ void circle_check_l(void)
     {
     case no_ring:
         /* 1. 根据电感特征识别左环入口 (对称翻转原右环特征) */
-        if (ring_is_flat_pose() != 0 &&
+        if (allow_entry != 0 &&
+            ring_is_flat_pose() != 0 &&
             ring_is_left_entry_signal() != 0)
         {
             stop = 1;
-            count_start++;
+            ring_entry_count++;
         }
         else
         {
-            count_start = 0;
+            ring_entry_count = 0;
             timedestroy(&ring_data.time_l);
         }
 
         /* 2. 在限定时间内连续命中多次才确认进入环岛 */
-        if (count_start > 0)
+        if (ring_entry_count > 0)
         {
-            /* 在 1000ms 窗口内达到 5 次，判定左环成立 */
-            if (count_start >= 1)
+            /* 在 1000ms 窗口内达到连续确认次数，判定左环成立。 */
+            if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
             {
 				stop=1;
-                count_start = 0;
+                ring_entry_count = 0;
                 timedestroy(&ring_data.time_l); // 清空左环识别定时器
                 ring_data.flast_l = 1;          // 置位左环过程标志
                 /* 从入口识别切到 ring，后续进入距离累计阶段 */
@@ -472,7 +683,7 @@ void circle_check_l(void)
             /* 超过 1000ms 仍未满足次数，丢弃本次识别 */
             else if (timeadd(&ring_data.time_l, 1000))
             {
-                count_start = 0;
+                ring_entry_count = 0;
                 timedestroy(&ring_data.time_l);
             }
         }
@@ -535,7 +746,7 @@ void circle_check_l(void)
 
     case out_ring:
         /* 1000ms 内电感重新平衡，则认为已完全驶离环岛 */
-        if (func_abs((int)(ad1 - ad4)) < 10 && timeadd(&ring_data.out_ring_time, 500))
+        if (func_abs((int)ad1 - (int)ad4) < 10 && timeadd(&ring_data.out_ring_time, 500))
         {
             timedestroy(&ring_data.out_ring_time); // 清空出环确认定时器
             ring_data.flast_l = 0;                 // 清除左环过程标志
@@ -546,6 +757,7 @@ void circle_check_l(void)
             ring_data.gyro_flat = 0;               // 关闭相对偏航角更新
             ring_data.Gyroz = 0;                   // 清零相对偏航角差
             current_state = no_ring;               // 返回普通巡线状态
+            ring_finish_event = 1;
         }
         break;
     }

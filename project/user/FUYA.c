@@ -253,6 +253,16 @@ static void fuya_restore_cylinder_peak_angle(void)
     fuya_cylinder_peak_flag = 0;
 }
 
+void fuya_enter_cylinder_peak_mode(void)
+{
+    fuya_apply_cylinder_peak_angle();
+}
+
+void fuya_exit_cylinder_peak_mode(void)
+{
+    fuya_restore_cylinder_peak_angle();
+}
+
 /**
  * @brief 负压模块初始化
  * @details 初始化 PWM 通道并复位内部状态到安全默认值。

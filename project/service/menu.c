@@ -74,6 +74,7 @@ static void Menu_Draw_Sensor(void);
 static void Menu_Draw_Ring(int edit_line);
 static void Menu_Draw_Fly(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
+static void Menu_Process_Track_Mode(void);
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
 static void Keystroke_Menu_HOME(void);
@@ -525,12 +526,14 @@ static void Menu_Draw_Start(int edit_line)
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "trk_mode");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.circle_flags, 3);
     ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
     ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
     ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
+    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.track_mode, 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -606,8 +609,8 @@ static void Menu_Draw_Sensor(void)
     ips114_show_int32(176, 3 * MENU_ROW_HEIGHT, MA[2], 4);
     ips114_show_int32(176, 4 * MENU_ROW_HEIGHT, MA[3], 4);
 
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "peak");
-    ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, fuya_cylinder_peak_flag, 1);
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "cyl");
+    ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
     ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "vzc");
     ips114_show_float(176, 5 * MENU_ROW_HEIGHT, fuya_last_vzc, 2, 3);
 
@@ -640,8 +643,10 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
     ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
     ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
-    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "P");
-    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_ring_pose_flat(), 1);
+    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "X");
+    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_expected_element(), 1);
+    ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
+    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -688,6 +693,48 @@ static void Menu_Process_Special_Value(int16 *parameter)
     case KEYSTROKE_TWO:
     case KEYSTROKE_TWO_LONG:
         *parameter = 0;
+        changed = 1;
+        break;
+    default:
+        break;
+    }
+
+    if (changed)
+        control_apply_config();
+}
+
+static void Menu_Process_Track_Mode(void)
+{
+    uint8 event_code;
+    uint8 changed;
+
+    changed = 0;
+    ips114_show_string(MENU_STEP_X, 0, "0-3");
+
+    event_code = Menu_Read_Key_Event();
+    if (event_code == 0)
+        return;
+
+    Menu_Handle_Common_Key(keystroke_label);
+
+    switch (keystroke_label)
+    {
+    case KEYSTROKE_ONE:
+    case KEYSTROKE_ONE_LONG:
+        app.start.track_mode++;
+        if (app.start.track_mode > 3)
+        {
+            app.start.track_mode = 0;
+        }
+        changed = 1;
+        break;
+    case KEYSTROKE_TWO:
+    case KEYSTROKE_TWO_LONG:
+        app.start.track_mode--;
+        if (app.start.track_mode < 0)
+        {
+            app.start.track_mode = 3;
+        }
         changed = 1;
         break;
     default:
@@ -804,11 +851,11 @@ static void Menu_Start_Process(void)
     {
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -831,6 +878,10 @@ static void Menu_Start_Process(void)
     case 15:
         Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.angle.gyro_feedback_scale, 0.1f);
+        break;
+    case 16:
+        Menu_Draw_Start(6 * MENU_ROW_HEIGHT);
+        Menu_Process_Track_Mode();
         break;
     default:
         break;
@@ -1048,6 +1099,7 @@ void Keystroke_Menu(void)
     case 13:
     case 14:
     case 15:
+    case 16:
         Menu_Start_Process();
         break;
     case 2:

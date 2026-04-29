@@ -28,6 +28,7 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 启动与基础配置默认值 */
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.circle_flags = 1;           /* 默认关闭圆环识别 */
+    config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 50.00f;         /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
@@ -116,6 +117,11 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.count_fly_time_2 = (int)read_int(24);
     config->fly.fly_ramp_enable = (int16)read_int(26);
     config->start.fuya_wall_percent = read_float(27);
+    config->start.track_mode = (int16)read_int(29);
+    if (config->start.track_mode < 0 || config->start.track_mode > 3)
+    {
+        config->start.track_mode = 0;
+    }
 
     percent_migrated = 0;
     if (config->start.fuya_xili < 0.0f || config->start.fuya_xili > 100.0f)
@@ -175,6 +181,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.count_fly_time_2, 24);
     save_int(config->fly.fly_ramp_enable, 26);
     save_float(clamp_percent_value(config->start.fuya_wall_percent, 70.0f), 27);
+    save_int(config->start.track_mode, 29);
 }
 
 /**

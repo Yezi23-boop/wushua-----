@@ -114,6 +114,10 @@ void control_apply_config(void)
 
     app.start.fuya_xili = clamp_config_percent(app.start.fuya_xili);
     app.start.fuya_wall_percent = clamp_config_percent(app.start.fuya_wall_percent);
+    if (app.start.track_mode < 0 || app.start.track_mode > 3)
+    {
+        app.start.track_mode = 0;
+    }
 
     /* 1. 同步转向环，包含二次校正项 */
     PID.steer.Kp = app.speed.kp_Err;

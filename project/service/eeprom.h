@@ -10,6 +10,7 @@ typedef struct
 {
     int16 start_flag;        /**< 启动标志位：1-启动运行，0-停止待机 */
     int16 circle_flags;      /**< 圆环识别开关：1-开启，0-关闭 */
+    int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
 } AppStartConfig;
