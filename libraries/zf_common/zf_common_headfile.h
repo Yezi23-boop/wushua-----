@@ -94,6 +94,7 @@
 #include "key.h"
 #include "vofa.h"
 #include "a_run.h"
+#include "a_run_mode.h"
 #include "soft_timer.h"
 #include "../user/ADC.h"
 #include "debug_view.h"

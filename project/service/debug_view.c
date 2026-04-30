@@ -78,8 +78,12 @@ void printf_adc(void)
  */
 void printf_imu(void)
 {
-	float vzc=0;
+    float vzc = 0.0f;
+    float acc_vz;
+
     imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+    acc_vz = a_run_mode_get_cylinder_acc_vz();
+
     ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
     ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
     ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);
@@ -88,10 +92,14 @@ void printf_imu(void)
     ips114_show_float(4 * 24, 18 * 5, imu660rc_quarternion[2], 1, 3);
     ips114_show_float(4 * 24, 18 * 6, imu660rc_quarternion[3], 1, 3);
 
-    ips114_show_float(0, 15, imu660rc_gyro_x, 6, 1);
-    ips114_show_float(0, 35, imu660rc_gyro_y, 6, 1);
-    ips114_show_float(0, 55, imu660rc_gyro_z, 6, 1);
-    ips114_show_float(0, 75, vzc, 6, 2);
+    ips114_show_float(0, 18 * 0, imu660rc_gyro_x, 6, 1);
+    ips114_show_float(0, 18 * 1, imu660rc_gyro_y, 6, 1);
+    ips114_show_float(0, 18 * 2, imu660rc_gyro_z, 6, 1);
+    ips114_show_float(0, 18 * 3, acc_vz, 1, 3);
+    ips114_show_float(0, 18 * 4, imu660rc_acc_x, 6, 1);
+    ips114_show_float(0, 18 * 5, imu660rc_acc_y, 6, 1);
+    ips114_show_float(0, 18 * 6, imu660rc_acc_z, 6, 1);
+//    ips114_show_float(0, 75, vzc, 6, 2);
     /* 预留一行可按需显示更多 gyro 调试量 */
 }
 

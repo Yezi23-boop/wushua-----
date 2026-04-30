@@ -32,13 +32,16 @@ static int fly_state_count = 0;  /* 飞坡保持、恢复和冷却阶段的 5ms 
 #define RING_FLAT_RELEASE_VZ 0.98f  /* 回到该重力 Z 分量以上才重新允许圆环识别 */
 #define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，10ms 调用下约 30ms */
 
-/* --- 赛道元素仲裁与圆筒状态参数（run_time_2 以 10ms 调用） --- */
+/* --- 赛道元素仲裁与圆筒状态参数（run_time_1 以 5ms 调用） --- */
 #define TRACK_MODE_LEFT_RING_CYLINDER 0
-#define CYLINDER_TOP_VZ -0.85f
-#define CYLINDER_GROUND_VZ 0.80f
-#define CYLINDER_TOP_CONFIRM_COUNT 2u
-#define CYLINDER_GROUND_CONFIRM_COUNT 2u
-#define CYLINDER_STABLE_DELAY_COUNT 25u
+#define CYLINDER_TOP_ACC_VZ -0.75f       /* 归一化 acc_z 到达该值以下，认为接近圆桶顶部。 */
+#define CYLINDER_GROUND_ACC_VZ 0.70f     /* 归一化 acc_z 回到该值以上，认为车身已回地。 */
+#define CYLINDER_ACC_NORM2_EPS 0.000001f /* 单位 g 的加速度平方和过小时视为无效，避免反平方根异常。 */
+#define CYLINDER_ACC_FILTER_OLD 0.95f     /* 圆桶姿态量一阶低通：旧值权重。 */
+#define CYLINDER_ACC_FILTER_NEW 0.05f     /* 圆桶姿态量一阶低通：新值权重。 */
+#define CYLINDER_TOP_CONFIRM_COUNT 3u    /* 5ms * 3 = 15ms，抑制单次冲击误判。 */
+#define CYLINDER_GROUND_CONFIRM_COUNT 3u /* 5ms * 3 = 15ms，回地同样做连续确认。 */
+#define CYLINDER_STABLE_DELAY_COUNT 50u  /* 5ms * 50 = 250ms，回地稳定后再恢复圆环识别。 */
 
 enum StartState
 {
@@ -347,6 +350,8 @@ static enum CylinderStep cylinder_state = CYL_IDLE;
 static uint8 cylinder_top_count = 0;
 static uint8 cylinder_ground_count = 0;
 static uint8 cylinder_stable_count = 0;
+static float cylinder_acc_vz_filter = 1.0f;
+static uint8 cylinder_acc_vz_filter_valid = 0;
 
 /**
  * @brief 读取当前环岛状态机阶段。
@@ -376,6 +381,15 @@ int8 a_run_mode_get_expected_element(void)
 int8 a_run_mode_get_cylinder_state(void)
 {
     return (int8)cylinder_state;
+}
+
+/**
+ * @brief 读取圆桶判断当前使用的加速度 Z 方向滤波值。
+ * @return float 经过 0.95/0.05 一阶滤波的 acc_z / |acc|。
+ */
+float a_run_mode_get_cylinder_acc_vz(void)
+{
+    return cylinder_acc_vz_filter;
 }
 
 static uint8 ring_take_finish_event(void)
@@ -478,14 +492,65 @@ static int8 ring_is_left_entry_signal(void)
 }
 
 /**
- * @brief 读取5ms主环缓存的重力向量Z分量。
- * @return float 已在主控制入口限幅到 -1.0~1.0 的姿态Z分量。
- *
- * @note 圆筒状态机跟随 run_time_1() 调用，直接复用同周期姿态缓存，避免多处重复计算四元数。
+ * @brief 计算归一化加速度 Z 分量。
+ * @return float acc_z / |acc|，范围约为 -1.0~1.0；加速度无效时返回 1.0f，避免误判过顶。
+ * @details
+ * 圆桶只关心车身是否接近倒置或回平，直接使用 IMU660RC 原始加速度方向，
+ * 不依赖四元数解算。这里使用驱动缓存值，避免在 5ms 控制链路中额外发起 SPI 读取。
  */
-static float cylinder_read_vzc(void)
+static float cylinder_calc_acc_vz(void)
 {
-    return fuya_last_vzc;
+    float ax;
+    float ay;
+    float az;
+    float norm2;
+
+    if (imu660rc_transition_factor[0] <= 0.001f)
+    {
+        return 1.0f;
+    }
+
+    ax = imu660rc_acc_transition(imu660rc_acc_x);
+    ay = imu660rc_acc_transition(imu660rc_acc_y);
+    az = imu660rc_acc_transition(imu660rc_acc_z);
+    norm2 = ax * ax + ay * ay + az * az;
+
+    if (norm2 <= CYLINDER_ACC_NORM2_EPS)
+    {
+        return 1.0f;
+    }
+
+    return az * invSqrt(norm2);
+}
+
+/**
+ * @brief 更新圆桶判断用加速度滤波值。
+ * @details 使用 0.95 旧值 + 0.05 新值的一阶低通，降低负压机械抖动对阈值判断的影响。
+ */
+static void cylinder_update_acc_filter_5ms(void)
+{
+    float acc_vz;
+
+    acc_vz = cylinder_calc_acc_vz();
+    if (cylinder_acc_vz_filter_valid == 0)
+    {
+        cylinder_acc_vz_filter = acc_vz;
+        cylinder_acc_vz_filter_valid = 1;
+    }
+    else
+    {
+        cylinder_acc_vz_filter = cylinder_acc_vz_filter * CYLINDER_ACC_FILTER_OLD +
+                                 acc_vz * CYLINDER_ACC_FILTER_NEW;
+    }
+}
+
+/**
+ * @brief 读取圆桶判断当前使用的滤波后加速度 Z 分量。
+ * @return float 滤波后的 acc_z / |acc|。
+ */
+static float cylinder_read_acc_vz(void)
+{
+    return cylinder_acc_vz_filter;
 }
 
 static void cylinder_reset_state(void)
@@ -506,21 +571,28 @@ static void cylinder_start_wait_top(void)
     fuya_restore_cylinder_peak_angle();
 }
 
-static uint8 cylinder_update_10ms(void)
+/**
+ * @brief 更新圆桶过顶/回地状态机。
+ * @return uint8 1-圆桶流程完成，可恢复后续圆环识别；0-仍在圆桶流程中。
+ * @details
+ * 该函数由 5ms 主控制链路调用，只使用归一化加速度 Z 分量判断顶部和回地。
+ * 顶部、回地和稳定延时都通过计数去抖，避免单次冲击触发状态跳变。
+ */
+static uint8 cylinder_update_5ms(void)
 {
-    float vzc;
+    float acc_vz;
 
     if (cylinder_state == CYL_IDLE)
     {
         cylinder_start_wait_top();
     }
 
-    vzc = cylinder_read_vzc();
+    acc_vz = cylinder_read_acc_vz();
 
     switch (cylinder_state)
     {
     case CYL_WAIT_TOP:
-        if (vzc <= CYLINDER_TOP_VZ)
+        if (acc_vz <= CYLINDER_TOP_ACC_VZ)
         {
             cylinder_top_count++;
             if (cylinder_top_count >= CYLINDER_TOP_CONFIRM_COUNT)
@@ -540,7 +612,7 @@ static uint8 cylinder_update_10ms(void)
         break;
 
     case CYL_WAIT_GROUND:
-        if (vzc >= CYLINDER_GROUND_VZ)
+        if (acc_vz >= CYLINDER_GROUND_ACC_VZ)
         {
             cylinder_ground_count++;
             if (cylinder_ground_count >= CYLINDER_GROUND_CONFIRM_COUNT)
@@ -588,6 +660,8 @@ void a_run_mode_update_track_element_gate(void)
 {
     uint8 cylinder_done;
 
+    cylinder_update_acc_filter_5ms();
+
     if (app.start.circle_flags != 1)
     {
         track_element_reset_state();
@@ -611,7 +685,7 @@ void a_run_mode_update_track_element_gate(void)
     {
         circle_check_l(0);
         (void)ring_take_finish_event();
-        cylinder_done = cylinder_update_10ms();
+        cylinder_done = cylinder_update_5ms();
         if (cylinder_done != 0)
         {
             expected_element = ELEMENT_LEFT_RING;

@@ -77,19 +77,21 @@ void run_time_1(void)
  * @details 完成赛道检测、大周期系统状态机更新、异常保护与软件定时器。
  * 此时序对实时性要求稍低，但仍需避免长延时阻塞操作影响主控制环中断。
  */
-static int ii=0;
 void run_time_2(void)
 {
+    int8 start_state;
+
     /* 1. 更新电感动态最大值，用于归一化与标定 */
     scan_track_max_value();
     a_run_mode_update_start_state(); /* 按键/外部命令状态机，每 10ms 刷新一次 */
-    flat_statr = a_run_mode_get_start_state(); /* 同步当前启停状态到对外变量 */
+    start_state = a_run_mode_get_start_state();
+    flat_statr = start_state; /* 同步当前启停状态到对外变量 */
     /* 2. 执行各类保护检测 */
     lost_lines();    /* 丢线保护 */
     dianya_jiance(); /* 电池电压检测 */
     /* 3. 更新启停状态与负压控制 */
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
-    if (a_run_mode_get_start_state() == 1)
+    if (start_state == 1)
     {
 //		if(ii==0)
 //		{
