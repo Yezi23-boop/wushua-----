@@ -28,17 +28,17 @@ static int fly_state_count = 0;  /* 飞坡保持、恢复和冷却阶段的 5ms 
 #define FLY_COOLDOWN_COUNT 20    /* 退出冷却窗口，单位 5ms，默认约 100ms */
 
 /* --- 圆环姿态门控参数（run_time_2 以 10ms 调用） --- */
-#define RING_FLAT_BLOCK_VZ 0.985f   /* 低于该重力 Z 分量时认为已进入桶/墙/坡面姿态 */
-#define RING_FLAT_RELEASE_VZ 0.99f /* 回到该重力 Z 分量以上才重新允许圆环识别 */
+#define RING_FLAT_BLOCK_VZ 0.95f    /* 低于该重力 Z 分量时认为已进入桶/墙/坡面姿态 */
+#define RING_FLAT_RELEASE_VZ 0.98f  /* 回到该重力 Z 分量以上才重新允许圆环识别 */
 #define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，10ms 调用下约 30ms */
 
 /* --- 赛道元素仲裁与圆筒状态参数（run_time_2 以 10ms 调用） --- */
 #define TRACK_MODE_LEFT_RING_CYLINDER 0
 #define CYLINDER_TOP_VZ -0.85f
-#define CYLINDER_GROUND_VZ 0.98f
+#define CYLINDER_GROUND_VZ 0.80f
 #define CYLINDER_TOP_CONFIRM_COUNT 2u
-#define CYLINDER_GROUND_CONFIRM_COUNT 3u
-#define CYLINDER_STABLE_DELAY_COUNT 10u
+#define CYLINDER_GROUND_CONFIRM_COUNT 2u
+#define CYLINDER_STABLE_DELAY_COUNT 25u
 
 enum StartState
 {
@@ -63,7 +63,7 @@ static int8 fly_is_vzc_ramp_pose(void)
 {
     float vzc;
 
-    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+    vzc = fuya_last_vzc;
 
     if (vzc < FLY_RAMP_BLOCK_VZ)
     {
@@ -427,7 +427,7 @@ static int8 ring_is_flat_pose(void)
 {
     float vzc;
 
-    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
+    vzc = fuya_last_vzc;
 
     if (ring_pose_flat != 0)
     {
@@ -454,14 +454,22 @@ static int8 ring_is_flat_pose(void)
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    if (ad1 > 40 &&
-        ad2 > 15 &&
-        ad3 > 15 &&
-        ad4 > 40 &&
-        ad1 < 50 &&
-        ad2 < 30 &&
-        ad3 < 30 &&
-        ad4 < 50)
+    if ((ad1 > 35 &&
+         ad2 > 15 &&
+         ad3 > 15 &&
+         ad4 > 35 &&
+         ad1 < 90 &&
+         ad2 < 40 &&
+         ad3 < 40 &&
+         ad4 < 90) ||
+        (ad1 > 45 &&
+         ad2 > 15 &&
+         ad3 > 5 &&
+         ad4 > 30 &&
+         ad1 < 90 &&
+         ad2 < 40 &&
+         ad3 < 40 &&
+         ad4 < 90))
     {
         return 1;
     }
@@ -469,22 +477,15 @@ static int8 ring_is_left_entry_signal(void)
     return 0;
 }
 
+/**
+ * @brief 读取5ms主环缓存的重力向量Z分量。
+ * @return float 已在主控制入口限幅到 -1.0~1.0 的姿态Z分量。
+ *
+ * @note 圆筒状态机跟随 run_time_1() 调用，直接复用同周期姿态缓存，避免多处重复计算四元数。
+ */
 static float cylinder_read_vzc(void)
 {
-    float vzc;
-
-    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
-    if (vzc > 1.0f)
-    {
-        vzc = 1.0f;
-    }
-    else if (vzc < -1.0f)
-    {
-        vzc = -1.0f;
-    }
-
-    fuya_last_vzc = vzc;
-    return vzc;
+    return fuya_last_vzc;
 }
 
 static void cylinder_reset_state(void)
@@ -529,6 +530,7 @@ static uint8 cylinder_update_10ms(void)
                 cylinder_stable_count = 0;
                 fuya_apply_cylinder_peak_angle();
                 cylinder_state = CYL_WAIT_GROUND;
+                //  stop = 1;
             }
         }
         else
@@ -546,6 +548,7 @@ static uint8 cylinder_update_10ms(void)
                 cylinder_ground_count = 0;
                 cylinder_stable_count = 0;
                 cylinder_state = CYL_STABLE_DELAY;
+                //                stop = 1;
             }
         }
         else
@@ -561,6 +564,7 @@ static uint8 cylinder_update_10ms(void)
             cylinder_stable_count = 0;
             fuya_restore_cylinder_peak_angle();
             cylinder_state = CYL_IDLE;
+            //            stop = 1;
             return 1;
         }
         break;
@@ -646,7 +650,6 @@ void circle_check_l(uint8 allow_entry)
             ring_is_flat_pose() != 0 &&
             ring_is_left_entry_signal() != 0)
         {
-            stop = 1;
             ring_entry_count++;
         }
         else
@@ -661,7 +664,6 @@ void circle_check_l(uint8 allow_entry)
             /* 在 1000ms 窗口内达到连续确认次数，判定左环成立。 */
             if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
             {
-				stop=1;
                 ring_entry_count = 0;
                 timedestroy(&ring_data.time_l); // 清空左环识别定时器
                 ring_data.flast_l = 1;          // 置位左环过程标志
@@ -684,7 +686,7 @@ void circle_check_l(uint8 allow_entry)
         ring_data.Gyroz = 0;
 
         /* 累计距离达到阈值后进入预入环阶段 */
-        if (ring_data.encoder >= app.ring.ring_encoder)
+        if (ring_data.encoder >= app.ring.ring_entry_encoder)
         {
             ring_data.distance = 0;
             ring_data.encoder = 0;
@@ -697,11 +699,11 @@ void circle_check_l(uint8 allow_entry)
 
     case pre_ring:
         /* 给定预入环固定目标角速度，左环实测 Gyroz 为负。 */
-        ring_data.diff_set = app.ring.pre_ring_Gyro_set;
+        ring_data.diff_set = app.ring.pre_ring_Gyro_target;
 
         /* 相对预入环起点的偏航角累计达到入环阈值并确认 50ms 后，认为已真正入环。 */
         /* 由于累加的角度自带符号，这里直接取绝对值判断是否转够30度即可，不论左右环。 */
-        if (ring_data.Gyroz < -40 && timeadd(&ring_data.ing_ring_time, 100))
+        if (ring_data.Gyroz < -app.ring.pre_ring_Gyroz && timeadd(&ring_data.ing_ring_time, 50))
         {
             ring_data.diff_set = 0;
             timedestroy(&ring_data.ing_ring_time);
@@ -719,7 +721,7 @@ void circle_check_l(uint8 allow_entry)
 
     case pre_out_ring:
         /* 给定预出环固定目标角速度，继续沿左环方向修正车身。 */
-        ring_data.diff_set = app.ring.pre_out_ring_Gyro_set;
+        ring_data.diff_set = app.ring.pre_out_ring_Gyro_target;
 
         /* 预出环继续沿左环方向打到更大的出环角度，避免过早回线导致压线不稳。 */
         if (ring_data.Gyroz < -app.ring.pre_out_ring_Gyroz && timeadd(&ring_data.out_ring_time, 50))
@@ -734,7 +736,7 @@ void circle_check_l(uint8 allow_entry)
 
     case out_ring:
         /* 1000ms 内电感重新平衡，则认为已完全驶离环岛 */
-        if (func_abs((int)ad1 - (int)ad4) < 10 && timeadd(&ring_data.out_ring_time, 500))
+        if (func_abs((int)ad1 - (int)ad4) < 10 && timeadd(&ring_data.out_ring_time, 100))
         {
             timedestroy(&ring_data.out_ring_time); // 清空出环确认定时器
             ring_data.flast_l = 0;                 // 清除左环过程标志
@@ -746,6 +748,7 @@ void circle_check_l(uint8 allow_entry)
             ring_data.Gyroz = 0;                   // 清零相对偏航角差
             current_state = no_ring;               // 返回普通巡线状态
             ring_finish_event = 1;
+            //           stop = 1;
         }
         break;
     }
@@ -790,6 +793,6 @@ void gyro_integrals(void)
     if (ring_data.distance == 1)
     {
         /* 0.01 系数与当前速度单位配套，保持里程判据量级稳定 */
-        ring_data.encoder += (speed_l + speed_r) * 0.01; // 用于判断是否达到环岛距离阈值
+        ring_data.encoder += (speed_l + speed_r) * 0.005; // 用于判断是否达到环岛距离阈值
     }
 }

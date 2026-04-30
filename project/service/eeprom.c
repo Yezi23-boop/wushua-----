@@ -50,7 +50,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 0.50f;        /* ring->pre_ring编码器积分阈值 */
+    config->ring.ring_entry_encoder = 3.0;        /* ring->pre_ring编码器积分阈值 */
     config->ring.pre_ring_Gyro_target = 20.00f;     /* pre_ring固定目标角速度 */
     config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 270.00f;           /* in_ring->pre_out_ring累计转角阈值 */

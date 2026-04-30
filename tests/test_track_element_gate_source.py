@@ -36,9 +36,17 @@ def test_track_element_gate_contract_is_wired():
     assert "if (app.start.circle_flags != 1)" in source
     assert "start_state != START_STATE_2 || app.start.circle_flags != 1" not in source
 
-    assert "a_run_mode_update_track_element_gate();" in runner
-    assert "gyro_integrals();" in runner
-    assert runner.index("a_run_mode_update_track_element_gate();") < runner.index("gyro_integrals();")
+    run_time_1_body = runner[runner.index("void run_time_1(void)"):runner.index("void run_time_2(void)")]
+    run_time_2_body = runner[runner.index("void run_time_2(void)"):runner.index("void run_time_3(void)")]
+
+    assert "a_run_mode_update_track_element_gate();" in run_time_1_body
+    assert "gyro_integrals();" in run_time_1_body
+    assert "imu_update_gravity_vector_from_quaternion(0, 0, &gravity_vzc);" in run_time_1_body
+    assert run_time_1_body.index("imu_update_gravity_vector_from_quaternion") < run_time_1_body.index("a_run_mode_update_track_element_gate();")
+    assert run_time_1_body.index("a_run_mode_update_track_element_gate();") < run_time_1_body.index("gyro_integrals();")
+    assert "track_gate_div_10" not in runner
+    assert "a_run_mode_update_track_element_gate();" not in run_time_2_body
+    assert "gyro_integrals();" not in run_time_2_body
 
 
 def test_cylinder_peak_angle_api_is_split_from_element_state_machine():
@@ -54,8 +62,8 @@ def test_cylinder_peak_angle_api_is_split_from_element_state_machine():
     assert "fuya_apply_cylinder_peak_angle();" in run_mode_source
     assert "fuya_restore_cylinder_peak_angle();" in run_mode_source
     assert "#define CYLINDER_TOP_VZ -0.85f" in run_mode_source
-    assert "#define CYLINDER_GROUND_VZ 0.98f" in run_mode_source
-    assert "CYLINDER_STABLE_DELAY_COUNT 10" in run_mode_source
+    assert "#define CYLINDER_GROUND_VZ 0.90f" in run_mode_source
+    assert "CYLINDER_STABLE_DELAY_COUNT 5u" in run_mode_source
 
 
 def test_track_mode_config_and_menu_are_present():

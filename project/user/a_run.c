@@ -33,6 +33,7 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 void run_time_1(void)
 {
     float diff_output;
+    float gravity_vzc;
 //	    circle_check_l();
     steer_div_10++;
     /* P36 = 0; */
@@ -40,6 +41,11 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
+    imu_update_gravity_vector_from_quaternion(0, 0, &gravity_vzc);
+    fuya_last_vzc = gravity_vzc;
+    /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
+    a_run_mode_update_track_element_gate();
+    gyro_integrals();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
@@ -71,15 +77,13 @@ void run_time_1(void)
  * @details 完成赛道检测、大周期系统状态机更新、异常保护与软件定时器。
  * 此时序对实时性要求稍低，但仍需避免长延时阻塞操作影响主控制环中断。
  */
-int ll = 0;
+static int ii=0;
 void run_time_2(void)
 {
     /* 1. 更新电感动态最大值，用于归一化与标定 */
     scan_track_max_value();
     a_run_mode_update_start_state(); /* 按键/外部命令状态机，每 10ms 刷新一次 */
     flat_statr = a_run_mode_get_start_state(); /* 同步当前启停状态到对外变量 */
-    a_run_mode_update_track_element_gate();
-    gyro_integrals();
     /* 2. 执行各类保护检测 */
     lost_lines();    /* 丢线保护 */
     dianya_jiance(); /* 电池电压检测 */
@@ -87,9 +91,13 @@ void run_time_2(void)
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
     if (a_run_mode_get_start_state() == 1)
     {
+//		if(ii==0)
+//		{
+//		imu660rc_init(IMU660RC_QUARTERNION_240HZ); /* 六轴惯导初始化 */
+//			ii=1;
+//		}
         fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
     }
-    ll += (PID.left_speed.speed + PID.right_speed.speed) * 0.058;
     //   fuya_update_cylinder_peak_10ms(2);
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
