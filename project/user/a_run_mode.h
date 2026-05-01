@@ -104,10 +104,10 @@ int8 a_run_mode_get_expected_element(void);
 int8 a_run_mode_get_cylinder_state(void);
 
 /**
- * @brief 读取圆桶判断使用的加速度 Z 方向滤波值。
- * @return float 滤波后的 acc_z / |acc|。
+ * @brief 读取圆桶判断使用的加速度 Z 轴滤波值。
+ * @return float 滤波后的 acc_z，单位：g。
  */
-float a_run_mode_get_cylinder_acc_vz(void);
+float a_run_mode_get_cylinder_acc_z(void);
 
 void circle_check_l(uint8 allow_entry);
 void gyro_integrals(void);

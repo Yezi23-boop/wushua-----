@@ -41,11 +41,11 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
-    imu_update_gravity_vector_from_quaternion(0, 0, &gravity_vzc);
-    fuya_last_vzc = gravity_vzc;
+//    imu_update_gravity_vector_from_quaternion(0, 0, &gravity_vzc);
+//    fuya_last_vzc = gravity_vzc;
     /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
-    a_run_mode_update_track_element_gate();
-    gyro_integrals();
+//    a_run_mode_update_track_element_gate();
+//    gyro_integrals();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
@@ -93,11 +93,6 @@ void run_time_2(void)
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
     if (start_state == 1)
     {
-//		if(ii==0)
-//		{
-//		imu660rc_init(IMU660RC_QUARTERNION_240HZ); /* 六轴惯导初始化 */
-//			ii=1;
-//		}
         fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
     }
     //   fuya_update_cylinder_peak_10ms(2);
