@@ -20,22 +20,20 @@ static int fly_state_count = 0;  /* 飞坡保持、恢复和冷却阶段的 5ms 
 #define START_DEBOUNCE_TIME 5 /* 启动按键消抖确认次数（10ms 调用周期下约 500ms） */
 
 /* --- 飞坡状态机参数（run_time_1 以 5ms 调用） --- */
-#define FLY_AD_SIDE_LOST_TH 14u  /* 横向电感低于该值时认为主线信号正在消失 */
-#define FLY_AD_CENTER_LOST_TH 5u /* 竖向电感阈值更低，避免普通弱弯误触发飞坡 */
-#define FLY_HOLD_ANGLE 0         /* 飞坡离线阶段固定目标角速度，0 表示直行锁角 */
-#define FLY_RAMP_BLOCK_VZ 0.95f  /* 低于该重力 Z 分量时认为车身已明显离开平面姿态 */
-#define FLY_RECOVER_COUNT 2      /* 落地恢复窗口，单位 5ms，默认约 20ms */
-#define FLY_COOLDOWN_COUNT 20    /* 退出冷却窗口，单位 5ms，默认约 100ms */
+#define FLY_AD_SIDE_LOST_TH 14u    /* 横向电感低于该值时认为主线信号正在消失 */
+#define FLY_AD_CENTER_LOST_TH 5u   /* 竖向电感阈值更低，避免普通弱弯误触发飞坡 */
+#define FLY_HOLD_ANGLE 0           /* 飞坡离线阶段固定目标角速度，0 表示直行锁角 */
+#define FLY_RAMP_BLOCK_ACC_Z 0.95f /* 低于该 acc_z 时认为车身已明显离开平面姿态，单位：g。 */
+#define FLY_RECOVER_COUNT 2        /* 落地恢复窗口，单位 5ms，默认约 20ms */
+#define FLY_COOLDOWN_COUNT 20      /* 退出冷却窗口，单位 5ms，默认约 100ms */
 
-/* --- 圆环姿态门控参数（run_time_2 以 10ms 调用） --- */
-#define RING_FLAT_BLOCK_VZ 0.95f    /* 低于该重力 Z 分量时认为已进入桶/墙/坡面姿态 */
-#define RING_FLAT_RELEASE_VZ 0.98f  /* 回到该重力 Z 分量以上才重新允许圆环识别 */
-#define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，10ms 调用下约 30ms */
+/* --- 圆环入口参数（run_time_1 以 5ms 调用） --- */
+#define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，5ms 调用下约 15ms */
 
 /* --- 赛道元素仲裁与圆筒状态参数（run_time_1 以 5ms 调用） --- */
 #define TRACK_MODE_LEFT_RING_CYLINDER 0
-#define CYLINDER_TOP_ACC_Z -0.75f        /* acc_z 到达该值以下，认为接近圆桶顶部，单位：g。 */
-#define CYLINDER_GROUND_ACC_Z 0.70f      /* acc_z 回到该值以上，认为车身已回地，单位：g。 */
+#define CYLINDER_TOP_ACC_Z -0.3f         /* acc_z 到达该值以下，认为接近圆桶顶部，单位：g。 */
+#define CYLINDER_GROUND_ACC_Z 0.3f       /* acc_z 回到该值以上，认为车身已回地，单位：g。 */
 #define CYLINDER_ACC_FILTER_OLD 0.95f    /* 圆桶姿态量一阶低通：旧值权重。 */
 #define CYLINDER_ACC_FILTER_NEW 0.05f    /* 圆桶姿态量一阶低通：新值权重。 */
 #define CYLINDER_TOP_CONFIRM_COUNT 3u    /* 5ms * 3 = 15ms，抑制单次冲击误判。 */
@@ -57,17 +55,21 @@ static int8 key_released = 1;                               // 按键释放锁�
  * @brief 判断车身是否已经明显离开平面姿态。
  *
  * 平地丢线时四路电感也可能同时很低，因此飞坡入口不能只依赖电感。
- * 重力向量 Z 分量低于阈值时，认为车身已经进入坡面或飞坡姿态。
+ * acc_z 低于阈值时，认为车身已经进入坡面或飞坡姿态。
  *
  * @return int8 1-姿态满足飞坡触发条件，0-仍近似平面。
  */
-static int8 fly_is_vzc_ramp_pose(void)
+static int8 fly_is_acc_z_ramp_pose(void)
 {
-    float vzc;
+    float acc_z;
 
-    vzc = fuya_last_vzc;
+    if (imu660rc_transition_factor[0] <= 0.001f)
+    {
+        return 0;
+    }
 
-    if (vzc < FLY_RAMP_BLOCK_VZ)
+    acc_z = imu660rc_acc_transition(imu660rc_acc_z);
+    if (acc_z < FLY_RAMP_BLOCK_ACC_Z)
     {
         return 1;
     }
@@ -91,7 +93,7 @@ static int8 fly_is_ramp_lost_signal(void)
         ad2 < FLY_AD_CENTER_LOST_TH &&
         ad3 < FLY_AD_CENTER_LOST_TH &&
         ad4 < FLY_AD_SIDE_LOST_TH &&
-        fly_is_vzc_ramp_pose())
+        fly_is_acc_z_ramp_pose())
     {
         return 1;
     }
@@ -341,7 +343,6 @@ enum RingStep current_state = no_ring;
 
 // 环岛过程数据，保存累计量和阶段标志
 RingStruct ring_data = {0};
-static int8 ring_pose_flat = 1; /* 姿态门控结果：1-允许圆环识别，0-桶/墙/坡面段禁止圆环 */
 static uint8 ring_entry_count = 0;
 static uint8 ring_finish_event = 0;
 static enum TrackElement expected_element = ELEMENT_LEFT_RING;
@@ -365,11 +366,11 @@ int8 a_run_mode_get_ring_state(void)
 
 /**
  * @brief 读取当前圆环姿态门控结果。
- * @return int8 1-姿态接近平地，允许圆环识别；0-疑似桶/墙/坡面姿态，禁止圆环识别。
+ * @return int8 当前已取消圆环姿态门控，固定返回 1。
  */
 int8 a_run_mode_get_ring_pose_flat(void)
 {
-    return ring_pose_flat;
+    return 1;
 }
 
 int8 a_run_mode_get_expected_element(void)
@@ -429,60 +430,20 @@ static void ring_reset_state(void)
 }
 
 /**
- * @brief 判断当前姿态是否允许圆环入口识别。
- *
- * 立体桶、墙面和坡面会改变车身重力方向，电感形态可能短暂接近圆环入口。
- * 这里仅使用重力向量 Z 分量做滞回判断，避免 pitch 方向定义变化影响圆环门控。
- *
- * @return int8 1-接近平地，允许圆环识别；0-非平地姿态，禁止圆环识别。
- */
-static int8 ring_is_flat_pose(void)
-{
-    float vzc;
-
-    vzc = fuya_last_vzc;
-
-    if (ring_pose_flat != 0)
-    {
-        if (vzc < RING_FLAT_BLOCK_VZ)
-        {
-            ring_pose_flat = 0;
-        }
-    }
-    else
-    {
-        if (vzc >= RING_FLAT_RELEASE_VZ)
-        {
-            ring_pose_flat = 1;
-        }
-    }
-
-    return ring_pose_flat;
-}
-
-/**
  * @brief 判断左环入口电感特征是否命中。
  * @return int8 1-命中左环入口特征，0-未命中。
  *
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    if ((ad1 > 40 &&
-         ad2 > 15 &&
-         ad3 > 15 &&
-         ad4 > 40 &&
-         ad1 < 70 &&
-         ad2 < 40 &&
-         ad3 < 40 &&
-         ad4 < 70) ||
-        (ad1 > 99 &&
-         ad2 > 15 &&
-         ad3 > 5 &&
-         ad4 > 99 &&
-         ad1 < 70 &&
-         ad2 < 40 &&
-         ad3 < 40 &&
-         ad4 < 70))
+    if (ad1 > 40 &&
+        ad2 > 15 &&
+        ad3 > 15 &&
+        ad4 > 40 &&
+        ad1 < 70 &&
+        ad2 < 40 &&
+        ad3 < 40 &&
+        ad4 < 70)
     {
         return 1;
     }
@@ -523,8 +484,10 @@ static void cylinder_update_acc_filter_5ms(void)
     }
     else
     {
-        cylinder_acc_z_filter = cylinder_acc_z_filter * CYLINDER_ACC_FILTER_OLD +
-                                acc_z * CYLINDER_ACC_FILTER_NEW;
+        cylinder_acc_z_filter =
+
+            *CYLINDER_ACC_FILTER_OLD +
+            acc_z * CYLINDER_ACC_FILTER_NEW;
     }
 }
 
@@ -585,6 +548,7 @@ static uint8 cylinder_update_5ms(void)
                 cylinder_ground_count = 0;
                 cylinder_stable_count = 0;
                 fuya_apply_cylinder_peak_angle();
+                stop = 1;
                 cylinder_state = CYL_WAIT_GROUND;
             }
         }
@@ -702,7 +666,6 @@ void circle_check_l(uint8 allow_entry)
     case no_ring:
         /* 1. 根据电感特征识别左环入口 (对称翻转原右环特征) */
         if (allow_entry != 0 &&
-            ring_is_flat_pose() != 0 &&
             ring_is_left_entry_signal() != 0)
         {
             ring_entry_count++;
@@ -803,6 +766,7 @@ void circle_check_l(uint8 allow_entry)
             ring_data.Gyroz = 0;                   // 清零相对偏航角差
             current_state = no_ring;               // 返回普通巡线状态
             ring_finish_event = 1;
+            //			stop=1;
         }
         break;
     }

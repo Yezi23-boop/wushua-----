@@ -611,8 +611,8 @@ static void Menu_Draw_Sensor(void)
 
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "cyl");
     ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
-    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "vzc");
-    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, fuya_last_vzc, 2, 3);
+    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "accz");
+    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_acc_z(), 2, 3);
 
     ips114_show_float(56, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
 }

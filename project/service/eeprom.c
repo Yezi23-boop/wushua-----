@@ -33,10 +33,10 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
-    config->speed.kp_Err = 4.50f;  // 4.50
-    config->speed.kd_Err = 10.00f; // 4.50
+    config->speed.kp_Err = 3.00f;  // 4.50
+    config->speed.kd_Err = 4.00f; // 4.50
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 35.00f; /* 默认基础速度 30 */ // 4.50
+    config->speed.speed_run = 20.00f; /* 默认基础速度 30 */ // 4.50
     config->speed.limiting_Err = 600.00f; /* 转向限幅 */    // 4.50
     config->speed.kp2_Err = 0.00f;
 
@@ -44,7 +44,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.kp_Angle = 0.80f;
     config->angle.kd_Angle = 0.20f;
     config->angle.gyro_feedback_scale = 1.00f;
-    config->angle.limiting_Angle = 33.00f;
+    config->angle.limiting_Angle = 18.00f;
     config->angle.A_1 = 0.80f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;

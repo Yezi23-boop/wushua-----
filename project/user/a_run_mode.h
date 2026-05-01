@@ -87,7 +87,7 @@ int8 a_run_mode_get_ring_state(void);
 
 /**
  * @brief 读取当前圆环姿态门控结果，用于菜单调参显示。
- * @return int8 1-允许圆环识别，0-姿态门控禁止圆环识别。
+ * @return int8 当前圆环入口不再使用姿态门控，固定返回 1。
  */
 int8 a_run_mode_get_ring_pose_flat(void);
 

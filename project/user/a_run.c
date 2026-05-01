@@ -33,7 +33,6 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 void run_time_1(void)
 {
     float diff_output;
-    float gravity_vzc;
 //	    circle_check_l();
     steer_div_10++;
     /* P36 = 0; */
@@ -41,15 +40,14 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
-//    imu_update_gravity_vector_from_quaternion(0, 0, &gravity_vzc);
-//    fuya_last_vzc = gravity_vzc;
     /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
-//    a_run_mode_update_track_element_gate();
-//    gyro_integrals();
+    a_run_mode_update_track_element_gate();
+    gyro_integrals();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
         pid_steer_update(&PID.steer, Err, 0.0f);
+		steer_div_10=0;
     }
     speed_active = app.speed.speed_run;
     /* 飞坡阶段在外环与角速度内环之间锁定目标角速度，同时覆盖目标速度。 */
