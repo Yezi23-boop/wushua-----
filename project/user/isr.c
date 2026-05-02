@@ -11,7 +11,6 @@
  * 3) 通过编译开关精确控制 TM0/TM1 挂载任务。
  */
 #include "zf_common_headfile.h"
-#include "../speed_loop_autotune/firmware/speed_loop_trial.h"
 
 /**
  * @brief UART1 DMA 接收中断
@@ -127,9 +126,6 @@ void TM0_IRQHandler() interrupt 1
 ///* 1. 获取编码器实时速度反馈 */
 // Encoder_get(&PID.left_speed, &PID.right_speed);
 // motor_output(3000, 4000);
-#if MAIN_ENABLE_ISR_RUN_TEST_SPEED
-    run_test_speed();
-#endif
 #if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
     test_diff_func();
 #endif

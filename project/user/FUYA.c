@@ -58,10 +58,6 @@ volatile float fuya_last_vzc = 0.0f;        /* 最近一次限幅后的重力向
 static uint8 fuya_cylinder_top_count = 0;    /* 顶部负值窗口连续计数 */
 static uint8 fuya_cylinder_ground_count = 0; /* 回平地连续计数 */
 static uint8 fuya_startup_ramp_active = 1;   /* 首次给负压百分比时启用小步进软启动 */
-static float fuya_angle_backup_a1 = 0.0f;    /* 过顶前 A_1 备份 */
-static float fuya_angle_backup_b1 = 0.0f;    /* 过顶前 B_1 备份 */
-static float fuya_angle_backup_cl = 0.0f;    /* 过顶前 C_l 备份 */
-
 static float fuya_read_vzc(void);
 static int fuya_ramp_pwm_with_step(int current_pwm, int target_pwm, int up_step);
 static int fuya_ramp_pwm_startup(int current_pwm, int target_pwm);
@@ -215,37 +211,22 @@ static int fuya_ramp_pwm_startup(int current_pwm, int target_pwm)
 
 /**
  * @brief 进入圆筒最高点处理窗口
- * @details 首次触发时备份 angle 参数，并覆盖为过顶专用权重。
+ * @details
+ * 当前已取消圆桶过程对 A_1/B_1/C_l 的临时切换。
+ * 该接口仅保留圆桶流程标志位，避免旧调用点重新启用时再改写循迹参数。
  */
 void fuya_apply_cylinder_peak_angle(void)
 {
-    if (!fuya_cylinder_peak_flag)
-    {
-        fuya_angle_backup_a1 = app.angle.A_1;
-        fuya_angle_backup_b1 = app.angle.B_1;
-        fuya_angle_backup_cl = app.angle.C_l;
-    }
-
-    app.angle.A_1 = 1.40f;
-    app.angle.B_1 = 0.00f;
-    app.angle.C_l = 0.00f;
-
     fuya_cylinder_peak_flag = 1;
 }
 
 /**
  * @brief 恢复圆筒最高点触发前的 angle 参数
- * @details 退出运行态或回到平地时统一调用，避免临时参数残留。
+ * @details
+ * 当前圆桶过程不再切换 A_1/B_1/C_l，因此这里仅清理圆桶相关计数和标志。
  */
 void fuya_restore_cylinder_peak_angle(void)
 {
-    if (fuya_cylinder_peak_flag)
-    {
-        app.angle.A_1 = fuya_angle_backup_a1;
-        app.angle.B_1 = fuya_angle_backup_b1;
-        app.angle.C_l = fuya_angle_backup_cl;
-    }
-
     fuya_cylinder_top_count = 0;
     fuya_cylinder_ground_count = 0;
     fuya_cylinder_peak_flag = 0;

@@ -2,7 +2,6 @@
 #include "int_user.h"
 #include "../service/key.h"
 #include "../service/menu.h"
-#include "../service/speed_loop_autotune_adapter.h"
 
 /* 定时器中断周期定义（单位：ms） */
 #define TIME_0 5  /* 主控控制环周期 */
@@ -91,7 +90,6 @@ static void control_init(void)
 
     /* 同步 EEPROM 参数 */
     control_apply_config();
-    speed_loop_autotune_project_init();
 }
 
 /**

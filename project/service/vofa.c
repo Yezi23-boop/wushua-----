@@ -8,12 +8,11 @@
  * 功能包含：
  * 1) 从无线串口 FIFO 按字节解析命令帧（'!' 结尾）；
  * 2) 使用固定深度环形队列缓存完整命令，避免主循环瞬时堵塞；
- * 3) 将命令转发到 speed_loop_autotune 或 legacy 参数解析路径；
+ * 3) 将命令转发到 legacy 参数解析路径；
  * 4) 统计帧溢出和队列溢出次数，供上位机诊断链路质量。
  */
 #include "zf_common_headfile.h"
 #include "vofa.h"
-#include "../speed_loop_autotune/firmware/host_transport.h"
 #include <stdlib.h>
 
 static vofa_data_struct vofa_data;
@@ -237,29 +236,23 @@ uint32 vofa_get_queue_overflow_count(void)
 }
 
 /**
- * @brief VOFA 主服务（自动调参模式）
+ * @brief VOFA 主服务
  * @details
- * 解析输入命令并交给统一命令处理入口，同时上报解析统计与遥测。
+ * 解析输入命令并交给统一命令处理入口。自动调参固件移除后，
+ * 本入口保留为主循环稳定调用点，内部回落到 legacy 指令路径。
  */
 void vofa_service(void)
 {
     static char vofa_cmd[64];
 
-    /* 1) 拉取并解析串口数据 */
+    /* 拉取并解析串口数据 */
     vofa_parse_from_fifo();
-    /* 2) 上报解析器健康状态 */
-    speed_loop_autotune_set_parser_stats(
-        vofa_get_frame_overflow_count(),
-        vofa_get_queue_overflow_count());
 
-    /* 3) 逐条消费命令，避免单次阻塞过久 */
+    /* 逐条消费命令，避免单次阻塞过久 */
     while (vofa_get_command(vofa_cmd, 64))
     {
         handle_vofa_command(vofa_cmd);
     }
-
-    /* 4) 周期输出遥测给上位机 */
-    speed_loop_autotune_emit_telemetry();
 }
 
 /**
@@ -390,15 +383,9 @@ static void vofa_handle_legacy_command(char *cmd)
 
 /**
  * @brief VOFA 命令统一分发入口
- * @details 优先交给 speed_loop_autotune 处理，未匹配再走 legacy 路径。
+ * @details 自动调参固件移除后，仅保留 legacy 参数解析路径。
  */
 void handle_vofa_command(char *cmd)
 {
-    /* 优先新协议：匹配成功即返回，避免同命令被重复解释 */
-    if (speed_loop_autotune_handle_text_command(cmd))
-    {
-        return;
-    }
-
     vofa_handle_legacy_command(cmd);
 }
