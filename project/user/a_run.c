@@ -10,9 +10,6 @@
  * 该模块位于实时主链路，注释强调调用时序和数据依赖，便于赛道现场快速排障。
  */
 #include "zf_common_headfile.h"
-#include "a_run.h"
-#include "a_run_mode.h"
-#include "../service/soft_timer.h"
 
 /* --- 运行状态变量 --- */
 volatile int flat_statr = 0;        /* 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */

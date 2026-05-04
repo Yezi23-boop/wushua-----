@@ -625,6 +625,26 @@
               <FilePath>..\user\a_run_mode.h</FilePath>
             </File>
             <File>
+              <FileName>a_run_fly.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_fly.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_fly.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_fly.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_track_element.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_track_element.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_track_element.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_track_element.h</FilePath>
+            </File>
+            <File>
               <FileName>ADC.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\user\ADC.c</FilePath>

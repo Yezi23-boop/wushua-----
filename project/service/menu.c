@@ -611,8 +611,8 @@ static void Menu_Draw_Sensor(void)
 
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "cyl");
     ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
-    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "accvz");
-    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_acc_z(), 2, 3);
+    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "qvz");
+    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_vz(), 2, 3);
 
     ips114_show_float(56, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
 }
@@ -637,8 +637,8 @@ static void Menu_Draw_Ring(int edit_line)
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
     ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_mode_get_ring_state(), 1);
-    ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "G");
-    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.Gyroz, 4, 0);
+    ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "Yd");
+    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
     ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
     ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
     ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");

@@ -95,6 +95,8 @@
 #include "vofa.h"
 #include "a_run.h"
 #include "a_run_mode.h"
+#include "a_run_fly.h"
+#include "a_run_track_element.h"
 #include "soft_timer.h"
 #include "../user/ADC.h"
 #include "debug_view.h"
