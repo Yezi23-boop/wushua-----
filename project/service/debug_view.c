@@ -119,18 +119,18 @@ void printf_speed_test(void)
 
 /**
  * @brief 按键与 IMU 中断脚状态测试显示
- * @details 四个按键改到 P26/P35/P34/P37，P33 单独作为 IMU660RC 的 INT1 观察
+ * @details 四个按键使用 P26/P41/P40/P37，P34/P35 保留给 TPL0102 软件 I2C。
  */
 void printf_butten_test(void)
 {
     ips114_show_string(0, 18 * 0, "K1 P26");
     ips114_show_int32(7 * 24, 18 * 0, P26, 1);
 
-    ips114_show_string(0, 18 * 1, "K2 P35");
-    ips114_show_int32(7 * 24, 18 * 1, P35, 1);
+    ips114_show_string(0, 18 * 1, "K2 P41");
+    ips114_show_int32(7 * 24, 18 * 1, P41, 1);
 
-    ips114_show_string(0, 18 * 2, "K3 P34");
-    ips114_show_int32(7 * 24, 18 * 2, P34, 1);
+    ips114_show_string(0, 18 * 2, "K3 P40");
+    ips114_show_int32(7 * 24, 18 * 2, P40, 1);
 
     ips114_show_string(0, 18 * 3, "K4 P37");
     ips114_show_int32(7 * 24, 18 * 3, P37, 1);

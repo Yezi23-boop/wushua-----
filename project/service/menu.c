@@ -28,6 +28,11 @@
 #define MENU_STEP_INT_X (15 * 8)
 #define EEPROM_MODE 1
 #define MENU_SAVE_PROMPT_DELAY_MS 300
+#define MENU_SENSOR_GAIN_SAVE_INDEX TPL0102_CH_COUNT
+#define MENU_SENSOR_GAIN_STATUS_OFF 0
+#define MENU_SENSOR_GAIN_STATUS_ON 1
+#define MENU_SENSOR_GAIN_STATUS_SAVED 2
+#define MENU_SENSOR_GAIN_STATUS_ERROR 3
 
 static uint8 menu_service_enabled = 0;
 static int cursor_row = MENU_ROW_MIN;
@@ -37,6 +42,9 @@ static int change_unit_multiplier = 1;
 static int keystroke_three_count = 0;
 static int menu_saved_row[MENU_PAGE_COUNT];
 static int menu_entry_row[MENU_PAGE_COUNT];
+static uint8 sensor_gain_edit_active = 0;
+static uint8 sensor_gain_selected = 0;
+static uint8 sensor_gain_status = MENU_SENSOR_GAIN_STATUS_OFF;
 
 int display_codename = 0;
 
@@ -71,10 +79,14 @@ static void Menu_Draw_Start(int edit_line);
 static void Menu_Draw_Speed(int edit_line);
 static void Menu_Draw_Model(int edit_line);
 static void Menu_Draw_Sensor(void);
+static void Menu_Draw_Sensor_Gain_Status(void);
 static void Menu_Draw_Ring(int edit_line);
 static void Menu_Draw_Fly(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
 static void Menu_Process_Track_Mode(void);
+static void Menu_Sensor_Gain_End(void);
+static void Menu_Sensor_Gain_Adjust(int delta);
+static void Menu_Sensor_Gain_Save(void);
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
 static void Keystroke_Menu_HOME(void);
@@ -100,6 +112,7 @@ void Menu_Set_Service_Enable(uint8 enabled)
     }
     else
     {
+        Menu_Sensor_Gain_End();
         Menu_Reset_Page_Memory();
         display_codename = 0;
         menu_next_flag = 0;
@@ -587,6 +600,7 @@ static void Menu_Draw_Sensor(void)
     ips114_show_string(56, 0, "NORM");
     ips114_show_string(112, 0, "RAW");
     ips114_show_string(176, 0, "MAX");
+    ips114_show_string(208, 0, "GAIN");
 
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "ad1");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ad2");
@@ -609,12 +623,61 @@ static void Menu_Draw_Sensor(void)
     ips114_show_int32(176, 3 * MENU_ROW_HEIGHT, MA[2], 4);
     ips114_show_int32(176, 4 * MENU_ROW_HEIGHT, MA[3], 4);
 
+    Menu_Draw_Sensor_Gain_Status();
+
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "cyl");
     ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
     ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "qvz");
     ips114_show_float(176, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_vz(), 2, 3);
 
     ips114_show_float(56, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
+}
+
+/**
+ * @brief 绘制 SENSOR 页右侧 TPL0102 增益调试状态。
+ *
+ * 该页面只在前台菜单路径执行，显示缓存值不会触发 I2C 访问；
+ * 只有明确按键事件才会进入写入或保存流程，避免影响 5ms 控制链路。
+ */
+static void Menu_Draw_Sensor_Gain_Status(void)
+{
+    uint8 i;
+    uint8 tap_code;
+
+    for (i = 0; i < TPL0102_CH_COUNT; i++)
+    {
+        if (sensor_gain_edit_active && sensor_gain_selected == i)
+            ips114_show_string(200, (i + 1) * MENU_ROW_HEIGHT, "*");
+        else
+            ips114_show_string(200, (i + 1) * MENU_ROW_HEIGHT, " ");
+
+        tap_code = tpl0102_get_cached_code((TPL0102_Channel)i);
+        ips114_show_int32(208, (i + 1) * MENU_ROW_HEIGHT, tap_code, 3);
+    }
+
+    if (sensor_gain_edit_active && sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
+        ips114_show_string(200, 5 * MENU_ROW_HEIGHT, "*");
+    else
+        ips114_show_string(200, 5 * MENU_ROW_HEIGHT, " ");
+
+    ips114_show_string(208, 5 * MENU_ROW_HEIGHT, "SAVE");
+    ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "TPL");
+
+    switch (sensor_gain_status)
+    {
+    case MENU_SENSOR_GAIN_STATUS_ON:
+        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "ON ");
+        break;
+    case MENU_SENSOR_GAIN_STATUS_SAVED:
+        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "SAV");
+        break;
+    case MENU_SENSOR_GAIN_STATUS_ERROR:
+        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "ERR");
+        break;
+    default:
+        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "OFF");
+        break;
+    }
 }
 
 static void Menu_Draw_Ring(int edit_line)
@@ -743,6 +806,94 @@ static void Menu_Process_Track_Mode(void)
 
     if (changed)
         control_apply_config();
+}
+
+/**
+ * @brief 结束 SENSOR 页 TPL0102 调试会话。
+ *
+ * 退出调试后只关闭软件状态，不改 TPL0102 已写入的 WR/IVR。
+ * 这样正常运行期不会继续误触 P3.4/P3.5 I2C 总线。
+ */
+static void Menu_Sensor_Gain_End(void)
+{
+    if (sensor_gain_edit_active)
+    {
+        tpl0102_debug_end();
+    }
+
+    sensor_gain_edit_active = 0;
+    sensor_gain_selected = 0;
+    sensor_gain_status = MENU_SENSOR_GAIN_STATUS_OFF;
+}
+
+/**
+ * @brief 调整当前选中通道的 volatile 抽头码。
+ *
+ * @param[in] delta 抽头码变化量，当前菜单只使用 +1 或 -1。
+ *
+ * @note 该函数只由按键事件触发，禁止放到周期刷新路径中调用。
+ */
+static void Menu_Sensor_Gain_Adjust(int delta)
+{
+    int tap_code;
+
+    if (!sensor_gain_edit_active || sensor_gain_selected >= TPL0102_CH_COUNT)
+    {
+        return;
+    }
+
+    tap_code = (int)tpl0102_get_cached_code((TPL0102_Channel)sensor_gain_selected);
+    tap_code += delta;
+    if (tap_code < 0)
+    {
+        tap_code = 0;
+    }
+    else if (tap_code > 255)
+    {
+        tap_code = 255;
+    }
+
+    if (tpl0102_set_channel((TPL0102_Channel)sensor_gain_selected, (uint8)tap_code))
+    {
+        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ON;
+    }
+    else
+    {
+        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
+        sensor_gain_edit_active = 0;
+    }
+}
+
+/**
+ * @brief 将四路当前缓存增益码保存到 TPL0102 内部 IVR。
+ *
+ * 保存会触发 TPL0102 内部 EEPROM 写周期，只能由用户选中 SAVE 后确认触发。
+ * 失败时关闭调试会话，避免菜单继续对不确定状态的总线发起写操作。
+ */
+static void Menu_Sensor_Gain_Save(void)
+{
+    uint8 gain_codes[TPL0102_CH_COUNT];
+    uint8 i;
+
+    if (!sensor_gain_edit_active)
+    {
+        return;
+    }
+
+    for (i = 0; i < TPL0102_CH_COUNT; i++)
+    {
+        gain_codes[i] = tpl0102_get_cached_code((TPL0102_Channel)i);
+    }
+
+    if (tpl0102_save_all(gain_codes))
+    {
+        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_SAVED;
+    }
+    else
+    {
+        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
+        sensor_gain_edit_active = 0;
+    }
 }
 
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min)
@@ -987,18 +1138,65 @@ static void Menu_Sensor_Process(void)
     if (event_code == 0)
         return;
 
+    if (!sensor_gain_edit_active)
+    {
+        switch (keystroke_label)
+        {
+        case KEYSTROKE_THREE:
+            if (tpl0102_debug_begin())
+            {
+                sensor_gain_edit_active = 1;
+                sensor_gain_selected = 0;
+                sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ON;
+            }
+            else
+            {
+                sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
+            }
+            break;
+        case KEYSTROKE_FOUR:
+        case KEYSTROKE_FOUR_LONG:
+            menu_next_flag = -1;
+            break;
+        default:
+            break;
+        }
+
+        if (menu_next_flag != 0)
+            Menu_Next_Back();
+        return;
+    }
+
     switch (keystroke_label)
     {
+    case KEYSTROKE_ONE:
+    case KEYSTROKE_ONE_LONG:
+        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
+            Menu_Sensor_Gain_Save();
+        else
+            Menu_Sensor_Gain_Adjust(1);
+        break;
+    case KEYSTROKE_TWO:
+    case KEYSTROKE_TWO_LONG:
+        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
+            Menu_Sensor_Gain_Save();
+        else
+            Menu_Sensor_Gain_Adjust(-1);
+        break;
+    case KEYSTROKE_THREE:
+        sensor_gain_selected++;
+        if (sensor_gain_selected > MENU_SENSOR_GAIN_SAVE_INDEX)
+        {
+            sensor_gain_selected = 0;
+        }
+        break;
     case KEYSTROKE_FOUR:
     case KEYSTROKE_FOUR_LONG:
-        menu_next_flag = -1;
+        Menu_Sensor_Gain_End();
         break;
     default:
         break;
     }
-
-    if (menu_next_flag != 0)
-        Menu_Next_Back();
 }
 
 static void Menu_Ring_Process(void)

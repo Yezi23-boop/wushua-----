@@ -42,7 +42,7 @@ void a_run_mode_update_start_state(void)
     }
 
     /* 检测按键按下（低电平有效） */
-    if (P36 == 0)
+    if (P43 == 0)
     {
         if (key_released == 1) // 仅在本次按下的首次稳定阶段计数
         {
