@@ -14,6 +14,17 @@
 #define TPL0102_ACR_WIP_MASK 0x20u
 #define TPL0102_DEFAULT_CODE 0x80u
 
+#define TPL0102_ERROR_NONE 0u
+#define TPL0102_ERROR_U3_ACR 1u
+#define TPL0102_ERROR_U6_ACR 2u
+#define TPL0102_ERROR_U3_READ 3u
+#define TPL0102_ERROR_U6_READ 4u
+#define TPL0102_ERROR_SET_WRITE 5u
+#define TPL0102_ERROR_SET_READBACK 6u
+#define TPL0102_ERROR_SET_MISMATCH 7u
+#define TPL0102_ERROR_SAVE 8u
+#define TPL0102_ERROR_SET_MODE 9u
+
 typedef enum
 {
     TPL0102_CH_LEFT_H = 0,
@@ -90,6 +101,80 @@ uint8 tpl0102_save_all(const uint8 *tap_codes);
  * @return 当前缓存抽头码；通道非法时返回 `TPL0102_DEFAULT_CODE`。
  */
 uint8 tpl0102_get_cached_code(TPL0102_Channel channel);
+
+/**
+ * @brief 读取最近一次 TPL0102 调试错误码。
+ *
+ * @return `TPL0102_ERROR_NONE` 表示无错误；E1/E2 表示 U3/U6 ACR 写失败；
+ *         E3/E4 表示 U3/U6 抽头寄存器读取失败；E5/E6/E7 表示调试写入、
+ *         写后读回、读回不一致失败；E8 表示保存失败；E9 表示 WR 模式确认失败。
+ */
+uint8 tpl0102_get_last_error(void);
+
+/**
+ * @brief 读取最近一次调试写入的目标抽头码。
+ *
+ * @return 最近一次 K1/K2 调试写入请求的目标值。
+ */
+uint8 tpl0102_get_last_target_code(void);
+
+/**
+ * @brief 读取最近一次调试写入后的寄存器读回值。
+ *
+ * @return 最近一次 WR 读回值；读回失败时保留上一次值。
+ */
+uint8 tpl0102_get_last_readback_code(void);
+
+/**
+ * @brief 读取最近一次调试写入前采集到的 ACR 值。
+ *
+ * @return ACR 读回值；0xFF 表示本次 ACR 读取失败。
+ */
+uint8 tpl0102_get_last_acr(void);
+
+/**
+ * @brief 读取 K3 打开调试后 U3 的 ACR 读回值。
+ *
+ * @return U3 ACR；0xFF 表示打开阶段读取失败。
+ */
+uint8 tpl0102_get_debug_u3_acr(void);
+
+/**
+ * @brief 读取 K3 打开调试后 U6 的 ACR 读回值。
+ *
+ * @return U6 ACR；0xFF 表示打开阶段读取失败。
+ */
+uint8 tpl0102_get_debug_u6_acr(void);
+
+/**
+ * @brief 读取 K3 打开调试前 I2C 总线空闲电平。
+ *
+ * @return bit1 表示 SCL(P34)，bit0 表示 SDA(P35)；正常空闲应为 3。
+ */
+uint8 tpl0102_get_debug_bus_idle(void);
+
+/**
+ * @brief 读取 K3 打开调试时的 TPL0102 地址扫描掩码。
+ *
+ * @return bit0..bit7 分别表示 0x50..0x57 写地址是否 ACK；U6=0x54、U3=0x56 时正常为 80。
+ */
+uint8 tpl0102_get_debug_addr_mask(void);
+
+/**
+ * @brief 读取 K3 打开调试时的 SDA 拉低/释放测试结果。
+ *
+ * @return bit0 表示初始释放，bit1 表示二次释放，bit2 表示 SCL 低时强拉低后，
+ *         bit3 表示 SCL 低时再次释放；正常应为 11。
+ */
+uint8 tpl0102_get_debug_sda_test(void);
+
+/**
+ * @brief 读取地址扫描首个 ACK 位的 SDA 采样结果。
+ *
+ * @return bit0 表示释放 SDA 后电平，bit1 表示 SCL 高电平采样，
+ *         bit2 表示 SCL 拉低后电平；1 表示 SDA 高。
+ */
+uint8 tpl0102_get_debug_scan_ack_sample(void);
 
 /**
  * @brief 查询当前是否处于 TPL0102 调试会话。

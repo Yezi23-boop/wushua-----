@@ -35,6 +35,7 @@
 - 可以使用 `int32`，但仍需注意目标平台上的类型宽度和运算开销。
 - `AGENTS.md` 与包含中文注释或字符串的源码文件统一使用 UTF-8 编码；若遇到 Keil5 C251 的特殊兼容性问题，以可编译和可读性为先。
 - 编译工具路径为 `D:\keil_5\UV4\UV4.exe`。
+- 常规工程编译验证使用 PowerShell 执行 `& 'D:\keil_5\UV4\UV4.exe' -b 'project\mdk\seekfree.uvproj'`，并读取 `project/mdk/out_file/SEEKFREE.build_log.htm` 确认 `Error(s)` 与 `Warning(s)`；若 Keil 增量构建未重编刚修改的源文件，可按工程参数用 `D:\keil_5\C251\BIN\C251.EXE` 对该文件做单文件辅助编译验证。
 - 头文件统一通过 `#include "zf_common_headfile.h"` 管理，避免分散包含造成依赖失控。
 - 读取日志相关的文件统一放在 `log/` 目录下，不要分散存放。
 - Git 提交信息要求使用中文。

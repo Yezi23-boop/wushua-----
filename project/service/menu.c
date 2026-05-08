@@ -28,11 +28,17 @@
 #define MENU_STEP_INT_X (15 * 8)
 #define EEPROM_MODE 1
 #define MENU_SAVE_PROMPT_DELAY_MS 300
+#define MENU_SENSOR_GAIN_ENABLE 0
+
+#if MENU_SENSOR_GAIN_ENABLE
 #define MENU_SENSOR_GAIN_SAVE_INDEX TPL0102_CH_COUNT
 #define MENU_SENSOR_GAIN_STATUS_OFF 0
 #define MENU_SENSOR_GAIN_STATUS_ON 1
 #define MENU_SENSOR_GAIN_STATUS_SAVED 2
 #define MENU_SENSOR_GAIN_STATUS_ERROR 3
+#define MENU_SENSOR_GAIN_STEP 5
+#define MENU_SENSOR_GAIN_FAST_STEP 20
+#endif
 
 static uint8 menu_service_enabled = 0;
 static int cursor_row = MENU_ROW_MIN;
@@ -42,9 +48,11 @@ static int change_unit_multiplier = 1;
 static int keystroke_three_count = 0;
 static int menu_saved_row[MENU_PAGE_COUNT];
 static int menu_entry_row[MENU_PAGE_COUNT];
+#if MENU_SENSOR_GAIN_ENABLE
 static uint8 sensor_gain_edit_active = 0;
 static uint8 sensor_gain_selected = 0;
 static uint8 sensor_gain_status = MENU_SENSOR_GAIN_STATUS_OFF;
+#endif
 
 int display_codename = 0;
 
@@ -79,14 +87,18 @@ static void Menu_Draw_Start(int edit_line);
 static void Menu_Draw_Speed(int edit_line);
 static void Menu_Draw_Model(int edit_line);
 static void Menu_Draw_Sensor(void);
+#if MENU_SENSOR_GAIN_ENABLE
 static void Menu_Draw_Sensor_Gain_Status(void);
+#endif
 static void Menu_Draw_Ring(int edit_line);
 static void Menu_Draw_Fly(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
 static void Menu_Process_Track_Mode(void);
+#if MENU_SENSOR_GAIN_ENABLE
 static void Menu_Sensor_Gain_End(void);
 static void Menu_Sensor_Gain_Adjust(int delta);
 static void Menu_Sensor_Gain_Save(void);
+#endif
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
 static void Keystroke_Menu_HOME(void);
@@ -112,7 +124,9 @@ void Menu_Set_Service_Enable(uint8 enabled)
     }
     else
     {
+#if MENU_SENSOR_GAIN_ENABLE
         Menu_Sensor_Gain_End();
+#endif
         Menu_Reset_Page_Memory();
         display_codename = 0;
         menu_next_flag = 0;
@@ -597,42 +611,44 @@ static void Menu_Draw_Model(int edit_line)
 static void Menu_Draw_Sensor(void)
 {
     ips114_show_string(8, 0, "<<SENSOR");
-    ips114_show_string(56, 0, "NORM");
+    ips114_show_string(64, 0, "NORM");
     ips114_show_string(112, 0, "RAW");
-    ips114_show_string(176, 0, "MAX");
-    ips114_show_string(208, 0, "GAIN");
+#if MENU_SENSOR_GAIN_ENABLE
+    ips114_show_string(184, 0, "GAIN");
+#endif
 
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "ad1");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ad2");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "ad3");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "ad4");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "Err");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "LH");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "LV");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "RH");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "RV");
 
-    ips114_show_int32(56, 1 * MENU_ROW_HEIGHT, ad1, 3);
-    ips114_show_int32(56, 2 * MENU_ROW_HEIGHT, ad2, 3);
-    ips114_show_int32(56, 3 * MENU_ROW_HEIGHT, ad3, 3);
-    ips114_show_int32(56, 4 * MENU_ROW_HEIGHT, ad4, 3);
+    ips114_show_int32(64, 1 * MENU_ROW_HEIGHT, ad1, 3);
+    ips114_show_int32(64, 2 * MENU_ROW_HEIGHT, ad2, 3);
+    ips114_show_int32(64, 3 * MENU_ROW_HEIGHT, ad3, 3);
+    ips114_show_int32(64, 4 * MENU_ROW_HEIGHT, ad4, 3);
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, RAW[0], 4);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, RAW[1], 4);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, RAW[2], 4);
     ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, RAW[3], 4);
 
-    ips114_show_int32(176, 1 * MENU_ROW_HEIGHT, MA[0], 4);
-    ips114_show_int32(176, 2 * MENU_ROW_HEIGHT, MA[1], 4);
-    ips114_show_int32(176, 3 * MENU_ROW_HEIGHT, MA[2], 4);
-    ips114_show_int32(176, 4 * MENU_ROW_HEIGHT, MA[3], 4);
-
+#if MENU_SENSOR_GAIN_ENABLE
     Menu_Draw_Sensor_Gain_Status();
+#endif
 
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "cyl");
-    ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
-    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "qvz");
-    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_vz(), 2, 3);
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "Err");
+    ips114_show_float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
+    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
+    ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
+    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "qvz");
+    ips114_show_float(192, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_vz(), 2, 3);
 
-    ips114_show_float(56, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
+#if MENU_SENSOR_GAIN_ENABLE
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "TPL");
+#endif
 }
 
+#if MENU_SENSOR_GAIN_ENABLE
 /**
  * @brief 绘制 SENSOR 页右侧 TPL0102 增益调试状态。
  *
@@ -643,42 +659,96 @@ static void Menu_Draw_Sensor_Gain_Status(void)
 {
     uint8 i;
     uint8 tap_code;
+    uint8 last_error;
+    char error_text[4];
+
+    ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "                  ");
 
     for (i = 0; i < TPL0102_CH_COUNT; i++)
     {
         if (sensor_gain_edit_active && sensor_gain_selected == i)
-            ips114_show_string(200, (i + 1) * MENU_ROW_HEIGHT, "*");
+            ips114_show_string(176, (i + 1) * MENU_ROW_HEIGHT, "*");
         else
-            ips114_show_string(200, (i + 1) * MENU_ROW_HEIGHT, " ");
+            ips114_show_string(176, (i + 1) * MENU_ROW_HEIGHT, " ");
 
         tap_code = tpl0102_get_cached_code((TPL0102_Channel)i);
-        ips114_show_int32(208, (i + 1) * MENU_ROW_HEIGHT, tap_code, 3);
+        ips114_show_int32(192, (i + 1) * MENU_ROW_HEIGHT, tap_code, 3);
     }
 
     if (sensor_gain_edit_active && sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
-        ips114_show_string(200, 5 * MENU_ROW_HEIGHT, "*");
+        ips114_show_string(176, 6 * MENU_ROW_HEIGHT, "*");
     else
-        ips114_show_string(200, 5 * MENU_ROW_HEIGHT, " ");
+        ips114_show_string(176, 6 * MENU_ROW_HEIGHT, " ");
 
-    ips114_show_string(208, 5 * MENU_ROW_HEIGHT, "SAVE");
-    ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "TPL");
+    ips114_show_string(192, 6 * MENU_ROW_HEIGHT, "SAVE");
 
     switch (sensor_gain_status)
     {
     case MENU_SENSOR_GAIN_STATUS_ON:
-        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "ON ");
+        ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "A");
+        ips114_show_int32(56, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_u3_acr(), 3);
+        ips114_show_string(88, 6 * MENU_ROW_HEIGHT, "/");
+        ips114_show_int32(96, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_u6_acr(), 3);
         break;
     case MENU_SENSOR_GAIN_STATUS_SAVED:
-        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "SAV");
+        ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "SAV");
         break;
     case MENU_SENSOR_GAIN_STATUS_ERROR:
-        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "ERR");
+        last_error = tpl0102_get_last_error();
+        if (last_error > 9)
+            last_error = 9;
+        if (last_error == TPL0102_ERROR_SET_MISMATCH)
+        {
+            ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "E7A");
+            ips114_show_int32(72, 6 * MENU_ROW_HEIGHT, tpl0102_get_last_acr(), 3);
+            ips114_show_string(104, 6 * MENU_ROW_HEIGHT, "T");
+            ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, tpl0102_get_last_target_code(), 3);
+        }
+        else if (last_error == TPL0102_ERROR_U3_ACR || last_error == TPL0102_ERROR_U6_ACR)
+        {
+            error_text[0] = 'E';
+            error_text[1] = (char)('0' + last_error);
+            error_text[2] = 'M';
+            error_text[3] = '\0';
+            ips114_show_string(48, 6 * MENU_ROW_HEIGHT, error_text);
+            ips114_show_int32(80, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_addr_mask(), 3);
+        }
+        else if (last_error == TPL0102_ERROR_SET_MODE)
+        {
+            if (tpl0102_get_debug_bus_idle() != 0x03u)
+            {
+                ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "E9B");
+                ips114_show_int32(80, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_bus_idle(), 1);
+                ips114_show_string(96, 6 * MENU_ROW_HEIGHT, "T");
+                ips114_show_int32(104, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_sda_test(), 1);
+            }
+            else
+            {
+                ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "E9M");
+                ips114_show_int32(72, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_addr_mask(), 3);
+                ips114_show_string(104, 6 * MENU_ROW_HEIGHT, "A");
+                ips114_show_char(112, 6 * MENU_ROW_HEIGHT, (char)('0' + tpl0102_get_debug_u3_acr()));
+                ips114_show_string(120, 6 * MENU_ROW_HEIGHT, "/");
+                ips114_show_char(128, 6 * MENU_ROW_HEIGHT, (char)('0' + tpl0102_get_debug_u6_acr()));
+                ips114_show_string(136, 6 * MENU_ROW_HEIGHT, "D");
+                ips114_show_char(144, 6 * MENU_ROW_HEIGHT, (char)('0' + tpl0102_get_debug_scan_ack_sample()));
+            }
+        }
+        else
+        {
+            error_text[0] = 'E';
+            error_text[1] = (char)('0' + last_error);
+            error_text[2] = ' ';
+            error_text[3] = '\0';
+            ips114_show_string(48, 6 * MENU_ROW_HEIGHT, error_text);
+        }
         break;
     default:
-        ips114_show_string(144, 6 * MENU_ROW_HEIGHT, "OFF");
+        ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "OFF");
         break;
     }
 }
+#endif
 
 static void Menu_Draw_Ring(int edit_line)
 {
@@ -808,6 +878,7 @@ static void Menu_Process_Track_Mode(void)
         control_apply_config();
 }
 
+#if MENU_SENSOR_GAIN_ENABLE
 /**
  * @brief 结束 SENSOR 页 TPL0102 调试会话。
  *
@@ -829,7 +900,7 @@ static void Menu_Sensor_Gain_End(void)
 /**
  * @brief 调整当前选中通道的 volatile 抽头码。
  *
- * @param[in] delta 抽头码变化量，当前菜单只使用 +1 或 -1。
+ * @param[in] delta 抽头码变化量，短按/长按使用不同步长便于现场快速拉满测试。
  *
  * @note 该函数只由按键事件触发，禁止放到周期刷新路径中调用。
  */
@@ -855,7 +926,14 @@ static void Menu_Sensor_Gain_Adjust(int delta)
 
     if (tpl0102_set_channel((TPL0102_Channel)sensor_gain_selected, (uint8)tap_code))
     {
-        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ON;
+        if (tpl0102_get_last_error() == TPL0102_ERROR_NONE)
+        {
+            sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ON;
+        }
+        else
+        {
+            sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
+        }
     }
     else
     {
@@ -895,6 +973,7 @@ static void Menu_Sensor_Gain_Save(void)
         sensor_gain_edit_active = 0;
     }
 }
+#endif
 
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min)
 {
@@ -1138,6 +1217,7 @@ static void Menu_Sensor_Process(void)
     if (event_code == 0)
         return;
 
+#if MENU_SENSOR_GAIN_ENABLE
     if (!sensor_gain_edit_active)
     {
         switch (keystroke_label)
@@ -1170,18 +1250,28 @@ static void Menu_Sensor_Process(void)
     switch (keystroke_label)
     {
     case KEYSTROKE_ONE:
+        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
+            Menu_Sensor_Gain_Save();
+        else
+            Menu_Sensor_Gain_Adjust(-MENU_SENSOR_GAIN_STEP);
+        break;
     case KEYSTROKE_ONE_LONG:
         if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
             Menu_Sensor_Gain_Save();
         else
-            Menu_Sensor_Gain_Adjust(1);
+            Menu_Sensor_Gain_Adjust(-MENU_SENSOR_GAIN_FAST_STEP);
         break;
     case KEYSTROKE_TWO:
+        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
+            Menu_Sensor_Gain_Save();
+        else
+            Menu_Sensor_Gain_Adjust(MENU_SENSOR_GAIN_STEP);
+        break;
     case KEYSTROKE_TWO_LONG:
         if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
             Menu_Sensor_Gain_Save();
         else
-            Menu_Sensor_Gain_Adjust(-1);
+            Menu_Sensor_Gain_Adjust(MENU_SENSOR_GAIN_FAST_STEP);
         break;
     case KEYSTROKE_THREE:
         sensor_gain_selected++;
@@ -1197,6 +1287,20 @@ static void Menu_Sensor_Process(void)
     default:
         break;
     }
+#else
+    switch (keystroke_label)
+    {
+    case KEYSTROKE_FOUR:
+    case KEYSTROKE_FOUR_LONG:
+        menu_next_flag = -1;
+        break;
+    default:
+        break;
+    }
+
+    if (menu_next_flag != 0)
+        Menu_Next_Back();
+#endif
 }
 
 static void Menu_Ring_Process(void)
