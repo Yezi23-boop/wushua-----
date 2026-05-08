@@ -3,7 +3,7 @@
  * @brief IMU 姿态辅助计算与角速度桥接
  * @details
  * 本模块对 IMU660RC 输出进行轻量转换，向控制环提供：
- * - 基于四元数的重力向量分量；
+ * - 基于四元数的重力向量 Z 分量缓存；
  * - 统一量纲后的 gyro_z 实时反馈；
  * - 若干数学辅助函数（快速平方根、反平方根、atan2 兼容实现）。
  *
@@ -19,11 +19,18 @@
 
 /**< Z 轴陀螺仪向外输出前缩放乘数：由底盘转向几何、硬件灵敏度及控制目标共同决定的经验值 */
 #define IMU_GYRO_Z_SCALE (0.005f)
+#define IMU_GYRO_Z_SIGN (-1.0f) /* 驱动 gyro_z 顺时针为正；控制差速约定左转为正，需在桥接层翻转。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
+#define IMU_GRAVITY_Z_SIGN (-1.0f) /* 当前 IMU 安装方向下，驱动解算平地 vz 为 -1；统一翻转为上层平地约 +1。 */
+#define IMU_GRAVITY_VZ_FLAT_COMP_START 0.80f /* 仅在接近平地时补偿；低于该值认为可能是真实姿态变化。 */
+#define IMU_GRAVITY_VZ_COMP_STEP 0.0015f     /* 5ms 每次最多补 0.0015，约 0.3/s，避免机械抖动导致平地 vz 慢慢掉。 */
+#define IMU_GRAVITY_VZ_COMP_MAX 0.20f        /* 最多补 0.20，防止补偿掩盖圆桶或墙面姿态。 */
 
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
+static volatile float imu_gravity_vz = 1.0f;
+static float imu_gravity_vz_time_comp = 0.0f;
 
 /**
  * @brief 上电标定 gyro_z 零偏
@@ -61,42 +68,80 @@ void imu_calibrate_gyro_z_zero_drift(void)
 }
 
 /**
- * @brief 由四元数计算重力向量分量
+ * @brief 由四元数更新重力向量 Z 分量缓存。
  * @details
  * 驱动层四元数顺序为 [y, x, z, w]，此处先重排为标准 (w,x,y,z) 再计算。
- * 允许按需传入空指针以跳过不关心分量，减少不必要写操作。
+ * 当前硬件安装方向下，驱动解算出的 Z 分量与控制策略约定相反，
+ * 因此统一在此处翻转 Z 轴，保证负压、圆桶和调试显示共用“平地 vz 约 +1”的坐标系。
+ *
+ * @note 由 5ms 主控制链路调用一次，其他模块通过 `imu_get_gravity_vz` 读取缓存，避免重复计算四元数。
  */
-void imu_update_gravity_vector_from_quaternion(float *vx, float *vy, float *vz)
+void imu_update_gravity_vz_from_quaternion(void)
 {
     float qw;
     float qx;
     float qy;
     float qz;
+    float comp_need;
+    float raw_vz;
+    float vz;
 
-    /* 1) 驱动当前导出的顺序为 [y, x, z, w]，先重排到标准四元数 */
     qx = imu660rc_quarternion[1];
     qy = imu660rc_quarternion[0];
     qz = imu660rc_quarternion[2];
     qw = imu660rc_quarternion[3];
 
-    /* 2) 按需输出各分量，空指针表示上层不关心该轴 */
-    if (0 != vx)
+    raw_vz = IMU_GRAVITY_Z_SIGN * (qw * qw - qx * qx - qy * qy + qz * qz);
+    if (raw_vz > 1.0f)
     {
-        *vx = 2.0f * (qx * qz - qw * qy);
+        raw_vz = 1.0f;
     }
-    if (0 != vy)
+    else if (raw_vz < -1.0f)
     {
-        *vy = 2.0f * (qw * qx + qy * qz);
+        raw_vz = -1.0f;
     }
-    if (0 != vz)
+
+    if (raw_vz > IMU_GRAVITY_VZ_FLAT_COMP_START && raw_vz < 1.0f)
     {
-        *vz = qw * qw - qx * qx - qy * qy + qz * qz;
+        comp_need = 1.0f - raw_vz;
+        if (comp_need > IMU_GRAVITY_VZ_COMP_MAX)
+        {
+            comp_need = IMU_GRAVITY_VZ_COMP_MAX;
+        }
+
+        imu_gravity_vz_time_comp += IMU_GRAVITY_VZ_COMP_STEP;
+        if (imu_gravity_vz_time_comp > comp_need)
+        {
+            imu_gravity_vz_time_comp = comp_need;
+        }
     }
+    else
+    {
+        // 离开接近平地区间时立即清补偿，避免真实圆桶/墙面姿态被持续抬高。
+        imu_gravity_vz_time_comp = 0.0f;
+    }
+
+    vz = raw_vz + imu_gravity_vz_time_comp;
+    if (vz > 1.0f)
+    {
+        vz = 1.0f;
+    }
+
+    imu_gravity_vz = vz;
+}
+
+/**
+ * @brief 读取最近一次 5ms 更新的重力向量 Z 分量。
+ * @return float 已限幅到 -1.0f~1.0f 的 vz，平地约 +1。
+ */
+float imu_get_gravity_vz(void)
+{
+    return imu_gravity_vz;
 }
 
 /**
  * @brief 更新控制环使用的 Z 轴角速度
- * @details 将驱动原始值转换为控制器统一量纲，避免各模块重复转换。
+ * @details 将驱动原始值转换为控制器统一量纲，并统一为左转/逆时针正，避免控制环分散处理符号。
  */
 void imu_update_gyro_z_from_imu660rc(void)
 {
@@ -104,7 +149,7 @@ void imu_update_gyro_z_from_imu660rc(void)
 
     /* 统一在此处做量纲转换，其他模块直接读 gyro_z */
     gyro_z_now = imu660rc_gyro_transition(imu660rc_gyro_z);
-    gyro_z = (gyro_z_now - imu_gyro_z_zero_bias) * IMU_GYRO_Z_SCALE;
+    gyro_z = (gyro_z_now - imu_gyro_z_zero_bias) * IMU_GYRO_Z_SCALE * IMU_GYRO_Z_SIGN;
 }
 
 /**

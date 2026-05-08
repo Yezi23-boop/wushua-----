@@ -77,23 +77,14 @@ static uint8 fuya_limit_percent(int percent)
 }
 
 /**
- * @brief 读取并限幅当前重力向量 Z 分量
- * @details 将 IMU 取值与边界裁剪集中到一个函数，减少重复代码。
+ * @brief 读取当前重力向量 Z 分量
+ * @details 直接使用 5ms IMU 缓存值，避免负压和圆桶各自重复计算四元数。
  */
 static float fuya_read_vzc(void)
 {
     float vzc;
 
-    imu_update_gravity_vector_from_quaternion(0, 0, &vzc);
-    if (vzc > 1.0f)
-    {
-        vzc = 1.0f;
-    }
-    else if (vzc < -1.0f)
-    {
-        vzc = -1.0f;
-    }
-
+    vzc = imu_get_gravity_vz();
     fuya_last_vzc = vzc;
     return vzc;
 }

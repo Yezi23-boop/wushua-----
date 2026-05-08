@@ -15,7 +15,6 @@ static void circle_check_l(uint8 allow_entry);
 /* --- 赛道元素仲裁与圆筒状态参数（run_time_1 以 5ms 调用） --- */
 #define CYLINDER_TOP_GRAVITY_Z -0.3f     /* vz 到达该值以下，认为接近圆桶顶部，单位：g。 */
 #define CYLINDER_GROUND_GRAVITY_Z 0.3f   /* vz 回到该值以上，认为车身已回地，单位：g。 */
-#define CYLINDER_VZ_FILTER_ALPHA 0.05f   /* 圆桶 vz 一阶低通输入权重，等价于 0.95 旧值 + 0.05 新值。 */
 #define CYLINDER_TOP_CONFIRM_COUNT 3u    /* 5ms * 3 = 15ms，抑制单次冲击误判。 */
 #define CYLINDER_GROUND_CONFIRM_COUNT 3u /* 5ms * 3 = 15ms，回地同样做连续确认。 */
 #define CYLINDER_STABLE_DELAY_COUNT 50u  /* 5ms * 50 = 250ms，回地稳定后再恢复圆环识别。 */
@@ -62,9 +61,7 @@ static enum CylinderStep cylinder_state = CYL_IDLE;            /**< 圆桶状态
 static uint8 cylinder_top_count = 0;                           /**< 圆桶顶部确认计数，连续 3 次（15ms）vz 低于阈值才认定过顶。 */
 static uint8 cylinder_ground_count = 0;                        /**< 圆桶回地确认计数，连续 3 次（15ms）vz 高于阈值才认定回地。 */
 static uint8 cylinder_stable_count = 0;                        /**< 圆桶回地稳定延时计数，50 次（250ms）后才允许恢复圆环识别。 */
-static float cylinder_vz_filter = 1.0f;                        /**< vz 一阶低通滤波值，用于圆桶顶部/回地阈值判断。 */
-static LowPassFilter_t cylinder_vz_low_pass = {0};             /**< 复用通用一阶低通状态，避免圆桶逻辑维护重复滤波公式。 */
-static uint8 cylinder_vz_filter_valid = 0;                     /**< vz 滤波是否已完成首次初始化，0-未初始化，1-已初始化。 */
+static float cylinder_vz = 1.0f;                               /**< 圆桶状态机当前使用的 5ms 重力向量 Z 分量，直接来自 IMU 缓存。 */
 
 /**
  * @brief 根据环岛状态更新角速度目标。
@@ -110,39 +107,6 @@ static int8 ring_is_left_entry_signal(void)
 }
 
 /**
- * @brief 更新圆桶判断用重力向量 vz 滤波值。
- * @details
- * 圆桶判断使用四元数解算的重力向量 vz，并在同一 5ms 调用内完成限幅和低通滤波。
- * 这样能减少只调用一次的小函数跳转，同时保持首次采样直接初始化，避免从 0 慢慢爬升。
- */
-static void cylinder_update_vz_filter_5ms(void)
-{
-    float vz;
-
-    imu_update_gravity_vector_from_quaternion(0, 0, &vz);
-    if (vz < -1.0f)
-    {
-        vz = -1.0f;
-    }
-    else if (vz > 1.0f)
-    {
-        vz = 1.0f;
-    }
-
-    if (cylinder_vz_filter_valid == 0)
-    {
-        cylinder_vz_filter = vz;
-        cylinder_vz_low_pass.out_last = vz;
-        cylinder_vz_filter_valid = 1;
-    }
-    else
-    {
-        low_pass_filter_mt(&cylinder_vz_low_pass, &vz, CYLINDER_VZ_FILTER_ALPHA);
-        cylinder_vz_filter = vz;
-    }
-}
-
-/**
  * @brief 读取当前环岛状态机阶段。
  * @return int8 当前阶段编号：0-no_ring，1-ring，2-pre_ring，3-in_ring，4-pre_out_ring，5-out_ring。
  *
@@ -172,12 +136,12 @@ int8 a_run_track_element_get_cylinder_state(void)
 }
 
 /**
- * @brief 读取圆桶判断当前使用的重力向量 vz 滤波值。
- * @return float 经过 0.95/0.05 一阶滤波的 vz，来自四元数解算。
+ * @brief 读取圆桶判断当前使用的重力向量 vz。
+ * @return float 5ms IMU 缓存的 vz，已在 IMU 模块限幅。
  */
 float a_run_track_element_get_cylinder_vz(void)
 {
-    return cylinder_vz_filter;
+    return cylinder_vz;
 }
 
 /**
@@ -254,7 +218,7 @@ static void cylinder_start_wait_top(void)
  * @brief 更新圆桶过顶/回地状态机。
  * @return uint8 1-圆桶流程完成，可恢复后续圆环识别；0-仍在圆桶流程中。
  * @details
- * 该函数由 5ms 主控制链路调用，只使用滤波后的 vz 判断顶部和回地。
+ * 该函数由 5ms 主控制链路调用，直接使用当前 vz 判断顶部和回地。
  * 顶部、回地和稳定延时都通过计数去抖，避免单次冲击触发状态跳变。
  */
 static uint8 cylinder_update_5ms(void)
@@ -266,7 +230,7 @@ static uint8 cylinder_update_5ms(void)
         cylinder_start_wait_top();
     }
 
-    vz = cylinder_vz_filter;
+    vz = cylinder_vz;
 
     switch (cylinder_state)
     {
@@ -346,13 +310,13 @@ static void track_element_reset_state(void)
  * 左环与圆筒为串行流程：左环完成后进入圆筒，圆筒完成后回到左环。
  * 右环功能在代码中标记为未实现，运行时按模式 0 执行。
  *
- * @note 由 5ms 主控制环调用，函数内部自行管理圆桶滤波和环岛状态迁移。
+ * @note 由 5ms 主控制环调用，函数内部刷新圆桶姿态快照并推进环岛状态迁移。
  */
 void a_run_track_element_update_gate(void)
 {
     uint8 cylinder_done;
 
-    cylinder_update_vz_filter_5ms();
+    cylinder_vz = imu_get_gravity_vz();
 
     if (app.start.circle_flags != 1)
     {
@@ -463,7 +427,7 @@ static void circle_check_l(uint8 allow_entry)
         break;
 
     case pre_ring:
-        /* 给定预入环固定目标角速度，左环累计 yaw 角增量为负。 */
+        /* 控制环 gyro_z 已统一为左转正；左环固定角速度目标保持正值，便于现场调参。 */
         ring_data.diff_set = app.ring.pre_ring_Gyro_target;
 
         /* 相对预入环起点的偏航角累计达到入环阈值并确认 50ms 后，认为已真正入环。 */
@@ -485,7 +449,7 @@ static void circle_check_l(uint8 allow_entry)
         break;
 
     case pre_out_ring:
-        /* 给定预出环固定目标角速度，继续沿左环方向修正车身。 */
+        /* 预出环继续按左环方向给正角速度目标，yaw 累计仍按顺时针正判断负角度。 */
         ring_data.diff_set = app.ring.pre_out_ring_Gyro_target;
 
         /* 预出环继续沿左环方向打到更大的出环角度，避免过早回线导致压线不稳。 */

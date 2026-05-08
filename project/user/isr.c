@@ -122,10 +122,10 @@ void INT1_IRQHandler(void) interrupt 2
 void TM0_IRQHandler() interrupt 1
 {
     TIM0_CLEAR_FLAG;
- a_run_apply_iap_guard();
-/* 1. 获取编码器实时速度反馈 */
- Encoder_get(&PID.left_speed, &PID.right_speed);
- motor_output(3000, 4000);
+// a_run_apply_iap_guard();
+///* 1. 获取编码器实时速度反馈 */
+// Encoder_get(&PID.left_speed, &PID.right_speed);
+// motor_output(3000, 4000);
 #if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
     test_diff_func();
 #endif
