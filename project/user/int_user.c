@@ -21,7 +21,6 @@ static void timer1_service_10ms(void);
  */
 void int_user(void)
 {
-    //	gpio_init(IO_P36, GPO, 1, GPO_PUSH_PULL);
     hardware_init(); /* 1. 硬件平台初始化 */
     control_init();  /* 2. 控制算法参数初始化 */
     app_init();      /* 3. 应用逻辑初始化 */
@@ -45,6 +44,10 @@ static void hardware_init(void)
     eeprom_init();                             /* 参数存储模块 */
 
     tim1_irq_handler = timer1_service_10ms;
+
+    /* P36/P43 都按准双向口直接写端口锁存，减少 GPIO 初始化对现场接线状态的影响。 */
+    P36 = 1;
+    P43 = 1;
 
     /* 编码器接口初始化 */
     encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04);
@@ -80,8 +83,8 @@ static void timer1_service_10ms(void)
 static void control_init(void)
 {
     /* 速度环初始化，默认提供一组安全基础参数 */
-    pid_speed_init(&PID.left_speed, 120.0f, 25.0f, 0.0f, 9000.0f, 9000.0f);
-    pid_speed_init(&PID.right_speed, 120.0f, 25.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.left_speed, 120.0f, 25.0f, 0.0f, 8000.0f, 8000.0f);
+    pid_speed_init(&PID.right_speed, 120.0f, 25.0f, 0.0f, 8000.0f, 8000.0f);
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);

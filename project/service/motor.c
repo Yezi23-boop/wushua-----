@@ -1,8 +1,20 @@
 #include "motor.h"
 
+#define MOTOR_START_PWM_RAMP_INITIAL_LIMIT 1500 /* 起步首个输出周期的 PWM 上限，单位：占空比。 */
+#define MOTOR_START_PWM_RAMP_STEP 20            /* 5ms 主环每次非零输出后放宽的 PWM 上限步长。 */
+#define MOTOR_STALL_PWM_THRESHOLD 6000          /* 堵转判定的实际输出 PWM 下限，低于该值时不认为电机已强驱。 */
+#define MOTOR_STALL_SPEED_THRESHOLD 2.0f        /* 堵转判定的编码器速度上限，单位同 PID.left_speed.speed。 */
+#define MOTOR_STALL_CONFIRM_COUNT 50            /* 10ms 检测周期计数，50 次约 500ms，用于过滤起步和瞬时卡顿。 */
+
 /* 全局控制标志位 */
 volatile uint8 stop = 0;   /* 停车标志位，1 表示紧急停车保护 */
 volatile float dianya = 0; /* 当前电池电压值 */
+
+static int32 motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
+static int32 motor_last_lpwm_limited = 0;
+static int32 motor_last_rpwm_limited = 0;
+static int16 motor_left_stall_count = 0;
+static int16 motor_right_stall_count = 0;
 
 /**
  * @brief 电机及相关硬件初始化
@@ -44,6 +56,97 @@ static int32 motor_limit_output_pwm(int32 pwm)
 }
 
 /**
+ * @brief 按起步爬坡窗口限制 PWM 输出。
+ * @param pwm 已经过全局限幅的目标 PWM，占空比单位。
+ * @return 被起步窗口限制后的 PWM，方向符号保持不变。
+ */
+static int32 motor_limit_start_pwm(int32 pwm)
+{
+    if (pwm > motor_start_pwm_ramp_limit)
+    {
+        return motor_start_pwm_ramp_limit;
+    }
+    if (pwm < -motor_start_pwm_ramp_limit)
+    {
+        return -motor_start_pwm_ramp_limit;
+    }
+    return pwm;
+}
+
+/**
+ * @brief 根据本周期输出推进或重置起步 PWM 爬坡窗口。
+ * @param lpwm_limited 已经完成起步限幅后的左轮 PWM。
+ * @param rpwm_limited 已经完成起步限幅后的右轮 PWM。
+ *
+ * 非运行态由上层传入 0 输出，本函数借此重置窗口；只有非零输出才消耗爬坡次数。
+ */
+static void motor_update_start_pwm_ramp(int32 lpwm_limited, int32 rpwm_limited)
+{
+    if (lpwm_limited == 0 && rpwm_limited == 0)
+    {
+        motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
+        motor_last_lpwm_limited = 0;
+        motor_last_rpwm_limited = 0;
+        motor_left_stall_count = 0;
+        motor_right_stall_count = 0;
+        return;
+    }
+
+    if (motor_start_pwm_ramp_limit < MOTOR_OUTPUT_PWM_LIMIT)
+    {
+        motor_start_pwm_ramp_limit += MOTOR_START_PWM_RAMP_STEP;
+        if (motor_start_pwm_ramp_limit > MOTOR_OUTPUT_PWM_LIMIT)
+        {
+            motor_start_pwm_ramp_limit = MOTOR_OUTPUT_PWM_LIMIT;
+        }
+    }
+}
+
+/**
+ * @brief 10ms 周期检测电机堵转并触发停车保护。
+ *
+ * 由 10ms 状态环调用。堵转只在起步爬坡已经放开到较高 PWM 后检测，
+ * 避免刚起步时编码器速度尚未建立导致误判。
+ */
+void motor_stall_check_10ms(void)
+{
+    if (motor_start_pwm_ramp_limit < MOTOR_STALL_PWM_THRESHOLD)
+    {
+        motor_left_stall_count = 0;
+        motor_right_stall_count = 0;
+        return;
+    }
+
+    if ((motor_last_lpwm_limited > MOTOR_STALL_PWM_THRESHOLD || motor_last_lpwm_limited < -MOTOR_STALL_PWM_THRESHOLD) &&
+        PID.left_speed.speed < MOTOR_STALL_SPEED_THRESHOLD)
+    {
+        motor_left_stall_count++;
+    }
+    else
+    {
+        motor_left_stall_count = 0;
+    }
+
+    if ((motor_last_rpwm_limited > MOTOR_STALL_PWM_THRESHOLD || motor_last_rpwm_limited < -MOTOR_STALL_PWM_THRESHOLD) &&
+        PID.right_speed.speed < MOTOR_STALL_SPEED_THRESHOLD)
+    {
+        motor_right_stall_count++;
+    }
+    else
+    {
+        motor_right_stall_count = 0;
+    }
+
+    if (motor_left_stall_count >= MOTOR_STALL_CONFIRM_COUNT ||
+        motor_right_stall_count >= MOTOR_STALL_CONFIRM_COUNT)
+    {
+        stop = 1;
+        motor_left_stall_count = 0;
+        motor_right_stall_count = 0;
+    }
+}
+
+/**
  * @brief 电机 PWM 占空比输出控制
  * @details 根据 lpwm 和 rpwm 的正负号控制电机正反转
  * @param lpwm 左轮目标占空比（函数内会限幅到 ±MOTOR_OUTPUT_PWM_LIMIT）
@@ -60,6 +163,12 @@ void motor_output(int32 lpwm, int32 rpwm)
     /* 检查停车标志位，stop 为 0 时正常运行 */
     if (stop == 0)
     {
+        lpwm_limited = motor_limit_start_pwm(lpwm_limited);
+        rpwm_limited = motor_limit_start_pwm(rpwm_limited);
+        motor_update_start_pwm_ramp(lpwm_limited, rpwm_limited);
+        motor_last_lpwm_limited = lpwm_limited;
+        motor_last_rpwm_limited = rpwm_limited;
+
         /* --- 右电机控制逻辑 (硬件映射可能交叉) --- */
         if (lpwm_limited > 0)
         {
@@ -79,12 +188,12 @@ void motor_output(int32 lpwm, int32 rpwm)
         /* --- 左电机控制逻辑 --- */
         if (rpwm_limited > 0)
         {
-            P53 = 1; /* 设置方向：正转 */
+            P53 = 0; /* 设置方向：正转 */
             pwm_set_duty(PWMB_CH3_P52, rpwm_limited);
         }
         else if (rpwm_limited < 0)
         {
-            P53 = 0; /* 设置方向：反转 */
+            P53 = 1; /* 设置方向：反转 */
             pwm_set_duty(PWMB_CH3_P52, -rpwm_limited);
         }
         else
@@ -94,6 +203,11 @@ void motor_output(int32 lpwm, int32 rpwm)
     }
     else
     {
+        motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
+        motor_last_lpwm_limited = 0;
+        motor_last_rpwm_limited = 0;
+        motor_left_stall_count = 0;
+        motor_right_stall_count = 0;
         /*
          * 保护状态：强制输出极低占空比或直接设为 100
          * 此处 设置成 100，设置成0会出现电机无法完全停止的情况，可能是由于 PWM 输出的非线性或电机特性导致的死区现象

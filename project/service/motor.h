@@ -20,6 +20,12 @@ void motor_Init(void);
 void motor_output(int32 lpwm, int32 rpwm);
 
 /**
+ * @brief 10ms 周期电机堵转检测
+ * @details 由 10ms 状态环调用，根据最近一次实际 PWM 和编码器速度触发 stop 保护。
+ */
+void motor_stall_check_10ms(void);
+
+/**
  * @brief 丢线检测保护函数
  * @details 当所有电感传感器均未检测到信号时，触发紧急停车
  */

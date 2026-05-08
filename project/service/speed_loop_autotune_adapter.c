@@ -42,15 +42,15 @@ static void speed_loop_autotune_project_write_fuya_pwm(int16 pwm_value)
 
 static void speed_loop_autotune_project_set_drive_state(uint8 enable, int flat_state)
 {
+    (void)flat_state;
+
     if (enable)
     {
         stop = 0;
-        flat_statr = flat_state;
     }
     else
     {
         stop = 1;
-        flat_statr = 0;
     }
 }
 

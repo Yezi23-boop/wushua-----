@@ -12,7 +12,6 @@
 #include "zf_common_headfile.h"
 
 /* --- 运行状态变量 --- */
-volatile int flat_statr = 0;        /* 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */
 volatile int flat_fly = 0;          /* 飞坡阶段状态：0-普通巡线，1-保持，2-恢复，3-冷却 */
 volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/调试显示） */
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
@@ -30,16 +29,16 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 void run_time_1(void)
 {
     float diff_output;
-//	    circle_check_l();
+//	circle_check_l();
     steer_div_10++;
-    /* P36 = 0; */
     a_run_apply_iap_guard();
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
+    imu_update_gravity_vz_from_quaternion();
     /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
-    a_run_mode_update_track_element_gate();
-    gyro_integrals();
+//   a_run_mode_update_track_element_gate();
+//    gyro_integrals();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
@@ -64,7 +63,10 @@ void run_time_1(void)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
     }
-    /* 结束执行时机：利用 IO 引脚翻转作示波器测时剖面，因无特殊需求已注释隐藏 */
+    else
+    {
+        motor_output(0, 0);
+    }
 }
 
 /**
@@ -78,19 +80,18 @@ void run_time_2(void)
 
     /* 1. 更新电感动态最大值，用于归一化与标定 */
     scan_track_max_value();
-    a_run_mode_update_start_state(); /* 按键/外部命令状态机，每 10ms 刷新一次 */
+    a_run_mode_update_start_state(); /* 按键状态机，每 10ms 刷新一次 */
     start_state = a_run_mode_get_start_state();
-    flat_statr = start_state; /* 同步当前启停状态到对外变量 */
     /* 2. 执行各类保护检测 */
-    lost_lines();    /* 丢线保护 */
-    dianya_jiance(); /* 电池电压检测 */
+//    lost_lines();    /* 丢线保护 */
+//    dianya_jiance(); /* 电池电压检测 */
+    motor_stall_check_10ms();
     /* 3. 更新启停状态与负压控制 */
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
-    if (start_state == 1)
-    {
-        fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
-    }
-    //   fuya_update_cylinder_peak_10ms(2);
+//    if (start_state == 1)
+//    {
+//        fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
+//    }
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
 }
@@ -122,6 +123,10 @@ void run_time_3(void)
     if (a_run_mode_get_start_state() == 2)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
+    }
+    else
+    {
+        motor_output(0, 0);
     }
 }
 

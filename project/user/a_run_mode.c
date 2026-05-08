@@ -8,7 +8,10 @@
 #include "zf_common_headfile.h"
 
 /* --- 启停状态机参数 --- */
-#define START_DEBOUNCE_TIME 5 /* 启动按键消抖确认次数（10ms 调用周期下约 500ms） */
+#define START_DEBOUNCE_TIME 2    /* 启动按键消抖确认次数，单位为 10ms 调用周期；当前约 20ms。 */
+#define START_DELAY_TICKS 100    /* 进入运行态前的确认时间，单位为 10ms 调用周期；当前约 1s。 */
+#define START_LED_ON 0           /* P43 指示灯为低电平点亮。 */
+#define START_LED_OFF 1
 
 enum StartState
 {
@@ -20,58 +23,58 @@ enum StartState
 static enum StartState current_start_state = START_STATE_0; /**< 当前启动状态，由 `a_run_mode_update_start_state` 写入，外部只读。 */
 static int press_debounce_cnt = 0;                          /**< 按下消抖计数，仅在 `a_run_mode_update_start_state`（10ms 上下文）中递增。 */
 static int8 key_released = 1;                               /**< 按键释放锁存：1-已释放等待下一次按下，0-仍在按下期间，防止重复触发状态切换。 */
+static int start_delay_ticks = 0;                            /**< 预启动到运行态的倒计时，期间对外仍保持 START_STATE_1。 */
 
 /**
  * @brief 启动状态机更新
- * @details 10ms 调用一次，检测 P36 启动按键或外部命令，在停止、预启动、运行之间切换
+ * @details 10ms 调用一次，检测 P36 启动按键，在停止、预启动、运行之间切换。
+ *          按键为低电平有效，持续按住只触发一次，释放后才允许下一次切换。
+ *          第二次按键后先点亮 P43 约 1s，确认窗口结束后才真正进入运行态。
  */
 void a_run_mode_update_start_state(void)
 {
-    /* 外部命令可直接请求进入运行态，flat_statr == 3 为一次性触发 */
-    if (flat_statr == 3)
+    if (start_delay_ticks > 0)
     {
-        current_start_state = START_STATE_2;
-        flat_statr = 2; // 同步状态镜像为运行中
-        return;
-    }
-    else if (flat_statr == 0 && current_start_state != START_STATE_0)
-    {
-        // 外部命令要求停止时，直接回到停止态
-        current_start_state = START_STATE_0;
-        return;
-    }
-
-    /* 检测按键按下（低电平有效） */
-    if (P43 == 0)
-    {
-        if (key_released == 1) // 仅在本次按下的首次稳定阶段计数
+        start_delay_ticks--;
+        if (start_delay_ticks == 0)
         {
-            /* 仅在按键保持按下期间递增，形成时间窗消抖 */
-            press_debounce_cnt++;
-            if (press_debounce_cnt >= START_DEBOUNCE_TIME)
-            {
-                /* 消抖通过后切换到下一个有效状态 */
-                if (current_start_state == START_STATE_0 || current_start_state == START_STATE_2)
-                {
-                    current_start_state = START_STATE_1;
-                }
-                else if (current_start_state == START_STATE_1)
-                {
-                    current_start_state = START_STATE_2;
-                }
-
-                /* 原因：不重复触发按下的去抖。防止用户在物理抖动瞬间或持续按下时系统在连续多个状态间极速切换。 */
-                key_released = 0;
-                press_debounce_cnt = 0;
-            }
+            P43 = START_LED_OFF;
+            current_start_state = START_STATE_2;
         }
+        return;
     }
-    /* 按键释放（高电平） */
-    else
+
+    if (P36 != 0)
     {
         press_debounce_cnt = 0;
-        key_released = 1; // 解除锁存，等待下一次按下
+        key_released = 1;
+        return;
     }
+
+    if (key_released == 0)
+    {
+        return;
+    }
+
+    press_debounce_cnt++;
+    if (press_debounce_cnt < START_DEBOUNCE_TIME)
+    {
+        return;
+    }
+
+    if (current_start_state == START_STATE_1)
+    {
+        start_delay_ticks = START_DELAY_TICKS;
+        P43 = START_LED_ON;
+    }
+    else
+    {
+        current_start_state = START_STATE_1;
+        P43 = START_LED_OFF;
+    }
+    /* 按住期间锁存触发结果，避免长按或触点抖动导致状态连续跳变。 */
+    key_released = 0;
+    press_debounce_cnt = 0;
 }
 
 /**

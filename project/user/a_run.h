@@ -6,7 +6,6 @@
 /**
  * @brief 运行模式大阶段的控制状态标志位集合
  */
-extern volatile int flat_statr;     /**< 运行状态镜像：0-停止，1-预启动，2-运行中，3-外部强制启动请求 */
 extern volatile int flat_fly;       /**< 飞坡阶段状态：0-普通巡线，1-保持，2-恢复，3-冷却 */
 extern volatile float left_target;  /**< 当前左轮目标速度（用于菜单/调试显示） */
 extern volatile float right_target; /**< 当前右轮目标速度（用于菜单/调试显示） */

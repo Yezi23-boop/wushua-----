@@ -139,5 +139,5 @@ void printf_butten_test(void)
     ips114_show_int32(7 * 24, 18 * 5, P33, 1);
 
     ips114_show_string(0, 18 * 6, "FLAG");
-    ips114_show_int32(7 * 24, 18 * 6, flat_statr, 2);
+    ips114_show_int32(7 * 24, 18 * 6, a_run_mode_get_start_state(), 2);
 }
