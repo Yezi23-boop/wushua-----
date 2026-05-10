@@ -1,55 +1,43 @@
 /**
  * @file a_run_fly.c
- * @brief 飞坡状态机与速度覆盖逻辑
+ * @brief 飞坡/跷跷板状态机与速度覆盖逻辑
  * @details
- * 本模块只处理飞坡入口识别、离线保持和落地恢复。对外仍由 a_run_mode.c
- * 统一调配，避免主控制链路直接依赖飞坡内部状态。
+ * 本模块只处理跷跷板入口识别、离线保持和落地恢复。入口检测窗口由赛道元素
+ * 仲裁控制，5ms 主控制链路直接传入是否允许触发入口。
  */
 #include "zf_common_headfile.h"
 
-/* --- 飞坡状态内部变量 --- */
-static int fly_detect_count = 0; /* 飞坡入口连续弱磁确认计数 */
-static int fly_state_count = 0;  /* 飞坡保持、恢复和冷却阶段的 5ms 计数 */
+/* --- 飞坡/跷跷板状态内部变量 --- */
+static int fly_detect_count = 0;   /* 入口弱磁连续确认计数，单位为 5ms 周期。 */
+static int fly_state_count = 0;    /* 保持、恢复和冷却阶段共用计数，单位为 5ms 周期。 */
+static uint8 fly_finish_event = 0; /* 跷跷板恢复完成事件，由元素仲裁在 5ms 链路中单次消费。 */
+static uint16 fly_recover_count = 0; /* 进入 RECOVER 后的总时长计数，单位为 5ms 周期。 */
+static uint8 fly_recover_speed_step_count = 0; /* RECOVER 阶梯提速节拍计数，单位为 5ms 周期。 */
+static int fly_recover_speed = 0; /* RECOVER 当前阶梯速度，最大不超过 app.fly.count_fly_speed。 */
+volatile uint8 fly_lost_line_blocked = 0; /* 飞坡高风险窗口屏蔽丢线；RECOVER 超过 1s 后恢复保护。 */
+volatile uint8 fly_motor_output_blocked = 0; /* RECOVER 吸稳段强制清电机输出，避免负压未稳时残留 PWM 推车。 */
 
-/* --- 飞坡状态机参数（run_time_1 以 5ms 调用） --- */
-#define FLY_AD_SIDE_LOST_TH 14u    /* 横向电感低于该值时认为主线信号正在消失 */
-#define FLY_AD_CENTER_LOST_TH 5u   /* 竖向电感阈值更低，避免普通弱弯误触发飞坡 */
-#define FLY_HOLD_ANGLE 0           /* 飞坡离线阶段固定目标角速度，0 表示直行锁角 */
-#define FLY_RAMP_BLOCK_ACC_Z 0.95f /* 低于该 acc_z 时认为车身已明显离开平面姿态，单位：g。 */
-#define FLY_RECOVER_COUNT 2        /* 落地恢复窗口，单位 5ms，默认约 20ms */
-#define FLY_COOLDOWN_COUNT 20      /* 退出冷却窗口，单位 5ms，默认约 100ms */
-
-/**
- * @brief 判断车身是否已经明显离开平面姿态。
- *
- * 平地丢线时四路电感也可能同时很低，因此飞坡入口不能只依赖电感。
- * acc_z 低于阈值时，认为车身已经进入坡面或飞坡姿态。
- *
- * @return int8 1-姿态满足飞坡触发条件，0-仍近似平面。
- */
-static int8 fly_is_acc_z_ramp_pose(void)
-{
-    float acc_z;
-
-    if (imu660rc_transition_factor[0] <= 0.001f)
-    {
-        return 0;
-    }
-
-    acc_z = imu660rc_acc_transition(imu660rc_acc_z);
-    if (acc_z < FLY_RAMP_BLOCK_ACC_Z)
-    {
-        return 1;
-    }
-
-    return 0;
-}
+/* --- 飞坡/跷跷板状态机参数（run_time_1 以 5ms 调用） --- */
+#define FLY_AD_SIDE_LOST_TH 14u  /* 横向电感低于该值时认为主线信号正在消失 */
+#define FLY_AD_CENTER_LOST_TH 5u /* 竖向电感阈值更低，避免普通弱弯误触发飞坡 */
+#define FLY_LANDING_SIDE_TH 15u  /* HOLD 结束后横向电感任一路回升到该值，才允许进入落地恢复。 */
+#define FLY_LANDING_CENTER_TH 10u /* HOLD 结束后竖向电感任一路回升到该值，辅助确认车已接近地面电磁线。 */
+#define FLY_HOLD_ANGLE 0         /* 离线保持阶段固定目标角速度，0 表示直行锁角。 */
+#define FLY_RECOVER_LINE_STABLE_COUNT 3u /* 吸稳后中线连续稳定确认次数，5ms * 3 = 15ms。 */
+#define FLY_COOLDOWN_COUNT 10    /* 退出冷却窗口，单位 5ms，默认约 100ms */
+#define FLY_LAND_SETTLE_COUNT 30u /* 进入 RECOVER 后先原地吸稳，5ms * 30 = 150ms。 */
+#define FLY_RECOVER_STEER_LIMIT_COUNT 70u /* RECOVER 前 350ms 限制转向，其中包含 150ms 吸稳窗口。 */
+#define FLY_RECOVER_STEER_LIMIT 8.0f /* 吸稳后前段小角速度找线，避免刚贴地时大差速打滑。 */
+#define FLY_RECOVER_SPEED_START 10 /* 吸稳后阶梯起步速度，避免从 0 过慢也避免直接满速打滑。 */
+#define FLY_RECOVER_SPEED_STEP 3 /* RECOVER 阶梯提速单步增量。 */
+#define FLY_RECOVER_SPEED_STEP_COUNT 10u /* 每 5ms * 10 = 50ms 提升一次速度。 */
+#define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 200u /* RECOVER 超过 5ms * 200 = 1000ms 仍未完成时恢复丢线保护。 */
 
 /**
  * @brief 判断当前电感是否满足飞坡入口弱磁特征。
  *
- * 飞坡入口通常表现为四路归一化电感同时快速跌低，并伴随重力 Z 分量下降。
- * 姿态条件用于过滤平地丢线，避免把普通弱磁或赛道断线误判为飞坡。
+ * 飞坡入口通常表现为四路归一化电感同时快速跌低；当前版本不再依赖 acc_z，
+ * 入口是否开放完全由赛道元素仲裁的 `allow_entry` 控制。
  *
  * @return int8 1-满足飞坡入口特征，0-不满足。
  *
@@ -57,76 +45,118 @@ static int8 fly_is_acc_z_ramp_pose(void)
  */
 static int8 fly_is_ramp_lost_signal(void)
 {
-    if (ad1 < FLY_AD_SIDE_LOST_TH &&
-        ad2 < FLY_AD_CENTER_LOST_TH &&
-        ad3 < FLY_AD_CENTER_LOST_TH &&
-        ad4 < FLY_AD_SIDE_LOST_TH &&
-        fly_is_acc_z_ramp_pose())
-    {
-        return 1;
-    }
+    return (ad1 < FLY_AD_SIDE_LOST_TH &&
+            ad2 < FLY_AD_CENTER_LOST_TH &&
+            ad3 < FLY_AD_CENTER_LOST_TH &&
+            ad4 < FLY_AD_SIDE_LOST_TH)
+               ? 1
+               : 0;
+}
 
-    return 0;
+/**
+ * @brief 判断 HOLD 结束后电感是否已回升到可落地恢复状态。
+ *
+ * HOLD 阶段只靠固定时间退出会在车还悬空时提前进入 RECOVER；这里要求至少一路
+ * 横向或竖向电感回升，说明车已重新接近电磁线，再允许开始吸稳和找线。
+ *
+ * @return int8 1-电感已有回升，可进入 RECOVER；0-仍处于弱磁/离线阶段。
+ */
+static int8 fly_is_landing_signal(void)
+{
+    return (ad1 > FLY_LANDING_SIDE_TH ||
+            ad4 > FLY_LANDING_SIDE_TH ||
+            ad2 > FLY_LANDING_CENTER_TH ||
+            ad3 > FLY_LANDING_CENTER_TH)
+               ? 1
+               : 0;
 }
 
 /**
  * @brief 判断飞坡落地恢复是否已回到中线附近。
  *
- * 中线在控制链路中对应 Err 为 0，同时用 ad1/ad2 差值约束电感平衡。
+ * 中线在控制链路中对应 Err 为 0，同时用横向主电感 ad1/ad4 差值约束电感平衡。
  * 原因是落地后单看 Err 可能受瞬态计算影响，双条件可以减少偏线误退出。
  *
  * @return int8 1-已接近中线，0-仍需继续低速回正。
  */
 static int8 fly_is_center_line(void)
 {
-    if (func_abs((int)ad1 - (int)ad2) < 10 &&
-        Err > -1.0f && Err < 1.0f)
-    {
-        return 1;
-    }
+    return (func_abs((int)ad1 - (int)ad4) < 10 && ad1 > 20 && ad4 > 20 &&
+            Err > -2.0f && Err < 2.0f)
+               ? 1
+               : 0;
+}
 
-    return 0;
+/**
+ * @brief 取出并清除飞坡/跷跷板完成事件。
+ *
+ * 完成事件只允许元素仲裁消费一次，避免墙面流程被同一次恢复确认重复触发。
+ *
+ * @return uint8 1-存在待消费完成事件，0-无事件。
+ */
+uint8 a_run_fly_take_finish_event(void)
+{
+    uint8 event;
+
+    event = fly_finish_event;
+    fly_finish_event = 0;
+
+    return event;
 }
 
 /**
  * @brief 复位飞坡状态机内部计数并回到普通巡线。
  *
- * 关闭飞坡开关或现场调试强制退出时，需要同时清掉阶段计数，避免重新开启后
- * 沿用上一次弱磁窗口中的残留计数而误入飞坡。
+ * 关闭飞坡开关、元素仲裁复位或重新进入跷跷板阶段时，需要同时清掉阶段计数和
+ * 完成事件，避免沿用上一轮弱磁窗口中的残留状态。
  */
-static void fly_reset_state(void)
+void a_run_fly_reset(void)
 {
     fly_detect_count = 0;
     fly_state_count = 0;
+    fly_recover_count = 0;
+    fly_recover_speed_step_count = 0;
+    fly_recover_speed = 0;
+    fly_finish_event = 0;
+    fly_lost_line_blocked = 0;
+    fly_motor_output_blocked = 0;
     flat_fly = FLY_STATE_IDLE;
 }
 
 /**
- * @brief 飞坡速度修正。
+ * @brief 飞坡/跷跷板速度修正。
  *
- * 根据四路电感特征推进飞坡状态机，并在高风险阶段覆盖速度和转向输出。
- * 该函数由 a_run_mode 调配层在 5ms 主控制链路中转发调用。
+ * 根据四路电感特征推进飞坡状态机，并在高风险阶段覆盖速度和转向输出。入口检测
+ * 只在元素仲裁允许时开放；一旦进入保持/恢复阶段，即使仲裁下一拍切换，也会继续
+ * 完成当前保护流程，避免半途释放控制权。
  *
  * @param speed 输出的目标速度指针。
+ * @param allow_entry 1-当前期望元素为跷跷板，允许空闲态检测入口；0-禁止新入口。
  */
-void a_run_fly_update_speed(int *speed)
+void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 {
     if (app.fly.fly_ramp_enable != 1)
     {
-        fly_reset_state();
+        a_run_fly_reset();
         return;
     }
 
     switch (flat_fly)
     {
     case FLY_STATE_IDLE:
-        if (fly_is_ramp_lost_signal())
+        fly_lost_line_blocked = 0;
+        fly_motor_output_blocked = 0;
+        if (allow_entry != 0 && fly_is_ramp_lost_signal())
         {
             fly_detect_count++;
             if (fly_detect_count >= app.fly.count_fly_time_1)
             {
                 fly_detect_count = 0;
                 fly_state_count = 0;
+                fly_recover_count = 0;
+                fly_recover_speed_step_count = 0;
+                fly_recover_speed = 0;
+                fly_lost_line_blocked = 1;
                 flat_fly = FLY_STATE_HOLD;
             }
         }
@@ -149,23 +179,103 @@ void a_run_fly_update_speed(int *speed)
         fly_state_count++;
         if (fly_state_count >= app.fly.count_fly_time_2)
         {
-            fly_state_count = 0;
-            flat_fly = FLY_STATE_RECOVER;
+            if (fly_is_landing_signal())
+            {
+                fly_state_count = 0;
+                fly_recover_count = 0;
+                fly_recover_speed_step_count = 0;
+                fly_recover_speed = 0;
+                fly_lost_line_blocked = 1;
+                fly_motor_output_blocked = 1;
+                flat_fly = FLY_STATE_RECOVER;
+            }
+            else
+            {
+                fly_state_count = app.fly.count_fly_time_2;
+            }
         }
         break;
 
     case FLY_STATE_RECOVER:
         /*
-         * 下地后第一件事是用飞坡低速回到中线。这里不再锁角，
-         * 让电感外环按 Err 回正，直到有效线信号下 Err 接近 0。
+         * 刚落地时先给负压 150ms 原地吸稳，再从 10 开始阶梯提速找线。
+         * 这样避免吸力尚未建立时轮子突然给力，导致车身滑动后 Err 失真。
          */
-        *speed = app.fly.count_fly_speed;
+        if (fly_recover_count < FLY_RECOVER_LOST_LINE_ENABLE_COUNT)
+        {
+            fly_recover_count++;
+            fly_lost_line_blocked = 1;
+        }
+        else
+        {
+            fly_lost_line_blocked = 0;
+        }
+
+        if (fly_recover_count <= FLY_LAND_SETTLE_COUNT)
+        {
+            *speed = 0;
+            PID.steer.output = 0.0f;
+            fly_motor_output_blocked = 1;
+            fly_state_count = 0;
+            break;
+        }
+
+        fly_motor_output_blocked = 0;
+        if (fly_recover_count <= FLY_RECOVER_STEER_LIMIT_COUNT)
+        {
+            if (PID.steer.output > FLY_RECOVER_STEER_LIMIT)
+            {
+                PID.steer.output = FLY_RECOVER_STEER_LIMIT;
+            }
+            else if (PID.steer.output < -FLY_RECOVER_STEER_LIMIT)
+            {
+                PID.steer.output = -FLY_RECOVER_STEER_LIMIT;
+            }
+        }
+
+        if (app.fly.count_fly_speed <= 0)
+        {
+            fly_recover_speed = 0;
+        }
+        else if (app.fly.count_fly_speed <= FLY_RECOVER_SPEED_START)
+        {
+            fly_recover_speed = app.fly.count_fly_speed;
+        }
+        else
+        {
+            if (fly_recover_speed < FLY_RECOVER_SPEED_START)
+            {
+                fly_recover_speed = FLY_RECOVER_SPEED_START;
+            }
+
+            fly_recover_speed_step_count++;
+            if (fly_recover_speed_step_count >= FLY_RECOVER_SPEED_STEP_COUNT)
+            {
+                fly_recover_speed_step_count = 0;
+                if (fly_recover_speed < app.fly.count_fly_speed)
+                {
+                    fly_recover_speed += FLY_RECOVER_SPEED_STEP;
+                    if (fly_recover_speed > app.fly.count_fly_speed)
+                    {
+                        fly_recover_speed = app.fly.count_fly_speed;
+                    }
+                }
+            }
+        }
+        *speed = fly_recover_speed;
+
         if (fly_is_center_line())
         {
             fly_state_count++;
-            if (fly_state_count >= FLY_RECOVER_COUNT)
+            if (fly_state_count >= FLY_RECOVER_LINE_STABLE_COUNT)
             {
+//                stop = 1;
                 fly_state_count = 0;
+                fly_recover_count = 0;
+                fly_recover_speed_step_count = 0;
+                fly_recover_speed = 0;
+                fly_lost_line_blocked = 1;
+                fly_finish_event = 1;
                 flat_fly = FLY_STATE_COOLDOWN;
             }
         }
@@ -177,15 +287,17 @@ void a_run_fly_update_speed(int *speed)
 
     case FLY_STATE_COOLDOWN:
         /* 冷却期只禁止重复触发，不覆盖控制输出，给普通巡线一个稳定接管窗口。 */
+        fly_lost_line_blocked = 1;
+        fly_motor_output_blocked = 0;
         fly_state_count++;
         if (fly_state_count >= FLY_COOLDOWN_COUNT)
         {
-            fly_reset_state();
+            a_run_fly_reset();
         }
         break;
 
     default:
-        fly_reset_state();
+        a_run_fly_reset();
         break;
     }
 }

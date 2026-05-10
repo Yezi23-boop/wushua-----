@@ -640,8 +640,8 @@ static void Menu_Draw_Sensor(void)
     ips114_show_float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
     ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
     ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
-    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "qvz");
-    ips114_show_float(192, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_vz(), 2, 3);
+    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "rdeg");
+    ips114_show_float(192, 5 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
 
 #if MENU_SENSOR_GAIN_ENABLE
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "TPL");
@@ -780,6 +780,8 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_expected_element(), 1);
     ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
     ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
+    ips114_show_string(200, 6 * MENU_ROW_HEIGHT, "W");
+    ips114_show_int32(216, 6 * MENU_ROW_HEIGHT, a_run_mode_get_wall_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -1152,7 +1154,7 @@ static void Menu_Speed_Process(void)
         break;
     case 25:
         Menu_Draw_Speed(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.limiting_Err, 0.01f);
+        Menu_Process_Float_Value(&app.speed.limiting_Err, 1.0f);
         break;
     case 26:
         Menu_Draw_Speed(6 * MENU_ROW_HEIGHT);
@@ -1189,7 +1191,7 @@ static void Menu_Model_Process(void)
         break;
     case 33:
         Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.limiting_Angle, 0.1f);
+        Menu_Process_Float_Value(&app.angle.limiting_Angle, 1.0f);
         break;
     case 34:
         Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
@@ -1325,23 +1327,23 @@ static void Menu_Ring_Process(void)
         break;
     case 52:
         Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 10.0f);
+        Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 1.0f);
         break;
     case 53:
         Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyroz, 10.0f);
+        Menu_Process_Float_Value(&app.ring.pre_ring_Gyroz, 1.0f);
         break;
     case 54:
         Menu_Draw_Ring(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.in_ring_Gyroz, 10.0f);
+        Menu_Process_Float_Value(&app.ring.in_ring_Gyroz, 1.0f);
         break;
     case 55:
         Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 10.0f);
+        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 1.0f);
         break;
     case 56:
         Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 10.0f);
+        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 1.0f);
         break;
     default:
         break;

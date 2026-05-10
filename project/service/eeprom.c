@@ -15,7 +15,6 @@ static void save_int(int32 input, uint8 value_bit);
 static int32 read_int(uint8 value_bit);
 static void save_float(float input, uint8 value_bit);
 static float read_float(uint8 value_bit);
-static float clamp_percent_value(float value, float default_value);
 
 /**
  * @brief 加载系统默认参数
@@ -29,14 +28,14 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.circle_flags = 1;           /* 默认关闭圆环识别 */
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
-    config->start.fuya_xili = 45.00f;         /* 默认平地负压百分比 */
+    config->start.fuya_xili = 55.00f;         /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 3.00f;  // 4.50
     config->speed.kd_Err = 4.00f; // 4.50
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 20.00f; /* 默认基础速度 30 */ // 4.50
+    config->speed.speed_run = 40.00f; /* 默认基础速度 30 */ // 4.50
     config->speed.limiting_Err = 600.00f; /* 转向限幅 */    // 4.50
     config->speed.kp2_Err = 0.00f;
 
@@ -44,23 +43,23 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.kp_Angle = 0.80f;
     config->angle.kd_Angle = 0.20f;
     config->angle.gyro_feedback_scale = 1.00f;
-    config->angle.limiting_Angle = 18.00f;
-    config->angle.A_1 = 0.80f;
+    config->angle.limiting_Angle = 38.00f;
+    config->angle.A_1 = 1.00f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 3.0;        /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 20.00f;     /* pre_ring固定目标角速度 */
-    config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
-    config->ring.in_ring_Gyroz = 270.00f;           /* in_ring->pre_out_ring累计转角阈值 */
-    config->ring.pre_out_ring_Gyro_target = 10.00f; /* pre_out_ring固定目标角速度 */
-    config->ring.pre_out_ring_Gyroz = 330.00f;      /* pre_out_ring->out_ring累计转角阈值 */
+    config->ring.ring_entry_encoder = 7.0;        /* ring->pre_ring编码器积分阈值 */
+    config->ring.pre_ring_Gyro_target = 15.00f;     /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyroz = 20.00f;           /* pre_ring->in_ring累计转角阈值 */
+    config->ring.in_ring_Gyroz = 210.00f;           /* in_ring->pre_out_ring累计转角阈值 */
+    config->ring.pre_out_ring_Gyro_target = 5.00f; /* pre_out_ring固定目标角速度 */
+    config->ring.pre_out_ring_Gyroz = 220.00f;      /* pre_out_ring->out_ring累计转角阈值 */
 
     /* 飞坡策略默认参数 */
-    config->fly.count_fly_speed = 15;  /* 飞坡慢速值 */
+    config->fly.count_fly_speed = 23;  /* 飞坡慢速值 */
     config->fly.count_fly_time_1 = 3;  /* 触发检测次数 (3 * 5ms = 15ms) */
-    config->fly.count_fly_time_2 = 10; /* 状态保持时间 (10 * 5ms = 50ms) */
+    config->fly.count_fly_time_2 = 30; /* 状态保持时间 (10 * 5ms = 50ms) */
     config->fly.fly_ramp_enable = 1;   /* 默认开启飞坡检测 */
 }
 
@@ -71,14 +70,8 @@ static void eeprom_load_defaults(AppConfig *config)
  */
 static void eeprom_read_config(AppConfig *config)
 {
-    uint8 percent_migrated;
-
     config->start.start_flag = (int16)read_int(1);
     config->start.circle_flags = (int16)read_int(2);
-    if (config->start.circle_flags != 1)
-    {
-        config->start.circle_flags = 0;
-    }
 
     config->speed.kp_Err = read_float(4);
     config->start.fuya_xili = read_float(5);
@@ -88,7 +81,7 @@ static void eeprom_read_config(AppConfig *config)
     config->speed.limiting_Err = read_float(9);
     config->speed.gyro_damp_Err = read_float(10);
 
-    /* 槽位 3 复用为角速度内环限幅；旧版本可能为未初始化值，需做范围回退 */
+    /* 槽位 3 复用为角速度内环限幅，保留原 EEPROM 布局。 */
     config->angle.limiting_Angle = read_float(3);
 
     /* 11/12 映射为角速度内环参数，保留原 EEPROM 布局以兼容旧数据 */
@@ -98,12 +91,6 @@ static void eeprom_read_config(AppConfig *config)
     config->angle.C_l = read_float(14);
     config->angle.A_1 = read_float(15);
     config->angle.gyro_feedback_scale = read_float(28);
-
-    if (config->angle.gyro_feedback_scale < 1.0f ||
-        config->angle.gyro_feedback_scale > 50.0f)
-    {
-        config->angle.gyro_feedback_scale = 10.0f;
-    }
 
     config->ring.ring_entry_encoder = read_float(16);
     config->ring.pre_ring_Gyro_target = read_float(17);
@@ -118,29 +105,6 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.fly_ramp_enable = (int16)read_int(26);
     config->start.fuya_wall_percent = read_float(27);
     config->start.track_mode = (int16)read_int(29);
-    if (config->start.track_mode < 0 || config->start.track_mode > 3)
-    {
-        config->start.track_mode = 0;
-    }
-
-    percent_migrated = 0;
-    if (config->start.fuya_xili < 0.0f || config->start.fuya_xili > 100.0f)
-    {
-        config->start.fuya_xili = 20.0f;
-        percent_migrated = 1;
-    }
-
-    if (config->start.fuya_wall_percent < 0.0f || config->start.fuya_wall_percent > 100.0f)
-    {
-        config->start.fuya_wall_percent = 70.0f;
-    }
-    else if (percent_migrated && config->start.fuya_wall_percent == 0.0f)
-    {
-        config->start.fuya_wall_percent = 70.0f;
-    }
-
-    config->start.fuya_xili = clamp_percent_value(config->start.fuya_xili, 20.0f);
-    config->start.fuya_wall_percent = clamp_percent_value(config->start.fuya_wall_percent, 70.0f);
 }
 
 /**
@@ -156,7 +120,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->angle.limiting_Angle, 3);
 
     save_float(config->speed.kp_Err, 4);
-    save_float(clamp_percent_value(config->start.fuya_xili, 20.0f), 5);
+    save_float(config->start.fuya_xili, 5);
     save_float(config->speed.kd_Err, 6);
     save_float(config->speed.kp2_Err, 7);
     save_float(config->speed.speed_run, 8);
@@ -180,7 +144,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.count_fly_time_1, 23);
     save_int(config->fly.count_fly_time_2, 24);
     save_int(config->fly.fly_ramp_enable, 26);
-    save_float(clamp_percent_value(config->start.fuya_wall_percent, 70.0f), 27);
+    save_float(config->start.fuya_wall_percent, 27);
     save_int(config->start.track_mode, 29);
 }
 
@@ -308,11 +272,3 @@ static float read_float(uint8 value_bit)
     return output;
 }
 
-static float clamp_percent_value(float value, float default_value)
-{
-    if (value < 0.0f || value > 100.0f)
-    {
-        return default_value;
-    }
-    return value;
-}

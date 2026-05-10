@@ -1,10 +1,10 @@
 #include "motor.h"
 
-#define MOTOR_START_PWM_RAMP_INITIAL_LIMIT 1500 /* 起步首个输出周期的 PWM 上限，单位：占空比。 */
-#define MOTOR_START_PWM_RAMP_STEP 20            /* 5ms 主环每次非零输出后放宽的 PWM 上限步长。 */
+#define MOTOR_START_PWM_RAMP_INITIAL_LIMIT 3000 /* 起步首个输出周期的 PWM 上限，单位：占空比。 */
+#define MOTOR_START_PWM_RAMP_STEP 60            /* 5ms 主环每次非零输出后放宽的 PWM 上限步长。 */
 #define MOTOR_STALL_PWM_THRESHOLD 6000          /* 堵转判定的实际输出 PWM 下限，低于该值时不认为电机已强驱。 */
 #define MOTOR_STALL_SPEED_THRESHOLD 2.0f        /* 堵转判定的编码器速度上限，单位同 PID.left_speed.speed。 */
-#define MOTOR_STALL_CONFIRM_COUNT 50            /* 10ms 检测周期计数，50 次约 500ms，用于过滤起步和瞬时卡顿。 */
+#define MOTOR_STALL_CONFIRM_COUNT 100            /* 10ms 检测周期计数，100 次约 1s，用于过滤起步和瞬时卡顿。 */
 
 /* 全局控制标志位 */
 volatile uint8 stop = 0;   /* 停车标志位，1 表示紧急停车保护 */
@@ -56,21 +56,30 @@ static int32 motor_limit_output_pwm(int32 pwm)
 }
 
 /**
- * @brief 按起步爬坡窗口限制 PWM 输出。
- * @param pwm 已经过全局限幅的目标 PWM，占空比单位。
- * @return 被起步窗口限制后的 PWM，方向符号保持不变。
+ * @brief 按起步爬坡窗口等比例限制左右 PWM 输出。
+ * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
+ * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
+ *
+ * 起步阶段不能把左右轮分别截到同一个上限，否则会抹掉差速转向量；
+ * 这里按较大一侧缩放两轮输出，在限制冲击的同时保留转向比例。
  */
-static int32 motor_limit_start_pwm(int32 pwm)
+static void motor_limit_start_pwm_pair(int32 *lpwm, int32 *rpwm)
 {
-    if (pwm > motor_start_pwm_ramp_limit)
+    int32 left_abs;
+    int32 right_abs;
+    int32 max_abs;
+
+    left_abs = (*lpwm >= 0) ? *lpwm : -*lpwm;
+    right_abs = (*rpwm >= 0) ? *rpwm : -*rpwm;
+    max_abs = (left_abs > right_abs) ? left_abs : right_abs;
+
+    if (max_abs <= motor_start_pwm_ramp_limit || max_abs == 0)
     {
-        return motor_start_pwm_ramp_limit;
+        return;
     }
-    if (pwm < -motor_start_pwm_ramp_limit)
-    {
-        return -motor_start_pwm_ramp_limit;
-    }
-    return pwm;
+
+    *lpwm = (*lpwm * motor_start_pwm_ramp_limit) / max_abs;
+    *rpwm = (*rpwm * motor_start_pwm_ramp_limit) / max_abs;
 }
 
 /**
@@ -163,8 +172,7 @@ void motor_output(int32 lpwm, int32 rpwm)
     /* 检查停车标志位，stop 为 0 时正常运行 */
     if (stop == 0)
     {
-        lpwm_limited = motor_limit_start_pwm(lpwm_limited);
-        rpwm_limited = motor_limit_start_pwm(rpwm_limited);
+        motor_limit_start_pwm_pair(&lpwm_limited, &rpwm_limited);
         motor_update_start_pwm_ramp(lpwm_limited, rpwm_limited);
         motor_last_lpwm_limited = lpwm_limited;
         motor_last_rpwm_limited = rpwm_limited;
@@ -220,17 +228,17 @@ void motor_output(int32 lpwm, int32 rpwm)
 
 /**
  * @brief 丢线保护逻辑
- * @details 当四路电感传感器采集值连续多次低于阈值时判定为丢线
+ * @details 当四路电感连续低于阈值且飞坡未临时屏蔽保护时判定为丢线。
  */
 void lost_lines(void)
 {
     static int8 count = 0; /* 丢线确认计数器 */
 
     /*
-     * ad1~ad4 为全局电感采样值
-     * 阈值 3 为根据实际环境标定的最小有效电感强度
+     * 跷跷板 HOLD/RECOVER 前段会主动屏蔽丢线；若 RECOVER 超过 1s 仍未恢复，
+     * 飞坡状态机会释放该屏蔽，让真实丢线重新触发停车保护。
      */
-    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && flat_fly == 0)
+    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && fly_lost_line_blocked == 0)
     {
         count++;
     }

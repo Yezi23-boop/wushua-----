@@ -4,7 +4,7 @@
  * @details
  * 功能分三层：
  * 1) 百分比与 PWM 互转：统一调参接口与底层输出量纲（50Hz 下 500~1000 对应 0~100%）；
- * 2) 工况识别：依据重力向量 Z 分量识别地面/墙面/立体桶过顶；
+ * 2) 工况识别：依据 roll 角差识别地面/墙面/立体桶过顶；
  * 3) 输出平滑：斜坡逼近防止电池瞬态大电流冲击跌落。
  *
  * 资源与时序：本模块主要在 10ms 周期（run_time_2）中调用，内部无任何死延时阻塞。
@@ -30,13 +30,13 @@
 #define FUYA_PWM_MIN 500
 #define FUYA_PWM_MAX 1000
 
-/* --- 表面识别阈值（基于重力向量 Z 分量） --- */
-#define FUYA_GROUND_ENTER_VZ 0.86f
-#define FUYA_WALL_ENTER_VZ 0.72f
+/* --- 表面识别阈值（基于 roll 角差绝对值，单位：度） --- */
+#define FUYA_GROUND_ENTER_ROLL_ABS_DEG 31.0f
+#define FUYA_WALL_ENTER_ROLL_ABS_DEG 44.0f
 
 /* --- 圆筒最高点识别阈值（10ms 调用一次） --- */
-#define FUYA_CYLINDER_VZ 0.90f
-#define FUYA_CYLINDER_TOP_VZ -0.85f
+#define FUYA_CYLINDER_GROUND_ROLL_ABS_DEG 26.0f
+#define FUYA_CYLINDER_TOP_ROLL_ABS_DEG 150.0f
 #define FUYA_CYLINDER_TOP_CONFIRM_COUNT 2
 #define FUYA_CYLINDER_GROUND_CONFIRM_COUNT 3
 
@@ -53,9 +53,9 @@ volatile int fuya_target_pwm = FUYA_PWM_MIN; /* 当前目标脉宽 */
 volatile uint8 fuya_target_percent = 0;      /* 当前目标百分比 */
 volatile uint8 fuya_surface_state = FUYA_SURFACE_GROUND;
 volatile uint8 fuya_cylinder_peak_flag = 0; /* 圆筒最高点通过标志 */
-volatile float fuya_last_vzc = 0.0f;        /* 最近一次限幅后的重力向量 Z 分量 */
+volatile float fuya_last_vzc = 0.0f;        /* 最近一次 roll 角差，单位：度，范围 -180~180。 */
 
-static uint8 fuya_cylinder_top_count = 0;    /* 顶部负值窗口连续计数 */
+static uint8 fuya_cylinder_top_count = 0;    /* 顶部大角度窗口连续计数 */
 static uint8 fuya_cylinder_ground_count = 0; /* 回平地连续计数 */
 static uint8 fuya_startup_ramp_active = 1;   /* 首次给负压百分比时启用小步进软启动 */
 static float fuya_read_vzc(void);
@@ -77,8 +77,8 @@ static uint8 fuya_limit_percent(int percent)
 }
 
 /**
- * @brief 读取当前重力向量 Z 分量
- * @details 直接使用 5ms IMU 缓存值，避免负压和圆桶各自重复计算四元数。
+ * @brief 读取当前 roll 角差
+ * @details 直接使用 5ms IMU 缓存值，避免负压和圆桶各自重复读取姿态角。
  */
 static float fuya_read_vzc(void)
 {
@@ -100,25 +100,32 @@ static int fuya_percent_to_pwm(uint8 percent)
 }
 
 /**
- * @brief 根据重力向量 Z 分量识别地面/墙面
+ * @brief 根据 roll 角差识别地面/墙面
  * @details 使用双阈值切换，减少边界抖动引起的状态来回跳变。
  */
 static uint8 fuya_detect_surface(float vzc)
 {
+    float roll_abs_deg;
     uint8 next_state;
+
+    roll_abs_deg = vzc;
+    if (roll_abs_deg < 0.0f)
+    {
+        roll_abs_deg = -roll_abs_deg;
+    }
 
     /* 滞回切换：地面转墙面阈值更低，墙面回地面阈值更高 */
     next_state = fuya_surface_state;
     if (FUYA_SURFACE_GROUND == fuya_surface_state)
     {
-        if (vzc <= FUYA_WALL_ENTER_VZ)
+        if (roll_abs_deg >= FUYA_WALL_ENTER_ROLL_ABS_DEG)
         {
             next_state = FUYA_SURFACE_WALL;
         }
     }
     else
     {
-        if (vzc >= FUYA_GROUND_ENTER_VZ)
+        if (roll_abs_deg <= FUYA_GROUND_ENTER_ROLL_ABS_DEG)
         {
             next_state = FUYA_SURFACE_GROUND;
         }
@@ -303,7 +310,7 @@ void fuya_update_simple(void)
     int target_pwm;
     int output_pwm;
 
-    /* 1) 姿态输入：只取重力向量 Z 分量即可完成墙面识别 */
+    /* 1) 姿态输入：使用 roll 角差即可完成墙面识别 */
     vzc = fuya_read_vzc();
 
     /* 2) 识别当前表面工况 */
@@ -334,11 +341,12 @@ void fuya_update_simple(void)
 /**
  * @brief 10ms 圆筒最高点检测与角度切换
  * @details
- * 判定逻辑为：检测车体 Z 轴在圆筒顶部连续进入负值极限区间，
+ * 判定逻辑为：检测 roll 角差在圆筒顶部连续进入大角度区间，
  * 以此确认已到达圆筒最高点附近。回到平地后自动恢复参数。
  */
 void fuya_update_cylinder_peak_10ms(int8 start_state)
 {
+    float roll_abs_deg;
     float vzc;
 
     if (2 != start_state)
@@ -348,10 +356,15 @@ void fuya_update_cylinder_peak_10ms(int8 start_state)
     }
 
     vzc = fuya_read_vzc();
+    roll_abs_deg = vzc;
+    if (roll_abs_deg < 0.0f)
+    {
+        roll_abs_deg = -roll_abs_deg;
+    }
 
     if (!fuya_cylinder_peak_flag)
     {
-        if (vzc <= FUYA_CYLINDER_TOP_VZ)
+        if (roll_abs_deg >= FUYA_CYLINDER_TOP_ROLL_ABS_DEG)
         {
             fuya_cylinder_top_count++;
 
@@ -368,7 +381,7 @@ void fuya_update_cylinder_peak_10ms(int8 start_state)
         return;
     }
 
-    if (vzc >= FUYA_CYLINDER_VZ)
+    if (roll_abs_deg <= FUYA_CYLINDER_GROUND_ROLL_ABS_DEG)
     {
         fuya_cylinder_ground_count++;
 

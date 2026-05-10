@@ -3,7 +3,7 @@
  * @brief IMU 姿态辅助计算与角速度桥接
  * @details
  * 本模块对 IMU660RC 输出进行轻量转换，向控制环提供：
- * - 基于四元数的重力向量 Z 分量缓存；
+ * - 基于 roll 角的姿态角差缓存；
  * - 统一量纲后的 gyro_z 实时反馈；
  * - 若干数学辅助函数（快速平方根、反平方根、atan2 兼容实现）。
  *
@@ -12,7 +12,7 @@
 #include "zf_common_headfile.h"
 #include "math.h"
 #include "imu.h"
-
+LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，5ms IMU 更新链路写入。 */
 #ifndef M_PI
 #define M_PI 3.14159265358979f
 #endif
@@ -22,16 +22,14 @@
 #define IMU_GYRO_Z_SIGN (-1.0f) /* 驱动 gyro_z 顺时针为正；控制差速约定左转为正，需在桥接层翻转。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
-#define IMU_GRAVITY_Z_SIGN (-1.0f) /* 当前 IMU 安装方向下，驱动解算平地 vz 为 -1；统一翻转为上层平地约 +1。 */
-#define IMU_GRAVITY_VZ_FLAT_COMP_START 0.80f /* 仅在接近平地时补偿；低于该值认为可能是真实姿态变化。 */
-#define IMU_GRAVITY_VZ_COMP_STEP 0.0015f     /* 5ms 每次最多补 0.0015，约 0.3/s，避免机械抖动导致平地 vz 慢慢掉。 */
-#define IMU_GRAVITY_VZ_COMP_MAX 0.20f        /* 最多补 0.20，防止补偿掩盖圆桶或墙面姿态。 */
+#define IMU_ROLL_FLAT_DEG 180.0f /* 当前安装姿态下平地 roll 约 180 度，输出角差前先扣除该基准。 */
+#define IMU_ROLL_DELTA_MIN_DEG (-180.0f) /* roll 角差输出下限，单位：度。 */
+#define IMU_ROLL_DELTA_MAX_DEG 180.0f    /* roll 角差输出上限，单位：度。 */
 
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
-static volatile float imu_gravity_vz = 1.0f;
-static float imu_gravity_vz_time_comp = 0.0f;
-
+static volatile float imu_roll_delta_deg = 0.0f; /**< 5ms 主环写入、控制和调试链路读取的 roll 角差，单位：度。 */
+ float acc_1 = 0.0;                     /**< acc_z 低通滤波输入/输出缓存，单位沿用 IMU660RC 原始 acc_z。 */
 /**
  * @brief 上电标定 gyro_z 零偏
  * @details
@@ -68,75 +66,39 @@ void imu_calibrate_gyro_z_zero_drift(void)
 }
 
 /**
- * @brief 由四元数更新重力向量 Z 分量缓存。
+ * @brief 由 roll 角更新姿态角差缓存。
  * @details
- * 驱动层四元数顺序为 [y, x, z, w]，此处先重排为标准 (w,x,y,z) 再计算。
- * 当前硬件安装方向下，驱动解算出的 Z 分量与控制策略约定相反，
- * 因此统一在此处翻转 Z 轴，保证负压、圆桶和调试显示共用“平地 vz 约 +1”的坐标系。
+ * 驱动层已把姿态解算结果更新到 `imu660rc_roll`。当前安装姿态下平地约 180 度，
+ * 因此这里得到 `imu660rc_roll - 180` 的角差并折回 -180~180 度。
  *
- * @note 由 5ms 主控制链路调用一次，其他模块通过 `imu_get_gravity_vz` 读取缓存，避免重复计算四元数。
+ * @note 由 5ms 主控制链路调用一次；其他模块读取缓存，避免重复处理 roll 环绕。
  */
-void imu_update_gravity_vz_from_quaternion(void)
+void imu_update_gravity_vz_from_roll(void)
 {
-    float qw;
-    float qx;
-    float qy;
-    float qz;
-    float comp_need;
-    float raw_vz;
-    float vz;
-
-    qx = imu660rc_quarternion[1];
-    qy = imu660rc_quarternion[0];
-    qz = imu660rc_quarternion[2];
-    qw = imu660rc_quarternion[3];
-
-    raw_vz = IMU_GRAVITY_Z_SIGN * (qw * qw - qx * qx - qy * qy + qz * qz);
-    if (raw_vz > 1.0f)
+    float roll_delta;
+	
+    roll_delta = imu660rc_roll - IMU_ROLL_FLAT_DEG;
+    if (roll_delta > IMU_ROLL_DELTA_MAX_DEG)
     {
-        raw_vz = 1.0f;
+        roll_delta -= 360.0f;
     }
-    else if (raw_vz < -1.0f)
+    else if (roll_delta < IMU_ROLL_DELTA_MIN_DEG)
     {
-        raw_vz = -1.0f;
+        roll_delta += 360.0f;
     }
 
-    if (raw_vz > IMU_GRAVITY_VZ_FLAT_COMP_START && raw_vz < 1.0f)
-    {
-        comp_need = 1.0f - raw_vz;
-        if (comp_need > IMU_GRAVITY_VZ_COMP_MAX)
-        {
-            comp_need = IMU_GRAVITY_VZ_COMP_MAX;
-        }
-
-        imu_gravity_vz_time_comp += IMU_GRAVITY_VZ_COMP_STEP;
-        if (imu_gravity_vz_time_comp > comp_need)
-        {
-            imu_gravity_vz_time_comp = comp_need;
-        }
-    }
-    else
-    {
-        // 离开接近平地区间时立即清补偿，避免真实圆桶/墙面姿态被持续抬高。
-        imu_gravity_vz_time_comp = 0.0f;
-    }
-
-    vz = raw_vz + imu_gravity_vz_time_comp;
-    if (vz > 1.0f)
-    {
-        vz = 1.0f;
-    }
-
-    imu_gravity_vz = vz;
+    imu_roll_delta_deg = roll_delta;
+    acc_1 = imu660rc_acc_z;
+    low_pass_filter_mt(&acc_z, &acc_1, 0.01f);
 }
 
 /**
- * @brief 读取最近一次 5ms 更新的重力向量 Z 分量。
- * @return float 已限幅到 -1.0f~1.0f 的 vz，平地约 +1。
+ * @brief 读取最近一次 5ms 更新的 roll 角差。
+ * @return float 已折回到 -180.0f~180.0f 的 roll 角差，单位：度；平地约 0。
  */
 float imu_get_gravity_vz(void)
 {
-    return imu_gravity_vz;
+    return imu_roll_delta_deg;
 }
 
 /**

@@ -20,7 +20,7 @@ extern volatile int fuya_target_pwm;           /**< 当前目标脉宽，范围 
 extern volatile uint8 fuya_target_percent;     /**< 当前目标百分比，范围 0~100 */
 extern volatile uint8 fuya_surface_state;      /**< 当前识别到的表面状态 */
 extern volatile uint8 fuya_cylinder_peak_flag; /**< 圆筒最高点通过标志：1-已过顶待落地，0-普通状态 */
-extern volatile float fuya_last_vzc;           /**< 最近一次限幅后的重力向量 Z 分量 */
+extern volatile float fuya_last_vzc;           /**< 最近一次 roll 角差，单位：度，范围 -180~180。 */
 
 /**
  * @brief 负压吸附系统初始化
@@ -48,7 +48,7 @@ void fuya_force_stop(void);
  * @brief 负压状态识别与输出平滑更新
  *
  * @details
- * 基于 IMU 的重力向量 Z 分量识别平地/墙面工况。通过软斜坡的方式输出目标占空比，
+ * 基于 IMU 的 roll 角差识别平地/墙面工况。通过软斜坡的方式输出目标占空比，
  * 避免直接突变导致外接电池瞬态压降或控制链路干扰。
  *
  * @note 无阻塞，允许在 10ms 中断或主循环中调用。

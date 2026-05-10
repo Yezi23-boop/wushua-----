@@ -30,7 +30,11 @@ void main()
                 /* B. 处理 IPS 屏幕菜单渲染与按键交互 (参数修改核心) */
 #if MAIN_ENABLE_MENU
                 //	P36=0;
-                Keystroke_Menu();
+                /* 运行态关闭屏幕菜单刷新，避免 UI 服务占用竞速控制资源。 */
+                if (a_run_mode_get_start_state() != 2)
+                {
+                        Keystroke_Menu();
+                }
                 //	P36=1;
 #endif
 
@@ -38,12 +42,12 @@ void main()
 #if MAIN_ENABLE_SPEED_TEST
 
 //			printf("%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, P46, speed_r);
-			ips114_show_int32(4 * 24, 18 * 0,P36, 4);
-//			P43=0;
-						ips114_show_float(4 * 24, 18 * 0,PID.left_speed.speed, 4, 1);
-			ips114_show_float(4 * 24, 18 * 1,PID.right_speed.speed, 4, 1);
+//			ips114_show_int32(4 * 24, 18 * 0,P36, 4);
+////			P43=0;
+//						ips114_show_float(4 * 24, 18 * 0,PID.left_speed.speed, 4, 1);
+//			ips114_show_float(4 * 24, 18 * 1,PID.right_speed.speed, 4, 1);
 //			system_delay_ms(200);
-//          printf_imu();
+          printf_imu();
 //			printf_adc();
 //			printf_speed_test();
 #endif

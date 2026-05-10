@@ -139,11 +139,20 @@ def test_gravity_z_sign_is_normalized_at_imu_boundary():
     assert "static volatile float imu_gravity_vz = 1.0f;" in imu_source
     assert "static float imu_gravity_vz_time_comp = 0.0f;" in imu_source
     assert "#define IMU_GRAVITY_VZ_FLAT_COMP_START 0.80f" in imu_source
-    assert "#define IMU_GRAVITY_VZ_COMP_STEP 0.0015f" in imu_source
-    assert "#define IMU_GRAVITY_VZ_COMP_MAX 0.20f" in imu_source
+    assert "#define IMU_GRAVITY_VZ_COMP_STEP" in imu_source
+    assert "#define IMU_GRAVITY_VZ_COMP_MAX" not in imu_source
+    assert "#define IMU_GRAVITY_VZ_DROP_WINDOW_COUNT 20u" in imu_source
+    assert "#define IMU_GRAVITY_VZ_FAST_DROP_LIMIT 0.08f" in imu_source
+    assert "#define IMU_GRAVITY_VZ_ELEMENT_COMP_VALUE 0.00001f" in imu_source
+    assert "IMU_GRAVITY_VZ_COMP_RELEASE_RATE" not in imu_source
+    assert "static float imu_gravity_vz_history[IMU_GRAVITY_VZ_DROP_WINDOW_COUNT];" in imu_source
     assert "void imu_update_gravity_vz_from_quaternion(void)" in imu_source
     assert "float imu_get_gravity_vz(void)" in imu_source
     assert "raw_vz = IMU_GRAVITY_Z_SIGN * (qw * qw - qx * qx - qy * qy + qz * qz);" in imu_source
+    assert "vz_before_update = raw_vz + imu_gravity_vz_time_comp;" in imu_source
+    assert "vz_drop_100ms >= IMU_GRAVITY_VZ_FAST_DROP_LIMIT" in imu_source
+    assert "imu_gravity_vz_time_comp = IMU_GRAVITY_VZ_ELEMENT_COMP_VALUE;" in imu_source
+    assert "        imu_gravity_vz_time_comp = 0.0f;" not in imu_source
     assert "vz = raw_vz + imu_gravity_vz_time_comp;" in imu_source
     assert "imu_update_gravity_vector_from_quaternion" not in imu_source
     assert "imu_update_gravity_vector_from_quaternion" not in imu_header
