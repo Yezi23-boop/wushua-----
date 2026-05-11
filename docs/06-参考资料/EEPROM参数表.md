@@ -2,56 +2,60 @@
 
 ## 参数分组
 
-当前 EEPROM 配置由 `AppConfig g_aapp_config 一承载。
+当前 EEPROM 配置由全局 `AppConfig app` 承载。
 
 ### `start`
 
-| 字段           | 含义                  |
-| -------------- | --------------------- |
-| `start_flag`   | 起跑/业务开关相关标志 |
-| `circle_flags` | 圆环相关标志          |
-| `fuya_xili`    | 负压输出基准参数      |
+| 字段 | 含义 |
+| --- | --- |
+| `start_flag` | 起跑/业务开关相关标志 |
+| `circle_flags` | 圆环和元素仲裁开关 |
+| `track_mode` | 赛道元素模式，当前主要使用 0 |
+| `fuya_xili` | 平地负压百分比 |
+| `fuya_wall_percent` | 墙面负压百分比 |
 
 ### `speed`
 
-| 字段           | 含义                   |
-| -------------- | ---------------------- |
-| `kp_Err`       | 转向环比例参数         |
-| `kd_Err`       | 转向环微分参数         |
-| `speed_run`    | 运行目标速度           |
-| `limiting_Err` | 转向环输出限幅         |
-| `kp2_Err`      | 转向环非线性误差项系数 |
+| 字段 | 含义 |
+| --- | --- |
+| `kp_Err` | 转向外环比例参数 |
+| `kd_Err` | 转向外环微分参数 |
+| `gyro_damp_Err` | 转向外环 gyro 阻尼参数 |
+| `speed_run` | 基础运行目标速度 |
+| `limiting_Err` | 转向外环输出限幅 |
+| `kp2_Err` | 转向外环非线性误差项系数 |
 
 ### `angle`
 
-| 字段             | 含义             |
-| ---------------- | ---------------- |
-| `kp_Angle`       | 角度环比例参数   |
-| `kd_Angle`       | 角度环微分参数   |
-| `limiting_Angle` | 角度环输出限幅   |
-| `A_1`            | 电感误差映射参数 |
-| `B_1`            | 电感误差映射参数 |
-| `C_l`            | 电感误差映射参数 |
+| 字段 | 含义 |
+| --- | --- |
+| `kp_Angle` | 角速度内环比例参数 |
+| `kd_Angle` | 角速度内环微分参数 |
+| `gyro_feedback_scale` | gyro_z 反馈缩放系数 |
+| `limiting_Angle` | 角速度内环输出限幅 |
+| `A_1` | 主亮度权重 |
+| `B_1` | 竖向差分权重 |
+| `C_l` | 弱信号分母补偿权重 |
 
 ### `ring`
 
-| 字段                    | 含义                   |
-| ----------------------- | ---------------------- |
-| `ring_encoder`          | 圆环编码器阈值相关参数 |
-| `pre_ring_Gyro_set`     | 进环前姿态设定参数     |
-| `in_ring_Gyroz`         | 圆环内角速度相关参数   |
-| `pre_out_ring_Gyro_set` | 出环前姿态设定参数     |
-| `pre_out_ring_Gyroz`    | 出环前角速度相关参数   |
-| `pre_out_ring_encoder`  | 出环前编码器阈值       |
+| 字段 | 含义 |
+| --- | --- |
+| `ring_entry_encoder` | ring 阶段编码器积分阈值 |
+| `pre_ring_Gyro_target` | pre_ring 固定目标角速度 |
+| `pre_ring_Gyroz` | pre_ring 累计转角阈值 |
+| `in_ring_Gyroz` | in_ring 累计转角阈值 |
+| `pre_out_ring_Gyro_target` | pre_out_ring 固定目标角速度 |
+| `pre_out_ring_Gyroz` | pre_out_ring 累计转角阈值 |
 
 ### `fly`
 
-| 字段               | 含义               |
-| ------------------ | ------------------ |
-| `count_fly_speed`  | 飞坡速度参数       |
-| `count_fly_time_1` | 飞坡阶段计数阈值 1 |
-| `count_fly_time_2` | 飞坡阶段计数阈值 2 |
-| `count_fly_angle`  | 飞坡角度相关参数   |
+| 字段 | 含义 |
+| --- | --- |
+| `count_fly_speed` | 飞坡/跷跷板目标速度 |
+| `count_fly_time_1` | 弱磁入口确认次数，按 5ms 累计 |
+| `count_fly_time_2` | HOLD 保持时间，按 5ms 累计 |
+| `fly_ramp_enable` | 飞坡/跷跷板功能开关 |
 
 ## 存储策略说明
 
@@ -64,4 +68,4 @@
 
 - 新增参数前，先判断是否必须掉电保存
 - 调试阶段的临时变量不要随意塞进 EEPROM
-- 会保存的参数应优先归入 `g_app_app_config
+- 会保存的参数应优先归入 `app`

@@ -1,0 +1,70 @@
+# a_run_track_element 模块
+
+## 模块职责
+
+`a_run_track_element.c` 负责左圆环、圆桶、跷跷板/飞坡和墙面的串行仲裁。它用当前期望元素限制入口识别，避免圆桶或墙面过渡段误触发下一次圆环。
+
+## 对外入口函数
+
+- `a_run_track_element_update_gate()`
+- `a_run_track_element_update_integrals()`
+- `a_run_track_element_update_angle_target(float *angle_target)`
+- `a_run_track_element_get_ring_state()`
+- `a_run_track_element_get_expected_element()`
+- `a_run_track_element_get_cylinder_state()`
+- `a_run_track_element_get_wall_state()`
+- `a_run_track_element_get_cylinder_vz()`
+
+## 依赖与被依赖关系
+
+依赖：
+
+- `app.start.circle_flags`
+- `app.ring`
+- `app.fly.fly_ramp_enable`
+- `ad1~ad4`
+- `gyro_z`
+- `speed_l / speed_r`
+- `imu_get_gravity_vz()`
+- `a_run_fly`
+- `FUYA` 的圆桶过顶参数切换接口
+
+被依赖：
+
+- `a_run.c`
+- `a_run_mode.c`
+- 菜单和调试显示
+
+## 元素仲裁顺序
+
+当前串行顺序为：
+
+```text
+左圆环
+  -> 圆桶
+  -> 跷跷板/飞坡（app.fly.fly_ramp_enable == 1 时）
+  -> 墙面
+  -> 左圆环
+```
+
+如果关闭 `app.start.circle_flags`，模块会复位到期望左圆环，并清理圆环、圆桶、墙面和飞坡状态。
+
+## 各阶段职责
+
+- 左圆环：入口要求四路电感满足特征，并使用连续确认和上升沿约束；环内通过 `ring_data.diff_set` 覆盖目标角速度。
+- 圆桶：通过电感强信号窗口、回地确认和稳定延迟判断完成，并在过顶阶段调用负压模块切换 angle 参数。
+- 跷跷板/飞坡：只开放入口，实际 HOLD/RECOVER/COOLDOWN 由 `a_run_fly` 推进。
+- 墙面：圆桶或跷跷板后等待墙面强信号，再计时完成，完成后重新开放左圆环。
+
+## 高频路径注意事项
+
+- `a_run_track_element_update_gate()` 和 `a_run_track_element_update_integrals()` 运行在 5ms 主控制链中，应避免串口输出和复杂计算。
+- 圆环角度累计依赖 `gyro_z` 已按 5ms 周期准备好；若 IMU 缩放或周期改变，圆环阈值要重新标定。
+- `expected_element` 是误触发防线，不应被菜单或调试代码直接改写。
+
+## 调参与常见风险
+
+- 圆环误触发：优先看入口阈值、连续确认次数和 `expected_element` 是否确实为左圆环。
+- 圆桶完成过早：提高强信号命中条件或延长稳定延迟。
+- 跷跷板没有触发：确认圆桶后是否切到了 `TRACK_ELEMENT_SEESAW`，以及 `app.fly.fly_ramp_enable` 是否为 1。
+- 墙面后不重新开放圆环：检查墙面强信号阈值和 `WALL_TIMING_COUNT` 是否符合实际路段。
