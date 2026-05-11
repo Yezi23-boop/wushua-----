@@ -1,10 +1,9 @@
 #include "pid.h"
 
-///* 左右轮编码器组合滤波状态：符号纠错 + 3 点中值 + EMA(1/2) */
-// static EncoderMedian3EmaFilterState encoder_filter_left;
-// static EncoderMedian3EmaFilterState encoder_filter_right;
-LowPassFilter_t encoder_filter_left;
-LowPassFilter_t encoder_filter_right;
+LowPassFilter_t encoder_filter_left;  /* 左轮速度反馈低通状态，Encoder_get 周期更新。 */
+LowPassFilter_t encoder_filter_right; /* 右轮速度反馈低通状态，Encoder_get 周期更新。 */
+TrimmedMeanFilterFloatState encoder_filter_left11;
+TrimmedMeanFilterFloatState encoder_filter_right11;
 /* 内部中间变量 */
 float speed_l = 0; /* 左轮当前速度反馈 */
 float speed_r = 0; /* 右轮当前速度反馈 */
@@ -68,21 +67,14 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
 
 /**
  * @brief 读取并处理编码器数据
- * @details 读取硬件编码器计数值，执行组合滤波后再转换为速度
+ * @details 读取硬件编码器计数值，转换为速度后执行一阶低通滤波。
  * @param left 左轮 PID 结构指针
  * @param right 右轮 PID 结构指针
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-    //    int32 fixed_left_count;
-    //    int32 fixed_right_count;
-
-    //    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
-    //                                                        &encoder_filter_left);
-    //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
-    //                                                         &encoder_filter_right);
-    speed_l = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.07f;
-    speed_r = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.07f;
+    speed_r = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.07f;
+    speed_l = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.07f;
     if (speed_l < 0)
     {
         speed_l = -speed_l;
@@ -91,13 +83,10 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     {
         speed_r = -speed_r;
     }
-    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);
-    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);
-    //    speed_l = (float)fixed_left_count * 0.2f;
-    //    speed_r = (float)fixed_right_count * 0.2f;
-
     left->speed = speed_l;
     right->speed = speed_r;
+    low_pass_filter_mt(&encoder_filter_left, &left->speed, 0.5f);
+    low_pass_filter_mt(&encoder_filter_right, &right->speed, 0.5f);
 
     /* 清零硬件计数器，准备下一采样周期的计数 */
     encoder_clear_count(TIM3_ENCOEDER);

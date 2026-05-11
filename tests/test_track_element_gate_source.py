@@ -53,7 +53,7 @@ def test_track_element_gate_contract_is_wired():
     assert "enum CylinderStep" in source
     assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target;" in source
     assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target;" in source
-    assert "IMU_GYRO_Z_SIGN (-1.0f)" in _read(IMU_C)
+    assert "IMU_GYRO_Z_SIGN (1.0f)" in _read(IMU_C)
     assert "ring_finish_event = 1;" in source
     assert "static uint8 ring_take_finish_event(void)" in source
     assert "void a_run_track_element_update_gate(void)" in source

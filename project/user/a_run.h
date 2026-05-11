@@ -9,8 +9,6 @@
 extern volatile int flat_fly;       /**< 飞坡阶段状态：0-普通巡线，1-保持，2-恢复，3-冷却 */
 extern volatile float left_target;  /**< 当前左轮目标速度（用于菜单/调试显示） */
 extern volatile float right_target; /**< 当前右轮目标速度（用于菜单/调试显示） */
-extern int ll;
-extern float gy;
 /**
  * @brief 系统主控制任务 (挂载于 TM0，通常为 5ms)
  * @details 完成采样、转向差速/速度环计算，并在允许运行时输出 PWM。由汇编中断包装后调用，严禁阻塞。

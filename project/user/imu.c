@@ -19,7 +19,7 @@ LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，5ms IMU 更新链路写�
 
 /**< Z 轴陀螺仪向外输出前缩放乘数：由底盘转向几何、硬件灵敏度及控制目标共同决定的经验值 */
 #define IMU_GYRO_Z_SCALE (0.005f)
-#define IMU_GYRO_Z_SIGN (-1.0f) /* 驱动 gyro_z 顺时针为正；控制差速约定左转为正，需在桥接层翻转。 */
+#define IMU_GYRO_Z_SIGN (1.0f) /* 驱动 gyro_z 顺时针为负，已符合控制层左转为正约定，桥接层不再翻转。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
 #define IMU_ROLL_FLAT_DEG 180.0f /* 当前安装姿态下平地 roll 约 180 度，输出角差前先扣除该基准。 */

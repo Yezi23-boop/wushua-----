@@ -26,24 +26,21 @@ static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
  * 必须始终保证函数总体耗时远小于 5ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
  * 任何超时都会导致电机脱管、失控。
  */
- float gy=0;
 void run_time_1(void)
 {
     float diff_output;
     int8 start_state;
-    uint8 seesaw_allow;
-//	circle_check_l();
+//  uint8 seesaw_allow;
     steer_div_10++;
     a_run_apply_iap_guard();
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     start_state = a_run_mode_get_start_state();
     imu_update_gyro_z_from_imu660rc();
-	gy+=gyro_z;
 //    imu_update_gravity_vz_from_roll();
     /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
-    a_run_track_element_update_gate();
-    a_run_track_element_update_integrals();
+//    a_run_track_element_update_gate();
+//    a_run_track_element_update_integrals();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
@@ -51,14 +48,15 @@ void run_time_1(void)
 		steer_div_10=0;
     }
     speed_active = app.speed.speed_run;
-    /* 跷跷板阶段在外环与角速度内环之间锁定目标角速度，同时覆盖目标速度。 */
-    seesaw_allow = 0;
-    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_SEESAW)
-    {
-        seesaw_allow = 1;
-    }
-    a_run_fly_update_speed(&speed_active, seesaw_allow);
-    a_run_track_element_update_angle_target(&PID.steer.output);
+    /* 元素屏蔽：保留普通循迹，禁止跷跷板/飞坡覆盖速度或锁定角速度目标。 */
+//    seesaw_allow = 0;
+//    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_SEESAW)
+//    {
+//        seesaw_allow = 1;
+//    }
+//    a_run_fly_update_speed(&speed_active, seesaw_allow);
+    /* 元素屏蔽：禁止环岛固定角速度覆盖普通电感循迹外环输出。 */
+//    a_run_track_element_update_angle_target(&PID.steer.output);
     pid_angle_update(&PID.angle, PID.steer.output,gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
     left_target = speed_active - diff_output;

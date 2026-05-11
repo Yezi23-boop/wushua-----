@@ -94,7 +94,7 @@ void printf_imu(void)
     ips114_show_float(0, 18 * 1, imu660rc_gyro_y, 6, 1);
     ips114_show_float(0, 18 * 2, imu660rc_gyro_z, 6, 1);
     ips114_show_float(0, 18 * 3, gyro_z, 4, 1);
-    ips114_show_float(0, 18 * 4, gy, 6, 1);
+    ips114_show_float(0, 18 * 4, gyro_z, 6, 1);
     ips114_show_float(0, 18 * 5, imu660rc_acc_y, 6, 1);
     ips114_show_float(0, 18 * 6, imu660rc_acc_z, 6, 1);
     /* 预留一行可按需显示更多 gyro 调试量 */
