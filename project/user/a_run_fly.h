@@ -40,6 +40,5 @@ uint8 a_run_fly_take_finish_event(void);
 void a_run_fly_reset(void);
 
 extern volatile uint8 fly_lost_line_blocked; /**< 飞坡状态机写、丢线保护读；1 表示临时屏蔽丢线，0 表示恢复丢线保护。 */
-extern volatile uint8 fly_motor_output_blocked; /**< 飞坡 RECOVER 吸稳段写、主控输出读；1 表示本拍必须清掉电机输出。 */
 
 #endif /* __A_RUN_FLY_H__ */

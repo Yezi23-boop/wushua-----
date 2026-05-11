@@ -59,27 +59,14 @@ void run_time_1(void)
     }
     a_run_fly_update_speed(&speed_active, seesaw_allow);
     a_run_track_element_update_angle_target(&PID.steer.output);
-    if (fly_motor_output_blocked != 0)
-    {
-        PID.steer.output = 0.0f;
-    }
     pid_angle_update(&PID.angle, PID.steer.output,gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
-    if (fly_motor_output_blocked != 0)
-    {
-        diff_output = 0.0f;
-    }
     left_target = speed_active - diff_output;
     right_target = speed_active + diff_output;
 
     /* 速度环保持高频更新，保证电机执行链路带宽 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
-    if (fly_motor_output_blocked != 0)
-    {
-        PID.left_speed.output = 0.0f;
-        PID.right_speed.output = 0.0f;
-    }
 
     /* 7. 仅在运行态时允许电机输出 */
     if (start_state == 2)
@@ -113,7 +100,7 @@ void run_time_2(void)
                                                //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
     if (start_state == 1)
     {
-        fuya_set_percent(app.start.fuya_xili); /* 运行态全力负压，其他状态关闭负压 */
+        fuya_set_percent(app.start.fuya_xili); /* 预启动阶段按 EEPROM 固定值提前拉起负压，运行态保持该 PWM。 */
     }
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();

@@ -12,7 +12,7 @@
 | `circle_flags` | 圆环和元素仲裁开关 |
 | `track_mode` | 赛道元素模式，当前主要使用 0 |
 | `fuya_xili` | 平地负压百分比 |
-| `fuya_wall_percent` | 墙面负压百分比 |
+| `fuya_wall_percent` | 墙面负压百分比保留字段，当前固定负压策略不使用 |
 
 ### `speed`
 

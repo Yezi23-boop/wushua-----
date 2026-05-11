@@ -15,7 +15,6 @@ static uint16 fly_recover_count = 0; /* 进入 RECOVER 后的总时长计数，�
 static uint8 fly_recover_speed_step_count = 0; /* RECOVER 阶梯提速节拍计数，单位为 5ms 周期。 */
 static int fly_recover_speed = 0; /* RECOVER 当前阶梯速度，最大不超过 app.fly.count_fly_speed。 */
 volatile uint8 fly_lost_line_blocked = 0; /* 飞坡高风险窗口屏蔽丢线；RECOVER 超过 1s 后恢复保护。 */
-volatile uint8 fly_motor_output_blocked = 0; /* RECOVER 吸稳段强制清电机输出，避免负压未稳时残留 PWM 推车。 */
 
 /* --- 飞坡/跷跷板状态机参数（run_time_1 以 5ms 调用） --- */
 #define FLY_AD_SIDE_LOST_TH 14u  /* 横向电感低于该值时认为主线信号正在消失 */
@@ -23,14 +22,13 @@ volatile uint8 fly_motor_output_blocked = 0; /* RECOVER 吸稳段强制清电机
 #define FLY_LANDING_SIDE_TH 15u  /* HOLD 结束后横向电感任一路回升到该值，才允许进入落地恢复。 */
 #define FLY_LANDING_CENTER_TH 10u /* HOLD 结束后竖向电感任一路回升到该值，辅助确认车已接近地面电磁线。 */
 #define FLY_HOLD_ANGLE 0         /* 离线保持阶段固定目标角速度，0 表示直行锁角。 */
-#define FLY_RECOVER_LINE_STABLE_COUNT 3u /* 吸稳后中线连续稳定确认次数，5ms * 3 = 15ms。 */
+#define FLY_RECOVER_LINE_STABLE_COUNT 3u /* RECOVER 中线连续稳定确认次数，5ms * 3 = 15ms。 */
 #define FLY_COOLDOWN_COUNT 10    /* 退出冷却窗口，单位 5ms，默认约 100ms */
-#define FLY_LAND_SETTLE_COUNT 30u /* 进入 RECOVER 后先原地吸稳，5ms * 30 = 150ms。 */
-#define FLY_RECOVER_STEER_LIMIT_COUNT 70u /* RECOVER 前 350ms 限制转向，其中包含 150ms 吸稳窗口。 */
-#define FLY_RECOVER_STEER_LIMIT 8.0f /* 吸稳后前段小角速度找线，避免刚贴地时大差速打滑。 */
-#define FLY_RECOVER_SPEED_START 10 /* 吸稳后阶梯起步速度，避免从 0 过慢也避免直接满速打滑。 */
+#define FLY_RECOVER_STEER_LIMIT_COUNT 40u /* RECOVER 前 5ms * 40 = 200ms 限制转向，避免刚贴地时大差速打滑。 */
+#define FLY_RECOVER_STEER_LIMIT 8.0f /* RECOVER 前段小角速度找线，避免刚贴地时大差速打滑。 */
+#define FLY_RECOVER_SPEED_START 10 /* RECOVER 阶梯起步速度，避免从 0 过慢也避免直接满速打滑。 */
 #define FLY_RECOVER_SPEED_STEP 3 /* RECOVER 阶梯提速单步增量。 */
-#define FLY_RECOVER_SPEED_STEP_COUNT 10u /* 每 5ms * 10 = 50ms 提升一次速度。 */
+#define FLY_RECOVER_SPEED_STEP_COUNT 20u /* 每 5ms * 10 = 50ms 提升一次速度。 */
 #define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 200u /* RECOVER 超过 5ms * 200 = 1000ms 仍未完成时恢复丢线保护。 */
 
 /**
@@ -119,7 +117,6 @@ void a_run_fly_reset(void)
     fly_recover_speed = 0;
     fly_finish_event = 0;
     fly_lost_line_blocked = 0;
-    fly_motor_output_blocked = 0;
     flat_fly = FLY_STATE_IDLE;
 }
 
@@ -145,7 +142,6 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
     {
     case FLY_STATE_IDLE:
         fly_lost_line_blocked = 0;
-        fly_motor_output_blocked = 0;
         if (allow_entry != 0 && fly_is_ramp_lost_signal())
         {
             fly_detect_count++;
@@ -186,7 +182,6 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
                 fly_recover_speed_step_count = 0;
                 fly_recover_speed = 0;
                 fly_lost_line_blocked = 1;
-                fly_motor_output_blocked = 1;
                 flat_fly = FLY_STATE_RECOVER;
             }
             else
@@ -198,8 +193,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 
     case FLY_STATE_RECOVER:
         /*
-         * 刚落地时先给负压 150ms 原地吸稳，再从 10 开始阶梯提速找线。
-         * 这样避免吸力尚未建立时轮子突然给力，导致车身滑动后 Err 失真。
+         * 电感回升后从 10 开始阶梯提速找线，并在前段限制转向。
+         * 这样避免刚贴地时速度和差速同时过大，导致车身滑动后 Err 失真。
          */
         if (fly_recover_count < FLY_RECOVER_LOST_LINE_ENABLE_COUNT)
         {
@@ -211,16 +206,6 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
             fly_lost_line_blocked = 0;
         }
 
-        if (fly_recover_count <= FLY_LAND_SETTLE_COUNT)
-        {
-            *speed = 0;
-            PID.steer.output = 0.0f;
-            fly_motor_output_blocked = 1;
-            fly_state_count = 0;
-            break;
-        }
-
-        fly_motor_output_blocked = 0;
         if (fly_recover_count <= FLY_RECOVER_STEER_LIMIT_COUNT)
         {
             if (PID.steer.output > FLY_RECOVER_STEER_LIMIT)
@@ -288,7 +273,6 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
     case FLY_STATE_COOLDOWN:
         /* 冷却期只禁止重复触发，不覆盖控制输出，给普通巡线一个稳定接管窗口。 */
         fly_lost_line_blocked = 1;
-        fly_motor_output_blocked = 0;
         fly_state_count++;
         if (fly_state_count >= FLY_COOLDOWN_COUNT)
         {
