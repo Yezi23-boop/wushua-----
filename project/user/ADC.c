@@ -210,14 +210,14 @@ static void adc_read_channels(uint16 *raw_buffer)
     //    raw_buffer[1] = adc_convert(ADC_CH8_P00); /* 左竖电感 */
     //    raw_buffer[2] = adc_convert(ADC_CH0_P10); /* 右横电感 */
     //    raw_buffer[3] = adc_convert(ADC_CH1_P11); /* 右竖电感 */
-    raw_buffer[0] = adc_convert(ADC_CH1_P11); /* 左横电感 */
-    raw_buffer[1] = adc_convert(ADC_CH0_P10); /* 左竖电感 */
-    raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
-    raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */
-//    raw_buffer[0] = adc_convert(ADC_CH0_P10); /* 左横电感 */
-//    raw_buffer[1] = adc_convert(ADC_CH1_P11); /* 左竖电感 */
-//    raw_buffer[2] = adc_convert(ADC_CH9_P01); /* 右横电感 */
-//    raw_buffer[3] = adc_convert(ADC_CH8_P00); /* 右竖电感 */
+//    raw_buffer[0] = adc_convert(ADC_CH1_P11); /* 左横电感 */
+//    raw_buffer[1] = adc_convert(ADC_CH0_P10); /* 左竖电感 */
+//    raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
+//    raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */
+    raw_buffer[0] = adc_convert(ADC_CH0_P10); /* 左横电感 */
+    raw_buffer[1] = adc_convert(ADC_CH1_P11); /* 左竖电感 */
+    raw_buffer[2] = adc_convert(ADC_CH9_P01); /* 右横电感 */
+    raw_buffer[3] = adc_convert(ADC_CH8_P00); /* 右竖电感 */
 }
 
 /**
