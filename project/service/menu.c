@@ -543,6 +543,7 @@ static void Menu_Draw_Home(void)
     ips114_show_float(184, 4 * MENU_ROW_HEIGHT, dianya, 4, 2);
     ips114_show_float(184, 5 * MENU_ROW_HEIGHT, left_target, 4, 1);
     ips114_show_float(184, 6 * MENU_ROW_HEIGHT, right_target, 4, 1);
+	
 }
 
 static void Menu_Draw_Start(int edit_line)

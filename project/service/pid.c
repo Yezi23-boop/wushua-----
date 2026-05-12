@@ -73,16 +73,16 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-    speed_r = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.07f;
-    speed_l = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.07f;
-    if (speed_l < 0)
-    {
-        speed_l = -speed_l;
-    }
-    if (speed_r < 0)
-    {
-        speed_r = -speed_r;
-    }
+    speed_r = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.04f;
+    speed_l = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.04f;
+//    if (speed_l < 0)
+//    {
+//        speed_l = -speed_l;
+//    }
+//    if (speed_r < 0)
+//    {
+//        speed_r = -speed_r;
+//    }
     left->speed = speed_l;
     right->speed = speed_r;
     low_pass_filter_mt(&encoder_filter_left, &left->speed, 0.5f);
