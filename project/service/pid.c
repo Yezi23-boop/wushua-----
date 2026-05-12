@@ -173,10 +173,10 @@ void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback)
 }
 
 /**
- * @brief 角度环 PID 更新（位置式算法）
+ * @brief 角速度环 PID 更新（位置式算法）
  * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
  * @param pid PID 结构指针
- * @param error 目标偏差（通常是 目标角度 - 当前角度）
+ * @param error 目标偏差（通常是 目标角速度 - 当前角速度）
  * @param gyro Calibrated steering feedback value
  */
 void pid_angle_update(PID_Steer *pid, float error, float gyro)

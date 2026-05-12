@@ -40,5 +40,7 @@ uint8 a_run_fly_take_finish_event(void);
 void a_run_fly_reset(void);
 
 extern volatile uint8 fly_lost_line_blocked; /**< 飞坡状态机写、丢线保护读；1 表示临时屏蔽丢线，0 表示恢复丢线保护。 */
+extern volatile float fly_diff_output_limit; /**< 飞坡 RECOVER 写、主控差速读；大于 0 时限制最终左右轮差速量。 */
+extern volatile int32 fly_pwm_output_limit; /**< 飞坡 HOLD/RECOVER 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
 
 #endif /* __A_RUN_FLY_H__ */

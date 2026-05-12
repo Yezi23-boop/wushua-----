@@ -15,6 +15,8 @@ static uint16 fly_recover_count = 0; /* 进入 RECOVER 后的总时长计数，�
 static uint8 fly_recover_speed_step_count = 0; /* RECOVER 阶梯提速节拍计数，单位为 5ms 周期。 */
 static int fly_recover_speed = 0; /* RECOVER 当前阶梯速度，最大不超过 app.fly.count_fly_speed。 */
 volatile uint8 fly_lost_line_blocked = 0; /* 飞坡高风险窗口屏蔽丢线；RECOVER 超过 1s 后恢复保护。 */
+volatile float fly_diff_output_limit = 0.0f; /* RECOVER 期间限制最终差速，防止落地 gyro 抖动放大左右轮差。 */
+volatile int32 fly_pwm_output_limit = 0; /* HOLD/RECOVER 期间限制最终 PWM 占空比，0 表示不额外限制。 */
 
 /* --- 飞坡/跷跷板状态机参数（run_time_1 以 5ms 调用） --- */
 #define FLY_AD_SIDE_LOST_TH 14u  /* 横向电感低于该值时认为主线信号正在消失 */
@@ -23,12 +25,16 @@ volatile uint8 fly_lost_line_blocked = 0; /* 飞坡高风险窗口屏蔽丢线�
 #define FLY_LANDING_CENTER_TH 10u /* HOLD 结束后竖向电感任一路回升到该值，辅助确认车已接近地面电磁线。 */
 #define FLY_HOLD_ANGLE 0         /* 离线保持阶段固定目标角速度，0 表示直行锁角。 */
 #define FLY_RECOVER_LINE_STABLE_COUNT 3u /* RECOVER 中线连续稳定确认次数，5ms * 3 = 15ms。 */
-#define FLY_COOLDOWN_COUNT 10    /* 退出冷却窗口，单位 5ms，默认约 100ms */
-#define FLY_RECOVER_STEER_LIMIT_COUNT 40u /* RECOVER 前 5ms * 40 = 200ms 限制转向，避免刚贴地时大差速打滑。 */
-#define FLY_RECOVER_STEER_LIMIT 8.0f /* RECOVER 前段小角速度找线，避免刚贴地时大差速打滑。 */
+#define FLY_COOLDOWN_COUNT 10    /* 退出冷却窗口，5ms * 10 = 50ms。 */
+#define FLY_RECOVER_DIFF_LIMIT_EARLY_COUNT 60u /* RECOVER 前 5ms * 60 = 300ms 严格限制最终差速。 */
+#define FLY_RECOVER_DIFF_LIMIT_EARLY 6.0f /* 刚落地阶段最终差速限幅，避免左右轮一正一反把车甩偏。 */
+#define FLY_RECOVER_DIFF_LIMIT_LATE 12.0f /* RECOVER 后段保留较小纠偏能力，直到中线稳定退出。 */
+#define FLY_PWM_LIMIT_HOLD 3000 /* 离线保持期实际 PWM 上限，避免空中/弱磁阶段速度环过冲。 */
+#define FLY_PWM_LIMIT_RECOVER_EARLY 2500 /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
+#define FLY_PWM_LIMIT_RECOVER_LATE 4000 /* RECOVER 后段实际 PWM 上限，给循迹留出有限纠偏能力。 */
 #define FLY_RECOVER_SPEED_START 10 /* RECOVER 阶梯起步速度，避免从 0 过慢也避免直接满速打滑。 */
 #define FLY_RECOVER_SPEED_STEP 3 /* RECOVER 阶梯提速单步增量。 */
-#define FLY_RECOVER_SPEED_STEP_COUNT 20u /* 每 5ms * 10 = 50ms 提升一次速度。 */
+#define FLY_RECOVER_SPEED_STEP_COUNT 20u /* 每 5ms * 20 = 100ms 提升一次速度。 */
 #define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 200u /* RECOVER 超过 5ms * 200 = 1000ms 仍未完成时恢复丢线保护。 */
 
 /**
@@ -117,6 +123,8 @@ void a_run_fly_reset(void)
     fly_recover_speed = 0;
     fly_finish_event = 0;
     fly_lost_line_blocked = 0;
+    fly_diff_output_limit = 0.0f;
+    fly_pwm_output_limit = 0;
     flat_fly = FLY_STATE_IDLE;
 }
 
@@ -142,6 +150,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
     {
     case FLY_STATE_IDLE:
         fly_lost_line_blocked = 0;
+        fly_diff_output_limit = 0.0f;
+        fly_pwm_output_limit = 0;
         if (allow_entry != 0 && fly_is_ramp_lost_signal())
         {
             fly_detect_count++;
@@ -171,6 +181,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
         /* 离地/弱磁期间冻结外环目标，避免 Err 瞬态失真把车头拉偏。 */
         *speed = app.fly.count_fly_speed;
         PID.steer.output = (float)FLY_HOLD_ANGLE;
+        fly_diff_output_limit = 0.0f;
+        fly_pwm_output_limit = FLY_PWM_LIMIT_HOLD;
 
         fly_state_count++;
         if (fly_state_count >= app.fly.count_fly_time_2)
@@ -193,8 +205,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 
     case FLY_STATE_RECOVER:
         /*
-         * 电感回升后从 10 开始阶梯提速找线，并在前段限制转向。
-         * 这样避免刚贴地时速度和差速同时过大，导致车身滑动后 Err 失真。
+         * 电感回升后从 10 开始阶梯提速找线，并在最终差速和 PWM 层限制输出。
+         * 这样避免刚贴地时速度和电机占空比同时过大，导致车身滑动后 Err 失真。
          */
         if (fly_recover_count < FLY_RECOVER_LOST_LINE_ENABLE_COUNT)
         {
@@ -205,17 +217,15 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
         {
             fly_lost_line_blocked = 0;
         }
-
-        if (fly_recover_count <= FLY_RECOVER_STEER_LIMIT_COUNT)
+        if (fly_recover_count <= FLY_RECOVER_DIFF_LIMIT_EARLY_COUNT)
         {
-            if (PID.steer.output > FLY_RECOVER_STEER_LIMIT)
-            {
-                PID.steer.output = FLY_RECOVER_STEER_LIMIT;
-            }
-            else if (PID.steer.output < -FLY_RECOVER_STEER_LIMIT)
-            {
-                PID.steer.output = -FLY_RECOVER_STEER_LIMIT;
-            }
+            fly_diff_output_limit = FLY_RECOVER_DIFF_LIMIT_EARLY;
+            fly_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_EARLY;
+        }
+        else
+        {
+            fly_diff_output_limit = FLY_RECOVER_DIFF_LIMIT_LATE;
+            fly_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
         }
 
         if (app.fly.count_fly_speed <= 0)
@@ -260,6 +270,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
                 fly_recover_speed_step_count = 0;
                 fly_recover_speed = 0;
                 fly_lost_line_blocked = 1;
+                fly_diff_output_limit = 0.0f;
+                fly_pwm_output_limit = 0;
                 fly_finish_event = 1;
                 flat_fly = FLY_STATE_COOLDOWN;
             }
@@ -273,6 +285,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
     case FLY_STATE_COOLDOWN:
         /* 冷却期只禁止重复触发，不覆盖控制输出，给普通巡线一个稳定接管窗口。 */
         fly_lost_line_blocked = 1;
+        fly_diff_output_limit = 0.0f;
+        fly_pwm_output_limit = 0;
         fly_state_count++;
         if (fly_state_count >= FLY_COOLDOWN_COUNT)
         {

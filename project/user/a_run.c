@@ -61,6 +61,18 @@ void run_time_1(void)
     a_run_track_element_update_angle_target(&PID.steer.output);
     pid_angle_update(&PID.angle, PID.steer.output,gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
+    if (fly_diff_output_limit > 0.001f)
+    {
+        if (diff_output > fly_diff_output_limit)
+        {
+            diff_output = fly_diff_output_limit;
+        }
+        else if (diff_output < -fly_diff_output_limit)
+        {
+            diff_output = -fly_diff_output_limit;
+        }
+        PID.angle.output = diff_output;
+    }
     left_target = speed_active - diff_output;
     right_target = speed_active + diff_output;
 

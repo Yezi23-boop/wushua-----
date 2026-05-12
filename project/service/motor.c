@@ -56,30 +56,46 @@ static int32 motor_limit_output_pwm(int32 pwm)
 }
 
 /**
- * @brief 按起步爬坡窗口等比例限制左右 PWM 输出。
+ * @brief 按指定上限等比例限制左右 PWM 输出。
  * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
  * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
+ * @param limit 本次允许的最大 PWM 绝对值，单位：占空比。
  *
- * 起步阶段不能把左右轮分别截到同一个上限，否则会抹掉差速转向量；
+ * 不能把左右轮分别截到同一个上限，否则会抹掉差速转向量；
  * 这里按较大一侧缩放两轮输出，在限制冲击的同时保留转向比例。
  */
-static void motor_limit_start_pwm_pair(int32 *lpwm, int32 *rpwm)
+static void motor_limit_pwm_pair_to(int32 *lpwm, int32 *rpwm, int32 limit)
 {
     int32 left_abs;
     int32 right_abs;
     int32 max_abs;
 
-    left_abs = (*lpwm >= 0) ? *lpwm : -*lpwm;
-    right_abs = (*rpwm >= 0) ? *rpwm : -*rpwm;
-    max_abs = (left_abs > right_abs) ? left_abs : right_abs;
-
-    if (max_abs <= motor_start_pwm_ramp_limit || max_abs == 0)
+    if (limit <= 0)
     {
         return;
     }
 
-    *lpwm = (*lpwm * motor_start_pwm_ramp_limit) / max_abs;
-    *rpwm = (*rpwm * motor_start_pwm_ramp_limit) / max_abs;
+    left_abs = (*lpwm >= 0) ? *lpwm : -*lpwm;
+    right_abs = (*rpwm >= 0) ? *rpwm : -*rpwm;
+    max_abs = (left_abs > right_abs) ? left_abs : right_abs;
+
+    if (max_abs <= limit || max_abs == 0)
+    {
+        return;
+    }
+
+    *lpwm = (*lpwm * limit) / max_abs;
+    *rpwm = (*rpwm * limit) / max_abs;
+}
+
+/**
+ * @brief 按起步爬坡窗口等比例限制左右 PWM 输出。
+ * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
+ * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
+ */
+static void motor_limit_start_pwm_pair(int32 *lpwm, int32 *rpwm)
+{
+    motor_limit_pwm_pair_to(lpwm, rpwm, motor_start_pwm_ramp_limit);
 }
 
 /**
@@ -173,6 +189,10 @@ void motor_output(int32 lpwm, int32 rpwm)
     if (stop == 0)
     {
         motor_limit_start_pwm_pair(&lpwm_limited, &rpwm_limited);
+        if (fly_pwm_output_limit > 0)
+        {
+            motor_limit_pwm_pair_to(&lpwm_limited, &rpwm_limited, fly_pwm_output_limit);
+        }
         motor_update_start_pwm_ramp(lpwm_limited, rpwm_limited);
         motor_last_lpwm_limited = lpwm_limited;
         motor_last_rpwm_limited = rpwm_limited;
