@@ -28,7 +28,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.circle_flags = 1;           /* 默认关闭圆环识别 */
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
-    config->start.fuya_xili = 55.00f;         /* 默认平地负压百分比 */
+    config->start.fuya_ground_percent = 60.00f; /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
@@ -49,12 +49,12 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 7.0;        /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 15.00f;     /* pre_ring固定目标角速度 */
-    config->ring.pre_ring_Gyroz = 20.00f;           /* pre_ring->in_ring累计转角阈值 */
+    config->ring.ring_entry_encoder = 0.0;        /* ring->pre_ring编码器积分阈值 */
+    config->ring.pre_ring_Gyro_target = 40.00f;     /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 210.00f;           /* in_ring->pre_out_ring累计转角阈值 */
     config->ring.pre_out_ring_Gyro_target = 5.00f; /* pre_out_ring固定目标角速度 */
-    config->ring.pre_out_ring_Gyroz = 220.00f;      /* pre_out_ring->out_ring累计转角阈值 */
+    config->ring.pre_out_ring_Gyroz = 240.00f;      /* pre_out_ring->out_ring累计转角阈值 */
 
     /* 飞坡策略默认参数 */
     config->fly.count_fly_speed = 23;  /* 飞坡慢速值 */
@@ -74,7 +74,7 @@ static void eeprom_read_config(AppConfig *config)
     config->start.circle_flags = (int16)read_int(2);
 
     config->speed.kp_Err = read_float(4);
-    config->start.fuya_xili = read_float(5);
+    config->start.fuya_ground_percent = read_float(5);
     config->speed.kd_Err = read_float(6);
     config->speed.kp2_Err = read_float(7);
     config->speed.speed_run = read_float(8);
@@ -120,7 +120,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->angle.limiting_Angle, 3);
 
     save_float(config->speed.kp_Err, 4);
-    save_float(config->start.fuya_xili, 5);
+    save_float(config->start.fuya_ground_percent, 5);
     save_float(config->speed.kd_Err, 6);
     save_float(config->speed.kp2_Err, 7);
     save_float(config->speed.speed_run, 8);

@@ -17,12 +17,6 @@ void a_run_mode_update_start_state(void);
 int8 a_run_mode_get_start_state(void);
 
 /**
- * @brief 负压状态更新
- * @details 仅在启动状态有效且配置允许时执行负压控制，避免待机时误动作
- */
-void a_run_mode_update_fuya_state(void);
-
-/**
  * @brief 读取当前环岛状态机阶段，用于菜单调参显示。
  * @return int8 阶段编号：0-no_ring，1-ring，2-pre_ring，3-in_ring，4-pre_out_ring，5-out_ring。
  */

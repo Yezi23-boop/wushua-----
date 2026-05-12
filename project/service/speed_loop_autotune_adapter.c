@@ -37,7 +37,7 @@ static void speed_loop_autotune_project_write_motor_pwm(int32 left_pwm, int32 ri
 
 static void speed_loop_autotune_project_write_fuya_pwm(int16 pwm_value)
 {
-    fuya_motor_output((int)pwm_value);
+    fuya_set_pwm((int)pwm_value);
 }
 
 static void speed_loop_autotune_project_set_drive_state(uint8 enable, int flat_state)

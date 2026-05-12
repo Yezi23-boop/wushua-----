@@ -558,7 +558,7 @@ static void Menu_Draw_Start(int edit_line)
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.circle_flags, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
+    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_ground_percent, 4, 1);
     ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
     ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
     ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.track_mode, 3);
@@ -1102,7 +1102,7 @@ static void Menu_Start_Process(void)
         break;
     case 13:
         Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.start.fuya_xili, 1.0f);
+        Menu_Process_Float_Value(&app.start.fuya_ground_percent, 1.0f);
         break;
     case 14:
         Menu_Draw_Start(4 * MENU_ROW_HEIGHT);

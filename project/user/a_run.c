@@ -30,34 +30,34 @@ void run_time_1(void)
 {
     float diff_output;
     int8 start_state;
-//  uint8 seesaw_allow;
+    uint8 seesaw_allow;
     steer_div_10++;
     a_run_apply_iap_guard();
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     start_state = a_run_mode_get_start_state();
     imu_update_gyro_z_from_imu660rc();
-//    imu_update_gravity_vz_from_roll();
-    /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
-//    a_run_track_element_update_gate();
-//    a_run_track_element_update_integrals();
+    imu_update_gravity_vz_from_roll();
+/* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
+    a_run_track_element_update_gate();
+    a_run_track_element_update_integrals();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
         pid_steer_update(&PID.steer, Err, 0.0f);
-		steer_div_10=0;
+        steer_div_10 = 0;
     }
     speed_active = app.speed.speed_run;
     /* 元素屏蔽：保留普通循迹，禁止跷跷板/飞坡覆盖速度或锁定角速度目标。 */
-//    seesaw_allow = 0;
-//    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_SEESAW)
-//    {
-//        seesaw_allow = 1;
-//    }
-//    a_run_fly_update_speed(&speed_active, seesaw_allow);
+    seesaw_allow = 0;
+    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_SEESAW)
+    {
+        seesaw_allow = 1;
+    }
+    a_run_fly_update_speed(&speed_active, seesaw_allow);
     /* 元素屏蔽：禁止环岛固定角速度覆盖普通电感循迹外环输出。 */
-//    a_run_track_element_update_angle_target(&PID.steer.output);
-    pid_angle_update(&PID.angle, PID.steer.output,gyro_z * app.angle.gyro_feedback_scale);
+    a_run_track_element_update_angle_target(&PID.steer.output);
+    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
     left_target = speed_active - diff_output;
     right_target = speed_active + diff_output;
@@ -95,10 +95,13 @@ void run_time_2(void)
     dianya_jiance(); /* 电池电压检测 */
     motor_stall_check_10ms();
     /* 3. 更新启停状态与负压控制 */
-                                               //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
-    if (start_state == 1)
+    if (start_state >= 1 && app.start.start_flag == 1)
     {
-        fuya_set_percent(app.start.fuya_xili); /* 预启动阶段按 EEPROM 固定值提前拉起负压，运行态保持该 PWM。 */
+        fuya_set_percent(app.start.fuya_ground_percent); /* 预启动和运行态持续同步固定负压百分比。 */
+    }
+    else
+    {
+        fuya_stop();
     }
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
@@ -143,7 +146,6 @@ void run_test_diff(void)
     /* 仅用于实验调试：不参与常规竞速主链路 */
     a_run_apply_iap_guard();
     test_diff_func();
-    fuya_update_simple();
 }
 
 /**

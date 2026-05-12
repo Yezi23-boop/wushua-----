@@ -2,7 +2,7 @@
  * @file a_run_mode.c
  * @brief 运行模式统一调配层
  * @details
- * 本模块保留启停、负压状态更新和菜单调试读取接口。5ms 主控链路中的飞坡与
+ * 本模块保留启停状态更新和菜单调试读取接口。5ms 主控链路中的飞坡与
  * 赛道元素更新直接调用对应模块，避免高频路径经过只转发的包装函数。
  */
 #include "zf_common_headfile.h"
@@ -84,22 +84,6 @@ void a_run_mode_update_start_state(void)
 int8 a_run_mode_get_start_state(void)
 {
     return (int8)current_start_state;
-}
-
-/**
- * @brief 负压状态更新
- * @details 启动状态有效且配置允许时才更新负压，避免待机时误动作
- */
-void a_run_mode_update_fuya_state(void)
-{
-    if (a_run_mode_get_start_state() >= 1 && app.start.start_flag == 1)
-    {
-        fuya_update_simple();
-    }
-    else
-    {
-        fuya_force_stop();
-    }
 }
 
 /**
