@@ -48,17 +48,28 @@ void run_time_1(void)
         steer_div_10 = 0;
     }
     speed_active = app.speed.speed_run;
-    /* 元素屏蔽：保留普通循迹，禁止跷跷板/飞坡覆盖速度或锁定角速度目标。 */
+    /* 跷跷板阶段在外环与角速度内环之间锁定目标角速度，同时覆盖目标速度。 */
     seesaw_allow = 0;
     if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_SEESAW)
     {
         seesaw_allow = 1;
     }
     a_run_fly_update_speed(&speed_active, seesaw_allow);
-    /* 元素屏蔽：禁止环岛固定角速度覆盖普通电感循迹外环输出。 */
     a_run_track_element_update_angle_target(&PID.steer.output);
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
+    if (fly_diff_output_limit > 0.001f)
+    {
+        if (diff_output > fly_diff_output_limit)
+        {
+            diff_output = fly_diff_output_limit;
+        }
+        else if (diff_output < -fly_diff_output_limit)
+        {
+            diff_output = -fly_diff_output_limit;
+        }
+        PID.angle.output = diff_output;
+    }
     left_target = speed_active - diff_output;
     right_target = speed_active + diff_output;
 

@@ -1,7 +1,7 @@
 #include "motor.h"
 
 #define MOTOR_START_PWM_RAMP_INITIAL_LIMIT 3000 /* 起步首个输出周期的 PWM 上限，单位：占空比。 */
-#define MOTOR_START_PWM_RAMP_STEP 60            /* 5ms 主环每次非零输出后放宽的 PWM 上限步长。 */
+#define MOTOR_START_PWM_RAMP_STEP 200            /* 5ms 主环每次非零输出后放宽的 PWM 上限步长。 */
 #define MOTOR_STALL_PWM_THRESHOLD 6000          /* 堵转判定的实际输出 PWM 下限，低于该值时不认为电机已强驱。 */
 #define MOTOR_STALL_SPEED_THRESHOLD 2.0f        /* 堵转判定的编码器速度上限，单位同 PID.left_speed.speed。 */
 #define MOTOR_STALL_CONFIRM_COUNT 100            /* 10ms 检测周期计数，100 次约 1s，用于过滤起步和瞬时卡顿。 */
@@ -56,30 +56,46 @@ static int32 motor_limit_output_pwm(int32 pwm)
 }
 
 /**
- * @brief 按起步爬坡窗口等比例限制左右 PWM 输出。
+ * @brief 按指定上限等比例限制左右 PWM 输出。
  * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
  * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
+ * @param limit 本次允许的最大 PWM 绝对值，单位：占空比。
  *
- * 起步阶段不能把左右轮分别截到同一个上限，否则会抹掉差速转向量；
+ * 不能把左右轮分别截到同一个上限，否则会抹掉差速转向量；
  * 这里按较大一侧缩放两轮输出，在限制冲击的同时保留转向比例。
  */
-static void motor_limit_start_pwm_pair(int32 *lpwm, int32 *rpwm)
+static void motor_limit_pwm_pair_to(int32 *lpwm, int32 *rpwm, int32 limit)
 {
     int32 left_abs;
     int32 right_abs;
     int32 max_abs;
 
-    left_abs = (*lpwm >= 0) ? *lpwm : -*lpwm;
-    right_abs = (*rpwm >= 0) ? *rpwm : -*rpwm;
-    max_abs = (left_abs > right_abs) ? left_abs : right_abs;
-
-    if (max_abs <= motor_start_pwm_ramp_limit || max_abs == 0)
+    if (limit <= 0)
     {
         return;
     }
 
-    *lpwm = (*lpwm * motor_start_pwm_ramp_limit) / max_abs;
-    *rpwm = (*rpwm * motor_start_pwm_ramp_limit) / max_abs;
+    left_abs = (*lpwm >= 0) ? *lpwm : -*lpwm;
+    right_abs = (*rpwm >= 0) ? *rpwm : -*rpwm;
+    max_abs = (left_abs > right_abs) ? left_abs : right_abs;
+
+    if (max_abs <= limit || max_abs == 0)
+    {
+        return;
+    }
+
+    *lpwm = (*lpwm * limit) / max_abs;
+    *rpwm = (*rpwm * limit) / max_abs;
+}
+
+/**
+ * @brief 按起步爬坡窗口等比例限制左右 PWM 输出。
+ * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
+ * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
+ */
+static void motor_limit_start_pwm_pair(int32 *lpwm, int32 *rpwm)
+{
+    motor_limit_pwm_pair_to(lpwm, rpwm, motor_start_pwm_ramp_limit);
 }
 
 /**
@@ -173,6 +189,10 @@ void motor_output(int32 lpwm, int32 rpwm)
     if (stop == 0)
     {
         motor_limit_start_pwm_pair(&lpwm_limited, &rpwm_limited);
+        if (fly_pwm_output_limit > 0)
+        {
+            motor_limit_pwm_pair_to(&lpwm_limited, &rpwm_limited, fly_pwm_output_limit);
+        }
         motor_update_start_pwm_ramp(lpwm_limited, rpwm_limited);
         motor_last_lpwm_limited = lpwm_limited;
         motor_last_rpwm_limited = rpwm_limited;
@@ -280,7 +300,7 @@ void dianya_jiance(void)
     }
 
     /* 持续欠压 3000 次（软件滤波，防止启动大电流导致电压跌落误判） */
-    if (dianya_count > 1000)
+    if (dianya_count > 3000)
     {
         stop = 1; /* 锁定停车，保护电池 */
     }
