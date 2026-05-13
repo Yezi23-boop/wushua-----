@@ -300,7 +300,7 @@ void dianya_jiance(void)
     }
 
     /* 持续欠压 3000 次（软件滤波，防止启动大电流导致电压跌落误判） */
-    if (dianya_count > 1000)
+    if (dianya_count > 3000)
     {
         stop = 1; /* 锁定停车，保护电池 */
     }
