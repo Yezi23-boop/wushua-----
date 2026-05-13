@@ -115,14 +115,14 @@ void a_run_track_element_update_angle_target(float *angle_target)
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    if (ad1 > 40 &&
+    if (ad1 > 35 &&
         ad2 > 10 &&
         ad3 > 10 &&
-        ad4 > 40 &&
-        ad1 < 70 &&
-        ad2 < 50 &&
-        ad3 < 50 &&
-        ad4 < 70)
+        ad4 > 35 &&
+        ad1 < 80 &&
+        ad2 < 60 &&
+        ad3 < 60 &&
+        ad4 < 80)
     {
         return 1;
     }
