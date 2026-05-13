@@ -12,8 +12,6 @@ static int fly_detect_count = 0;   /* 入口弱磁连续确认计数，单位为
 static int fly_state_count = 0;    /* 保持、恢复和冷却阶段共用计数，单位为 5ms 周期。 */
 static uint8 fly_finish_event = 0; /* 跷跷板恢复完成事件，由元素仲裁在 5ms 链路中单次消费。 */
 static uint16 fly_recover_count = 0; /* 进入 RECOVER 后的总时长计数，单位为 5ms 周期。 */
-static uint8 fly_recover_speed_step_count = 0; /* RECOVER 阶梯提速节拍计数，单位为 5ms 周期。 */
-static int fly_recover_speed = 0; /* RECOVER 当前阶梯速度，最大不超过 app.fly.count_fly_speed。 */
 volatile uint8 fly_lost_line_blocked = 0; /* 飞坡高风险窗口屏蔽丢线；RECOVER 超过 1s 后恢复保护。 */
 volatile float fly_diff_output_limit = 0.0f; /* RECOVER 期间限制最终差速，防止落地 gyro 抖动放大左右轮差。 */
 volatile int32 fly_pwm_output_limit = 0; /* HOLD/RECOVER 期间限制最终 PWM 占空比，0 表示不额外限制。 */
@@ -24,17 +22,15 @@ volatile int32 fly_pwm_output_limit = 0; /* HOLD/RECOVER 期间限制最终 PWM 
 #define FLY_LANDING_SIDE_TH 15u  /* HOLD 结束后横向电感任一路回升到该值，才允许进入落地恢复。 */
 #define FLY_LANDING_CENTER_TH 10u /* HOLD 结束后竖向电感任一路回升到该值，辅助确认车已接近地面电磁线。 */
 #define FLY_HOLD_ANGLE 0         /* 离线保持阶段固定目标角速度，0 表示直行锁角。 */
-#define FLY_RECOVER_LINE_STABLE_COUNT 3u /* RECOVER 中线连续稳定确认次数，5ms * 3 = 15ms。 */
+#define FLY_RECOVER_LINE_STABLE_COUNT 10u /* RECOVER 中线连续稳定确认次数，5ms * 10 = 50ms。 */
 #define FLY_COOLDOWN_COUNT 10    /* 退出冷却窗口，5ms * 10 = 50ms。 */
 #define FLY_RECOVER_DIFF_LIMIT_EARLY_COUNT 60u /* RECOVER 前 5ms * 60 = 300ms 严格限制最终差速。 */
-#define FLY_RECOVER_DIFF_LIMIT_EARLY 6.0f /* 刚落地阶段最终差速限幅，避免左右轮一正一反把车甩偏。 */
+#define FLY_RECOVER_DIFF_LIMIT_EARLY 10.0f /* 刚落地阶段保留较强纠偏能力，优先找回中线。 */
 #define FLY_RECOVER_DIFF_LIMIT_LATE 12.0f /* RECOVER 后段保留较小纠偏能力，直到中线稳定退出。 */
 #define FLY_PWM_LIMIT_HOLD 3000 /* 离线保持期实际 PWM 上限，避免空中/弱磁阶段速度环过冲。 */
-#define FLY_PWM_LIMIT_RECOVER_EARLY 2500 /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
+#define FLY_PWM_LIMIT_RECOVER_EARLY 2000 /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
 #define FLY_PWM_LIMIT_RECOVER_LATE 4000 /* RECOVER 后段实际 PWM 上限，给循迹留出有限纠偏能力。 */
-#define FLY_RECOVER_SPEED_START 10 /* RECOVER 阶梯起步速度，避免从 0 过慢也避免直接满速打滑。 */
-#define FLY_RECOVER_SPEED_STEP 3 /* RECOVER 阶梯提速单步增量。 */
-#define FLY_RECOVER_SPEED_STEP_COUNT 20u /* 每 5ms * 20 = 100ms 提升一次速度。 */
+#define FLY_RECOVER_SEARCH_SPEED 5 /* RECOVER 固定找线速度，低速保留差速纠偏余量。 */
 #define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 200u /* RECOVER 超过 5ms * 200 = 1000ms 仍未完成时恢复丢线保护。 */
 
 /**
@@ -119,8 +115,6 @@ void a_run_fly_reset(void)
     fly_detect_count = 0;
     fly_state_count = 0;
     fly_recover_count = 0;
-    fly_recover_speed_step_count = 0;
-    fly_recover_speed = 0;
     fly_finish_event = 0;
     fly_lost_line_blocked = 0;
     fly_diff_output_limit = 0.0f;
@@ -160,8 +154,6 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
                 fly_detect_count = 0;
                 fly_state_count = 0;
                 fly_recover_count = 0;
-                fly_recover_speed_step_count = 0;
-                fly_recover_speed = 0;
                 fly_lost_line_blocked = 1;
                 flat_fly = FLY_STATE_HOLD;
             }
@@ -191,8 +183,6 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
             {
                 fly_state_count = 0;
                 fly_recover_count = 0;
-                fly_recover_speed_step_count = 0;
-                fly_recover_speed = 0;
                 fly_lost_line_blocked = 1;
                 flat_fly = FLY_STATE_RECOVER;
             }
@@ -205,8 +195,8 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 
     case FLY_STATE_RECOVER:
         /*
-         * 电感回升后从 10 开始阶梯提速找线，并在最终差速和 PWM 层限制输出。
-         * 这样避免刚贴地时速度和电机占空比同时过大，导致车身滑动后 Err 失真。
+         * 电感回升后先固定低速找中线，不随时间自动提速。
+         * 这样把落地阶段的控制余量留给差速纠偏，避免车还没回线就被直线速度带走。
          */
         if (fly_recover_count < FLY_RECOVER_LOST_LINE_ENABLE_COUNT)
         {
@@ -230,45 +220,24 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 
         if (app.fly.count_fly_speed <= 0)
         {
-            fly_recover_speed = 0;
+            *speed = 0;
         }
-        else if (app.fly.count_fly_speed <= FLY_RECOVER_SPEED_START)
+        else if (app.fly.count_fly_speed <= FLY_RECOVER_SEARCH_SPEED)
         {
-            fly_recover_speed = app.fly.count_fly_speed;
+            *speed = app.fly.count_fly_speed;
         }
         else
         {
-            if (fly_recover_speed < FLY_RECOVER_SPEED_START)
-            {
-                fly_recover_speed = FLY_RECOVER_SPEED_START;
-            }
-
-            fly_recover_speed_step_count++;
-            if (fly_recover_speed_step_count >= FLY_RECOVER_SPEED_STEP_COUNT)
-            {
-                fly_recover_speed_step_count = 0;
-                if (fly_recover_speed < app.fly.count_fly_speed)
-                {
-                    fly_recover_speed += FLY_RECOVER_SPEED_STEP;
-                    if (fly_recover_speed > app.fly.count_fly_speed)
-                    {
-                        fly_recover_speed = app.fly.count_fly_speed;
-                    }
-                }
-            }
+            *speed = FLY_RECOVER_SEARCH_SPEED;
         }
-        *speed = fly_recover_speed;
 
         if (fly_is_center_line())
         {
             fly_state_count++;
             if (fly_state_count >= FLY_RECOVER_LINE_STABLE_COUNT)
             {
-//                stop = 1;
                 fly_state_count = 0;
                 fly_recover_count = 0;
-                fly_recover_speed_step_count = 0;
-                fly_recover_speed = 0;
                 fly_lost_line_blocked = 1;
                 fly_diff_output_limit = 0.0f;
                 fly_pwm_output_limit = 0;

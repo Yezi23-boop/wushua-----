@@ -25,14 +25,14 @@ static float read_float(uint8 value_bit);
 static void eeprom_load_defaults(AppConfig *config)
 {
     /* 启动与基础配置默认值 */
-    config->start.start_flag = 1;             /* 默认启动 */
-    config->start.circle_flags = 1;           /* 默认关闭圆环识别 */
-    config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
+    config->start.start_flag = 1;               /* 默认启动 */
+    config->start.circle_flags = 1;             /* 默认关闭圆环识别 */
+    config->start.track_mode = 0;               /* 默认左圆环->圆筒循环 */
     config->start.fuya_ground_percent = 60.00f; /* 默认平地负压百分比 */
-    config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
+    config->start.fuya_wall_percent = 60.00f;   /* 默认墙面负压百分比 */
 
     /* 速度环 PID 默认参数 */
-    config->speed.kp_Err = 3.00f;  // 4.50
+    config->speed.kp_Err = 3.00f; // 4.50
     config->speed.kd_Err = 4.00f; // 4.50
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 20.00f; /* 默认基础速度 30 */ // 4.50
@@ -49,17 +49,17 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 0.0;        /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 40.00f;     /* pre_ring固定目标角速度 */
-    config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
-    config->ring.in_ring_Gyroz = 210.00f;           /* in_ring->pre_out_ring累计转角阈值 */
+    config->ring.ring_entry_encoder = 0.0;         /* ring->pre_ring编码器积分阈值 */
+    config->ring.pre_ring_Gyro_target = 40.00f;    /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyroz = 30.00f;          /* pre_ring->in_ring累计转角阈值 */
+    config->ring.in_ring_Gyroz = 210.00f;          /* in_ring->pre_out_ring累计转角阈值 */
     config->ring.pre_out_ring_Gyro_target = 5.00f; /* pre_out_ring固定目标角速度 */
-    config->ring.pre_out_ring_Gyroz = 240.00f;      /* pre_out_ring->out_ring累计转角阈值 */
+    config->ring.pre_out_ring_Gyroz = 240.00f;     /* pre_out_ring->out_ring累计转角阈值 */
 
     /* 飞坡策略默认参数 */
-    config->fly.count_fly_speed = 23;  /* 飞坡慢速值 */
+    config->fly.count_fly_speed = 15;  /* 飞坡慢速值 */
     config->fly.count_fly_time_1 = 3;  /* 触发检测次数 (3 * 5ms = 15ms) */
-    config->fly.count_fly_time_2 = 30; /* 状态保持时间 (10 * 5ms = 50ms) */
+    config->fly.count_fly_time_2 = 100; /* 状态保持时间 (10 * 5ms = 50ms) */
     config->fly.fly_ramp_enable = 1;   /* 默认开启飞坡检测 */
 }
 
@@ -271,4 +271,3 @@ static float read_float(uint8 value_bit)
     }
     return output;
 }
-
