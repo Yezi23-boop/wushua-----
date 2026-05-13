@@ -1,10 +1,10 @@
 #include "motor.h"
 
 #define MOTOR_START_PWM_RAMP_INITIAL_LIMIT 3000 /* 起步首个输出周期的 PWM 上限，单位：占空比。 */
-#define MOTOR_START_PWM_RAMP_STEP 60            /* 5ms 主环每次非零输出后放宽的 PWM 上限步长。 */
+#define MOTOR_START_PWM_RAMP_STEP 120           /* 5ms 非零输出加 120，约 250ms 从 3000 放开到 9000。 */
 #define MOTOR_STALL_PWM_THRESHOLD 6000          /* 堵转判定的实际输出 PWM 下限，低于该值时不认为电机已强驱。 */
 #define MOTOR_STALL_SPEED_THRESHOLD 2.0f        /* 堵转判定的编码器速度上限，单位同 PID.left_speed.speed。 */
-#define MOTOR_STALL_CONFIRM_COUNT 100            /* 10ms 检测周期计数，100 次约 1s，用于过滤起步和瞬时卡顿。 */
+#define MOTOR_STALL_CONFIRM_COUNT 80            /* 10ms 检测周期计数，80 次约 0.8s，用于过滤起步和瞬时卡顿。 */
 
 /* 全局控制标志位 */
 volatile uint8 stop = 0;   /* 停车标志位，1 表示紧急停车保护 */

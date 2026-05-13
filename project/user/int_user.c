@@ -62,7 +62,7 @@ static void hardware_init(void)
 
     /* 应用层模块 */
     motor_Init();         /* 电机驱动 PWM 输出 */
-    fuya_Init();          /* 负压风扇 PWM */
+    fuya_init();          /* 负压风扇 PWM */
     wireless_uart_init(); /* 无线串口（用于调试/上位机） */
 }
 

@@ -94,11 +94,11 @@ void a_run_mode_update_fuya_state(void)
 {
     if (a_run_mode_get_start_state() >= 1 && app.start.start_flag == 1)
     {
-        fuya_update_simple();
+        fuya_set_percent(app.start.fuya_xili);
     }
     else
     {
-        fuya_force_stop();
+        fuya_stop();
     }
 }
 

@@ -109,10 +109,9 @@ void run_time_2(void)
     dianya_jiance(); /* 电池电压检测 */
     motor_stall_check_10ms();
     /* 3. 更新启停状态与负压控制 */
-                                               //   a_run_mode_update_fuya_state();    /* 根据当前状态决定是否启用负压 */
     if (start_state == 1)
     {
-        fuya_set_percent(app.start.fuya_xili); /* 预启动阶段按 EEPROM 固定值提前拉起负压，运行态保持该 PWM。 */
+        fuya_set_percent(app.start.fuya_xili); /* 预启动和运行态都周期刷新固定负压。 */
     }
     /* 4. 更新软件定时器 */
     soft_timer_update_10ms();
@@ -157,7 +156,6 @@ void run_test_diff(void)
     /* 仅用于实验调试：不参与常规竞速主链路 */
     a_run_apply_iap_guard();
     test_diff_func();
-    fuya_update_simple();
 }
 
 /**

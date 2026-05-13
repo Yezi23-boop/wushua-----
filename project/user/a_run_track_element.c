@@ -221,8 +221,7 @@ static void ring_reset_state(void)
 /**
  * @brief 复位圆桶状态机。
  *
- * 圆桶流程会临时置位负压过顶标志，复位时必须同步恢复负压模块，
- * 避免退出仲裁后仍残留圆桶过顶状态。
+ * 圆桶流程只维护本地状态计数，负压输出保持固定百分比链路。
  */
 static void cylinder_reset_state(void)
 {
@@ -231,7 +230,6 @@ static void cylinder_reset_state(void)
     cylinder_ground_count = 0;
     cylinder_stable_count = 0;
     cylinder_state = CYL_IDLE;
-    fuya_restore_cylinder_peak_angle();
 }
 
 /**
@@ -270,7 +268,6 @@ static void cylinder_start_wait_top(void)
     cylinder_ground_count = 0;
     cylinder_stable_count = 0;
     cylinder_state = CYL_WAIT_TOP;
-    fuya_restore_cylinder_peak_angle();
 }
 
 /**
@@ -317,7 +314,6 @@ static uint8 cylinder_update_5ms(void)
                 cylinder_top_window_count = 0;
                 cylinder_ground_count = 0;
                 cylinder_stable_count = 0;
-                fuya_apply_cylinder_peak_angle();
                 cylinder_state = CYL_WAIT_GROUND;
             }
             else if (cylinder_top_window_count >= CYLINDER_TOP_WINDOW_COUNT)
@@ -350,7 +346,6 @@ static uint8 cylinder_update_5ms(void)
         if (cylinder_stable_count >= CYLINDER_STABLE_DELAY_COUNT)
         {
             cylinder_stable_count = 0;
-            fuya_restore_cylinder_peak_angle();
             cylinder_state = CYL_IDLE;
             return 1;
         }
