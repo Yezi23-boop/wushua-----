@@ -14,16 +14,16 @@ static void circle_check_l(uint8 allow_entry);
 #define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，5ms 调用下约 15ms。 */
 
 /* --- 赛道元素仲裁、圆桶与墙面状态参数（run_time_1 以 5ms 调用） --- */
-#define CYLINDER_AD_BOTH_HIGH_THRESHOLD 60   /* 圆桶双路强信号阈值：ad1/ad4 同时超过该值算一次命中。 */
-#define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 80 /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
+#define CYLINDER_AD_BOTH_HIGH_THRESHOLD 60     /* 圆桶双路强信号阈值：ad1/ad4 同时超过该值算一次命中。 */
+#define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 80   /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
 #define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 80 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
-#define CYLINDER_TOP_WINDOW_COUNT 100u   /* 圆桶命中统计窗口，5ms * 100 = 500ms。 */
-#define CYLINDER_TOP_HIT_COUNT 3       /* 500ms 窗口内横向强信号达到该次数才认定进入圆桶段。 */
-#define CYLINDER_GROUND_CONFIRM_COUNT 3u /* 5ms * 3 = 15ms，强信号消失后连续确认回地。 */
-#define CYLINDER_STABLE_DELAY_COUNT 100u  /* 5ms * 100 = 500ms，回地稳定后切入跷跷板/墙面流程。 */
-#define WALL_AD_SIDE_THRESHOLD 35        /* 墙面横向有效阈值，ad1/ad4 同时超过才允许推进墙面波形。 */
-#define WALL_AD_HIGH_THRESHOLD 55        /* 墙面纵向高值阈值，ad2/ad3 任一路超过该值认为到达上墙峰值。 */
-#define WALL_TIMING_COUNT 200u           /* 墙面强信号确认后的下墙计时，5ms * 200 = 1000ms。 */
+#define CYLINDER_TOP_WINDOW_COUNT 100u         /* 圆桶命中统计窗口，5ms * 100 = 500ms。 */
+#define CYLINDER_TOP_HIT_COUNT 3               /* 500ms 窗口内横向强信号达到该次数才认定进入圆桶段。 */
+#define CYLINDER_GROUND_CONFIRM_COUNT 3u       /* 5ms * 3 = 15ms，强信号消失后连续确认回地。 */
+#define CYLINDER_STABLE_DELAY_COUNT 100u       /* 5ms * 100 = 500ms，回地稳定后切入跷跷板/墙面流程。 */
+#define WALL_AD_SIDE_THRESHOLD 35              /* 墙面横向有效阈值，ad1/ad4 同时超过才允许推进墙面波形。 */
+#define WALL_AD_HIGH_THRESHOLD 55              /* 墙面纵向高值阈值，ad2/ad3 任一路超过该值认为到达上墙峰值。 */
+#define WALL_TIMING_COUNT 200u                 /* 墙面强信号确认后的下墙计时，5ms * 200 = 1000ms。 */
 
 /**
  * @brief 环岛阶段枚举。
@@ -115,14 +115,15 @@ void a_run_track_element_update_angle_target(float *angle_target)
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    if (ad1 > 35 &&
-        ad2 > 10 &&
-        ad3 > 10 &&
-        ad4 > 35 &&
-        ad1 < 80 &&
-        ad2 < 60 &&
-        ad3 < 60 &&
-        ad4 < 80)
+    if ((ad1 > 35 &&
+         ad2 > 10 &&
+         ad3 > 10 &&
+         ad4 > 35 &&
+         ad1 < 80 &&
+         ad2 < 60 &&
+         ad3 < 60 &&
+         ad4 < 80) ||
+        ad1 > 50 && ad2 > 20 && ad3 > 10 && ad4 > 20)
     {
         return 1;
     }
@@ -616,7 +617,7 @@ static void circle_check_l(uint8 allow_entry)
         break;
 
     case ring:
-//		stop=1;
+        //		stop=1;
         /* 入环前先恢复普通循迹角速度目标，开始累计入口距离。 */
         ring_data.diff_set = 0;
         ring_data.distance = 1; // 允许累计编码器里程
@@ -639,7 +640,7 @@ static void circle_check_l(uint8 allow_entry)
         ring_data.diff_set = app.ring.pre_ring_Gyro_target;
 
         /* gyro_z 绝对积分只表示已转过的角度大小，不再依赖 IMU 欧拉 yaw。 */
-        if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz )
+        if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz)
         {
             ring_data.diff_set = 0;
             current_state = in_ring;
@@ -650,7 +651,6 @@ static void circle_check_l(uint8 allow_entry)
         if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz)
         {
             current_state = pre_out_ring;
-
         }
         break;
 
@@ -672,17 +672,17 @@ static void circle_check_l(uint8 allow_entry)
     case out_ring:
         if (timeadd(&ring_data.out_ring_time, 600))
         {
-//			stop=1;
+            //			stop=1;
             timedestroy(&ring_data.out_ring_time);
-            ring_data.flast_l = 0;                 // 清除左环过程标志
-            ring_data.last_yaw = 0;                // 清除历史 yaw 方案保留字段
-            ring_data.diff_set = 0;                // 清零环岛目标角速度覆盖
-            ring_data.distance = 0;                // 关闭里程累计
-            ring_data.encoder = 0;                 // 清零里程累计量
-            ring_data.gyro_flat = 0;               // 关闭 gyro_z 角度累计
-            ring_data.yaw_delta_sum = 0;           // 清零 gyro_z 绝对角增量
+            ring_data.flast_l = 0;       // 清除左环过程标志
+            ring_data.last_yaw = 0;      // 清除历史 yaw 方案保留字段
+            ring_data.diff_set = 0;      // 清零环岛目标角速度覆盖
+            ring_data.distance = 0;      // 关闭里程累计
+            ring_data.encoder = 0;       // 清零里程累计量
+            ring_data.gyro_flat = 0;     // 关闭 gyro_z 角度累计
+            ring_data.yaw_delta_sum = 0; // 清零 gyro_z 绝对角增量
             ring_finish_event = 1;
-            current_state = no_ring;               // 返回普通巡线状态
+            current_state = no_ring; // 返回普通巡线状态
         }
         break;
     }
