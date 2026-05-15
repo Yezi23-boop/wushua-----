@@ -8,6 +8,7 @@ static uint8 eeprom_init_time = 0;
 AppConfig app;
 
 /* 内部私有函数声明 */
+static void eeprom_set_default_element_sequence(AppConfig *config);
 static void eeprom_load_defaults(AppConfig *config);
 static void eeprom_read_config(AppConfig *config);
 static void eeprom_write_config(const AppConfig *config);
@@ -15,6 +16,23 @@ static void save_int(int32 input, uint8 value_bit);
 static int32 read_int(uint8 value_bit);
 static void save_float(float input, uint8 value_bit);
 static float read_float(uint8 value_bit);
+
+/**
+ * @brief 填充默认赛道元素序列。
+ * @param config 待写入默认序列的配置对象。
+ *
+ * 默认序列只在初始化和非法 EEPROM 数据回退时使用，避免多处手写导致比赛现场配置不一致。
+ */
+static void eeprom_set_default_element_sequence(AppConfig *config)
+{
+    config->start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
+    config->start.element_seq[0] = TRACK_ELEMENT_DEFAULT_0;
+    config->start.element_seq[1] = TRACK_ELEMENT_DEFAULT_1;
+    config->start.element_seq[2] = TRACK_ELEMENT_DEFAULT_2;
+    config->start.element_seq[3] = TRACK_ELEMENT_DEFAULT_3;
+    config->start.element_seq[4] = TRACK_ELEMENT_DEFAULT_4;
+    config->start.element_seq[5] = TRACK_ELEMENT_DEFAULT_5;
+}
 
 /**
  * @brief 加载系统默认参数
@@ -61,6 +79,8 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.count_fly_time_1 = 3;  /* 触发检测次数 (3 * 5ms = 15ms) */
     config->fly.count_fly_time_2 = 30; /* 状态保持时间 (10 * 5ms = 50ms) */
     config->fly.fly_ramp_enable = 1;   /* 默认开启飞坡检测 */
+
+    eeprom_set_default_element_sequence(config);
 }
 
 /**
@@ -105,6 +125,13 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.fly_ramp_enable = (int16)read_int(26);
     config->start.fuya_wall_percent = read_float(27);
     config->start.track_mode = (int16)read_int(29);
+    config->start.element_len = (int16)read_int(30);
+    config->start.element_seq[0] = (int16)read_int(31);
+    config->start.element_seq[1] = (int16)read_int(32);
+    config->start.element_seq[2] = (int16)read_int(33);
+    config->start.element_seq[3] = (int16)read_int(34);
+    config->start.element_seq[4] = (int16)read_int(35);
+    config->start.element_seq[5] = (int16)read_int(36);
 }
 
 /**
@@ -146,6 +173,13 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.fly_ramp_enable, 26);
     save_float(config->start.fuya_wall_percent, 27);
     save_int(config->start.track_mode, 29);
+    save_int(config->start.element_len, 30);
+    save_int(config->start.element_seq[0], 31);
+    save_int(config->start.element_seq[1], 32);
+    save_int(config->start.element_seq[2], 33);
+    save_int(config->start.element_seq[3], 34);
+    save_int(config->start.element_seq[4], 35);
+    save_int(config->start.element_seq[5], 36);
 }
 
 /**

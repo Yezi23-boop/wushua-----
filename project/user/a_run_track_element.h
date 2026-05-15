@@ -2,13 +2,7 @@
 #define __A_RUN_TRACK_ELEMENT_H__
 
 #include "zf_common_typedef.h"
-
-#define TRACK_ELEMENT_NONE 0       /**< 无特殊元素，保留给保护降级或模式切换。 */
-#define TRACK_ELEMENT_LEFT_RING 1  /**< 左圆环流程显示值。 */
-#define TRACK_ELEMENT_RIGHT_RING 2 /**< 右圆环流程预留显示值。 */
-#define TRACK_ELEMENT_CYLINDER 3   /**< 圆桶流程显示值。 */
-#define TRACK_ELEMENT_WALL 4       /**< 墙面流程显示值。 */
-#define TRACK_ELEMENT_SEESAW 5     /**< 跷跷板流程显示值。 */
+#include "track_element_config.h"
 
 /**
  * @brief 环岛状态数据。

@@ -2,6 +2,7 @@
 #define __EEPROM_H
 
 #include "zf_common_typedef.h"
+#include "track_element_config.h"
 
 /**
  * @brief 启动相关配置结构体
@@ -13,6 +14,8 @@ typedef struct
     int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
+    int16 element_len;       /**< 元素序列有效长度，范围 1~6。 */
+    int16 element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环预留、3圆桶、4墙面、5跷跷板。 */
 } AppStartConfig;
 
 /**

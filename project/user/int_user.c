@@ -14,6 +14,9 @@ static void app_init(void);
 static void clamp_steer_output(PID_Steer *pid);
 static float clamp_gyro_feedback_scale(float value);
 static float clamp_config_percent(float value);
+static int8 control_is_executable_element(int16 element);
+static void control_set_default_element_sequence(void);
+static void control_validate_element_sequence(void);
 static void timer1_service_10ms(void);
 
 /**
@@ -106,6 +109,79 @@ static void app_init(void)
 }
 
 /**
+ * @brief 判断元素编号当前是否可执行。
+ * @param element 元素编号：0空、1左环、2右环预留、3圆桶、4墙面、5跷跷板。
+ * @return int8 1-当前可执行，0-需要跳过。
+ */
+static int8 control_is_executable_element(int16 element)
+{
+    if (element == TRACK_ELEMENT_LEFT_RING ||
+        element == TRACK_ELEMENT_CYLINDER ||
+        element == TRACK_ELEMENT_WALL)
+    {
+        return 1;
+    }
+    if (element == TRACK_ELEMENT_SEESAW && app.fly.fly_ramp_enable == 1)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * @brief 将运行参数中的赛道元素序列恢复为默认值。
+ *
+ * 只修改 RAM 中的 app 配置；是否写入 EEPROM 由菜单保存流程决定。
+ */
+static void control_set_default_element_sequence(void)
+{
+    app.start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
+    app.start.element_seq[0] = TRACK_ELEMENT_DEFAULT_0;
+    app.start.element_seq[1] = TRACK_ELEMENT_DEFAULT_1;
+    app.start.element_seq[2] = TRACK_ELEMENT_DEFAULT_2;
+    app.start.element_seq[3] = TRACK_ELEMENT_DEFAULT_3;
+    app.start.element_seq[4] = TRACK_ELEMENT_DEFAULT_4;
+    app.start.element_seq[5] = TRACK_ELEMENT_DEFAULT_5;
+}
+
+/**
+ * @brief 校验 EEPROM 读入的元素序列并在 RAM 中兜底。
+ *
+ * 旧 EEPROM 新槽位可能含随机值；该函数保证 5ms 仲裁只会读到有界长度和合法元素编号。
+ */
+static void control_validate_element_sequence(void)
+{
+    uint8 i;
+    uint8 has_executable;
+
+    if (app.start.element_len < 1 || app.start.element_len > TRACK_ELEMENT_SEQUENCE_MAX)
+    {
+        control_set_default_element_sequence();
+        return;
+    }
+
+    has_executable = 0;
+    for (i = 0; i < TRACK_ELEMENT_SEQUENCE_MAX; i++)
+    {
+        if (app.start.element_seq[i] < TRACK_ELEMENT_NONE ||
+            app.start.element_seq[i] > TRACK_ELEMENT_SEESAW)
+        {
+            app.start.element_seq[i] = TRACK_ELEMENT_NONE;
+        }
+        if (i < (uint8)app.start.element_len &&
+            control_is_executable_element(app.start.element_seq[i]) != 0)
+        {
+            has_executable = 1;
+        }
+    }
+
+    if (has_executable == 0)
+    {
+        control_set_default_element_sequence();
+    }
+}
+
+/**
  * @brief 控制参数同步函数
  * @details 把全局配置结构 app 中的值写入 PID 运行实例
  */
@@ -119,6 +195,7 @@ void control_apply_config(void)
     {
         app.start.track_mode = 0;
     }
+    control_validate_element_sequence();
 
     /* 1. 同步转向环，包含二次校正项 */
     PID.steer.Kp = app.speed.kp_Err;
