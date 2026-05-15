@@ -13,6 +13,8 @@
 | `track_mode` | 赛道元素模式，当前主要使用 0 |
 | `fuya_xili` | 平地负压百分比 |
 | `fuya_wall_percent` | 墙面负压百分比保留字段，当前固定负压策略不使用 |
+| `element_len` | 元素序列有效长度，范围 1~6 |
+| `element_seq[0..5]` | 元素序列槽位，0空、1左环、2右环预留、3圆桶、4墙面、5跷跷板 |
 
 ### `speed`
 
@@ -63,9 +65,22 @@
 - `eeprom_init()` 负责加载和初始化
 - `eeprom_flash()` 负责回写
 - 业务上统一通过 `config_save()` 和 `config_load()` 驱动
+- 旧 EEPROM 的新槽位可能是随机值，启动后只在 RAM 中校验兜底；只有执行 SAVE 才会持久化新序列
 
 ## 使用建议
 
 - 新增参数前，先判断是否必须掉电保存
 - 调试阶段的临时变量不要随意塞进 EEPROM
 - 会保存的参数应优先归入 `app`
+
+## 槽位索引
+
+| EEPROM 槽位 | 字段 |
+| --- | --- |
+| 30 | `element_len` |
+| 31 | `element_seq[0]` |
+| 32 | `element_seq[1]` |
+| 33 | `element_seq[2]` |
+| 34 | `element_seq[3]` |
+| 35 | `element_seq[4]` |
+| 36 | `element_seq[5]` |
