@@ -2,7 +2,7 @@
  * @file a_run_track_element.c
  * @brief 环岛、圆桶、跷跷板与墙面赛道元素仲裁状态机
  * @details
- * 本模块按左圆环->圆桶->跷跷板->墙面->左圆环的顺序串行开放元素识别，
+ * 本模块按 app.start.element_len 和 app.start.element_seq[] 配置的顺序串行开放元素识别，
  * 避免圆桶和墙面过渡段误触发下一次圆环。5ms 主控制链路直接调用本模块，
  * 减少高频路径中的只转发包装。
  */
@@ -42,12 +42,18 @@ enum RingStep
 enum TrackElement
 {
     ELEMENT_NONE = TRACK_ELEMENT_NONE,             /**< 无特殊元素；保留给后续模式切换或保护降级。 */
-    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,   /**< 左圆环流程，当前已接入左环->圆桶->跷跷板->墙面串行仲裁。 */
+    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,   /**< 左圆环流程，当前已接入序列表串行仲裁。 */
     ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING, /**< 右圆环流程预留位，后续左右圆环区分时直接接入。 */
     ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,     /**< 圆桶流程，保持菜单显示值 3 不变。 */
     ELEMENT_WALL = TRACK_ELEMENT_WALL,             /**< 墙面流程，保持菜单显示值 4 不变。 */
     ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW          /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
 };
+
+static int8 track_element_is_executable(int16 element);
+static enum TrackElement track_element_default_first(void);
+static void track_element_enter(enum TrackElement element);
+static void track_element_advance_to_next(void);
+static void track_element_enter_first_valid(void);
 
 enum CylinderStep
 {
@@ -78,6 +84,7 @@ static uint16 ring_last_ad4 = 0;                               /**< 上一轮 5m
 static uint8 ring_adc_history_valid = 0;                       /**< 电感历史是否已有有效快照；上电首拍不允许作为上升沿。 */
 static uint8 ring_adc_rising = 0;                              /**< 当前 5ms 周期四路电感是否都相对上一拍严格上升。 */
 static enum TrackElement expected_element = ELEMENT_LEFT_RING; /**< 当前期望赛道元素，用于串行屏蔽非当前元素的入口识别。 */
+static uint8 element_index = 0;                                /**< 当前元素序列下标，只在 5ms 元素仲裁中更新。 */
 static enum CylinderStep cylinder_state = CYL_IDLE;            /**< 圆桶状态机阶段，由 `cylinder_update_5ms` 在 5ms 上下文推进。 */
 static uint8 cylinder_top_count = 0;                           /**< 圆桶窗口内命中次数，达到阈值后认定进入圆桶段。 */
 static uint8 cylinder_top_window_count = 0;                    /**< 圆桶命中统计窗口计数，首个强信号后开始计时，最大 500ms。 */
@@ -423,33 +430,197 @@ static uint8 wall_update_5ms(void)
 }
 
 /**
+ * @brief 判断元素编号当前是否可由仲裁状态机执行。
+ * @param element 元素编号，来源于 app.start.element_seq。
+ * @return int8 1-可执行，0-应跳过。
+ *
+ * @note 由 5ms 元素仲裁调用，仅做常量比较和飞坡开关判断。
+ */
+static int8 track_element_is_executable(int16 element)
+{
+    if (element == ELEMENT_LEFT_RING ||
+        element == ELEMENT_CYLINDER ||
+        element == ELEMENT_WALL)
+    {
+        return 1;
+    }
+    if (element == ELEMENT_SEESAW && app.fly.fly_ramp_enable == 1)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * @brief 获取默认序列的第一个可执行元素。
+ * @return enum TrackElement 默认入口元素，当前为左圆环。
+ *
+ * @note 只在配置非法或运行期找不到可执行槽位时兜底使用。
+ */
+static enum TrackElement track_element_default_first(void)
+{
+    return (enum TrackElement)TRACK_ELEMENT_DEFAULT_0;
+}
+
+/**
+ * @brief 进入指定赛道元素并清理其他元素残留状态。
+ * @param element 目标元素编号，通常来自当前元素序列槽位。
+ *
+ * @note 由 5ms 仲裁迁移调用。进入新元素时主动清掉非当前元素的完成事件、计时和覆盖量，
+ *       避免上一圈圆环/圆桶/墙面/跷跷板状态影响下一阶段。
+ */
+static void track_element_enter(enum TrackElement element)
+{
+    switch (element)
+    {
+    case ELEMENT_LEFT_RING:
+        expected_element = ELEMENT_LEFT_RING;
+        ring_reset_state();
+        cylinder_reset_state();
+        wall_reset_state();
+        a_run_fly_reset();
+        break;
+
+    case ELEMENT_CYLINDER:
+        expected_element = ELEMENT_CYLINDER;
+        (void)ring_take_finish_event();
+        ring_reset_state();
+        wall_reset_state();
+        a_run_fly_reset();
+        cylinder_start_wait_top();
+        break;
+
+    case ELEMENT_WALL:
+        expected_element = ELEMENT_WALL;
+        (void)ring_take_finish_event();
+        ring_reset_state();
+        cylinder_reset_state();
+        a_run_fly_reset();
+        wall_start_wait_signal();
+        break;
+
+    case ELEMENT_SEESAW:
+        expected_element = ELEMENT_SEESAW;
+        (void)ring_take_finish_event();
+        ring_reset_state();
+        cylinder_reset_state();
+        wall_reset_state();
+        a_run_fly_reset();
+        break;
+
+    default:
+        expected_element = track_element_default_first();
+        ring_reset_state();
+        cylinder_reset_state();
+        wall_reset_state();
+        a_run_fly_reset();
+        break;
+    }
+}
+
+/**
+ * @brief 从当前序列下标推进到下一个可执行元素。
+ *
+ * @note 由 5ms 仲裁在元素完成时调用，扫描次数固定受 TRACK_ELEMENT_SEQUENCE_MAX 限制，
+ *       防止全空、全右环或飞坡关闭时只有跷跷板导致死循环。
+ */
+static void track_element_advance_to_next(void)
+{
+    uint8 scan_count;
+    int16 next_element;
+
+    if (app.start.element_len < 1 || app.start.element_len > TRACK_ELEMENT_SEQUENCE_MAX)
+    {
+        element_index = 0;
+        track_element_enter(track_element_default_first());
+        return;
+    }
+
+    for (scan_count = 0; scan_count < TRACK_ELEMENT_SEQUENCE_MAX; scan_count++)
+    {
+        element_index++;
+        if (element_index >= (uint8)app.start.element_len)
+        {
+            element_index = 0;
+        }
+
+        next_element = app.start.element_seq[element_index];
+        if (track_element_is_executable(next_element) != 0)
+        {
+            track_element_enter((enum TrackElement)next_element);
+            return;
+        }
+    }
+
+    element_index = 0;
+    track_element_enter(track_element_default_first());
+}
+
+/**
+ * @brief 进入当前配置序列中的第一个可执行元素。
+ *
+ * @note 由复位和 circle_flags 重新关闭时调用。只扫描 6 个槽位，确保 5ms 链路不会被非法配置拖住。
+ */
+static void track_element_enter_first_valid(void)
+{
+    uint8 scan_count;
+    int16 element;
+
+    if (app.start.element_len < 1 || app.start.element_len > TRACK_ELEMENT_SEQUENCE_MAX)
+    {
+        element_index = 0;
+        track_element_enter(track_element_default_first());
+        return;
+    }
+
+    for (scan_count = 0; scan_count < TRACK_ELEMENT_SEQUENCE_MAX; scan_count++)
+    {
+        if (scan_count >= (uint8)app.start.element_len)
+        {
+            break;
+        }
+
+        element = app.start.element_seq[scan_count];
+        if (track_element_is_executable(element) != 0)
+        {
+            element_index = scan_count;
+            track_element_enter((enum TrackElement)element);
+            return;
+        }
+    }
+
+    element_index = 0;
+    track_element_enter(track_element_default_first());
+}
+
+/**
  * @brief 复位赛道元素仲裁状态机。
  *
- * 菜单关闭圆环识别时，仲裁、环岛、圆桶和墙面必须同步回到初始状态，
- * 否则重新开启时可能从上一次的中间阶段继续运行。
+ * 菜单关闭圆环识别时，仲裁、环岛、圆桶、跷跷板和墙面必须同步回到初始状态。
+ * 复位后重新进入配置序列中的第一个可执行元素，避免重新开启后沿用旧下标。
  */
 static void track_element_reset_state(void)
 {
-    expected_element = ELEMENT_LEFT_RING;
     ring_last_ad1 = 0;
     ring_last_ad2 = 0;
     ring_last_ad3 = 0;
     ring_last_ad4 = 0;
     ring_adc_history_valid = 0;
     ring_adc_rising = 0;
+    element_index = 0;
     ring_reset_state();
     cylinder_reset_state();
     wall_reset_state();
     a_run_fly_reset();
+    track_element_enter_first_valid();
 }
 
 /**
  * @brief 更新赛道元素仲裁状态机。
  *
  * 5ms 调用，根据 `expected_element` 当前期望元素开放左圆环、圆桶、跷跷板或墙面流程。
+ * 元素顺序由 `app.start.element_len` 和 `app.start.element_seq[]` 决定，0/右环/不可执行槽位会跳过。
  * 左环入口会使用上一拍电感快照确认四路同步上升，之后再进入连续阈值确认。
- * 各元素串行开放：左环完成后进入圆桶，圆桶完成后按飞坡开关进入跷跷板或墙面，
- * 跷跷板恢复完成后进入墙面，墙面计时完成后才重新开放下一次左环入口。
  *
  * @note 由 5ms 主控制环调用，函数内部刷新圆桶姿态快照并推进元素仲裁状态迁移。
  */
@@ -484,73 +655,60 @@ void a_run_track_element_update_gate(void)
         return;
     }
 
-    if (expected_element == ELEMENT_LEFT_RING)
+    switch (expected_element)
     {
+    case ELEMENT_LEFT_RING:
         circle_check_l(1);
         if (ring_take_finish_event() != 0)
         {
-            expected_element = ELEMENT_CYLINDER;
-            cylinder_start_wait_top();
+            track_element_advance_to_next();
         }
-        return;
-    }
+        break;
 
-    if (expected_element == ELEMENT_CYLINDER)
-    {
+    case ELEMENT_CYLINDER:
         circle_check_l(0);
         (void)ring_take_finish_event();
         cylinder_done = cylinder_update_5ms();
         if (cylinder_done != 0)
         {
-            if (app.fly.fly_ramp_enable == 1)
-            {
-                a_run_fly_reset();
-                expected_element = ELEMENT_SEESAW;
-            }
-            else
-            {
-                expected_element = ELEMENT_WALL;
-                wall_start_wait_signal();
-            }
+            track_element_advance_to_next();
         }
-        return;
-    }
+        break;
 
-    if (expected_element == ELEMENT_SEESAW)
-    {
+    case ELEMENT_SEESAW:
         circle_check_l(0);
         (void)ring_take_finish_event();
-
         if (app.fly.fly_ramp_enable != 1)
         {
-            a_run_fly_reset();
-            expected_element = ELEMENT_WALL;
-            wall_start_wait_signal();
-            return;
+            track_element_advance_to_next();
+            break;
         }
 
         seesaw_done = a_run_fly_take_finish_event();
         if (seesaw_done != 0)
         {
-            expected_element = ELEMENT_WALL;
-            wall_start_wait_signal();
+            track_element_advance_to_next();
         }
-        return;
-    }
+        break;
 
-    if (expected_element == ELEMENT_WALL)
-    {
+    case ELEMENT_WALL:
         circle_check_l(0);
         (void)ring_take_finish_event();
         wall_done = wall_update_5ms();
         if (wall_done != 0)
         {
-            expected_element = ELEMENT_LEFT_RING;
+            track_element_advance_to_next();
         }
-        return;
-    }
+        break;
 
-    expected_element = ELEMENT_LEFT_RING;
+    case ELEMENT_RIGHT_RING:
+        track_element_advance_to_next();
+        break;
+
+    default:
+        track_element_advance_to_next();
+        break;
+    }
 }
 
 /**
