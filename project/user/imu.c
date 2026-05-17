@@ -22,14 +22,14 @@ LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，5ms IMU 更新链路写�
 #define IMU_GYRO_Z_SIGN (-1.0f) /* 驱动 gyro_z 顺时针为正；控制差速约定左转为正，需在桥接层翻转。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
-#define IMU_ROLL_FLAT_DEG 180.0f /* 当前安装姿态下平地 roll 约 180 度，输出角差前先扣除该基准。 */
+#define IMU_ROLL_FLAT_DEG 180.0f         /* 当前安装姿态下平地 roll 约 180 度，输出角差前先扣除该基准。 */
 #define IMU_ROLL_DELTA_MIN_DEG (-180.0f) /* roll 角差输出下限，单位：度。 */
 #define IMU_ROLL_DELTA_MAX_DEG 180.0f    /* roll 角差输出上限，单位：度。 */
 
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
 static volatile float imu_roll_delta_deg = 0.0f; /**< 5ms 主环写入、控制和调试链路读取的 roll 角差，单位：度。 */
- float acc_1 = 0.0;                     /**< acc_z 低通滤波输入/输出缓存，单位沿用 IMU660RC 原始 acc_z。 */
+float acc_1 = 0.0;                               /**< acc_z 低通滤波输入/输出缓存，单位沿用 IMU660RC 原始 acc_z。 */
 /**
  * @brief 上电标定 gyro_z 零偏
  * @details
@@ -76,7 +76,7 @@ void imu_calibrate_gyro_z_zero_drift(void)
 void imu_update_gravity_vz_from_roll(void)
 {
     float roll_delta;
-	
+
     roll_delta = imu660rc_roll - IMU_ROLL_FLAT_DEG;
     if (roll_delta > IMU_ROLL_DELTA_MAX_DEG)
     {

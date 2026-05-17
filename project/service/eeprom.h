@@ -2,7 +2,7 @@
 #define __EEPROM_H
 
 #include "zf_common_typedef.h"
-#include "track_element_config.h"
+#include "a_run_track_element.h"
 
 /**
  * @brief 启动相关配置结构体
