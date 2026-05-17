@@ -9,7 +9,7 @@
 | 字段 | 含义 |
 | --- | --- |
 | `start_flag` | 起跑/业务开关相关标志 |
-| `circle_flags` | 圆环和元素仲裁开关 |
+| `element_enable` | 整体赛道元素识别开关 |
 | `track_mode` | 赛道元素模式，当前主要使用 0 |
 | `fuya_xili` | 平地负压百分比 |
 | `fuya_wall_percent` | 墙面负压百分比保留字段，当前固定负压策略不使用 |
@@ -57,7 +57,6 @@
 | `count_fly_speed` | 飞坡/跷跷板目标速度 |
 | `count_fly_time_1` | 弱磁入口确认次数，按 5ms 累计 |
 | `count_fly_time_2` | HOLD 保持时间，按 5ms 累计 |
-| `fly_ramp_enable` | 飞坡/跷跷板功能开关 |
 
 ## 存储策略说明
 
@@ -65,7 +64,7 @@
 - `eeprom_init()` 负责加载和初始化
 - `eeprom_flash()` 负责回写
 - 业务上统一通过 `config_save()` 和 `config_load()` 驱动
-- 旧 EEPROM 的新槽位可能是随机值，启动后只在 RAM 中校验兜底；只有执行 SAVE 才会持久化新序列
+- 旧 EEPROM 的新槽位可能是随机值；配置层不再校验元素序列，运行期由赛道元素仲裁跳过不可执行槽位或进入空状态
 
 ## 使用建议
 

@@ -7,21 +7,19 @@
 ## 对外入口函数
 
 - `a_run_track_element_update_gate()`
-- `a_run_track_element_update_integrals()`
 - `a_run_track_element_update_angle_target(float *angle_target)`
-- `a_run_track_element_get_ring_state()`
+- `a_run_ring_get_state()`
 - `a_run_track_element_get_expected_element()`
-- `a_run_track_element_get_cylinder_state()`
-- `a_run_track_element_get_wall_state()`
+- `a_run_cylinder_get_state()`
+- `a_run_wall_get_state()`
 - `a_run_track_element_get_cylinder_vz()`
 
 ## 依赖与被依赖关系
 
 依赖：
 
-- `app.start.circle_flags`
+- `app.start.element_enable`
 - `app.ring`
-- `app.fly.fly_ramp_enable`
 - `ad1~ad4`
 - `gyro_z`
 - `speed_l / speed_r`
@@ -49,12 +47,12 @@
 | --- | --- | --- |
 | 0 | 空槽 | 跳过 |
 | 1 | 左圆环 | 可执行 |
-| 2 | 右圆环 | 预留，当前跳过 |
+| 2 | 右圆环 | 可执行，入口和角速度方向取反 |
 | 3 | 圆桶 | 可执行 |
 | 4 | 墙面 | 可执行 |
-| 5 | 跷跷板/飞坡 | `app.fly.fly_ramp_enable == 1` 时可执行 |
+| 5 | 跷跷板/飞坡 | 可执行，是否进入由元素序列决定 |
 
-如果关闭 `app.start.circle_flags`，模块会复位到序列中的第一个有效元素，并清理圆环、圆桶、墙面和飞坡状态。全空、全非法或当前不可执行的序列会在 RAM 中回退默认序列，不会立刻改写 EEPROM。
+如果关闭 `app.start.element_enable`，模块会清理圆环、圆桶、墙面和飞坡状态，并对外显示为空元素；重新开启后的第一拍才会扫描 `E1~E6`，进入序列中的第一个有效元素。全空、全非法或当前不可执行时，运行期会进入空状态，不会改写 `app.start.element_seq[]` 或 EEPROM。
 
 运行中修改序列不会打断当前元素，当前元素完成后才按新序列跳转。填入右圆环编号 `2` 时当前会跳过，后续实现右环后可直接接入。
 
@@ -67,7 +65,7 @@
 
 ## 高频路径注意事项
 
-- `a_run_track_element_update_gate()` 和 `a_run_track_element_update_integrals()` 运行在 5ms 主控制链中，应避免串口输出和复杂计算。
+- `a_run_track_element_update_gate()` 运行在 5ms 主控制链中，应避免串口输出和复杂计算。
 - 圆环角度累计依赖 `gyro_z` 已按 5ms 周期准备好；若 IMU 缩放或周期改变，圆环阈值要重新标定。
 - `expected_element` 是误触发防线，不应被菜单或调试代码直接改写。
 
@@ -75,5 +73,5 @@
 
 - 圆环误触发：优先看入口阈值、连续确认次数和 `expected_element` 是否确实为左圆环。
 - 圆桶完成过早：提高强信号命中条件或延长稳定延迟。
-- 跷跷板没有触发：确认序列中是否包含 `TRACK_ELEMENT_SEESAW`，以及 `app.fly.fly_ramp_enable` 是否为 1。
+- 跷跷板没有触发：确认序列中是否包含 `TRACK_ELEMENT_SEESAW`，以及飞坡入口弱磁条件是否能成立。
 - 墙面后不重新开放圆环：检查墙面强信号阈值和 `WALL_TIMING_COUNT` 是否符合实际路段。
