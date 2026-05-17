@@ -37,13 +37,6 @@ void lost_lines(void);
  */
 void dianya_jiance(void);
 
-/**
- * @brief 速度转占空比的前馈查表函数
- * @param speed 目标物理速度
- * @return 对应的 PWM 基础占空比
- */
-int32 motor_speed_to_duty(float speed);
-
 /* --- 全局变量声明 --- */
 extern volatile uint8 stop;   /**< 停车标志位：1 表示停止，0 表示运行 */
 extern volatile float dianya; /**< 实时监测到的电池电压值 */

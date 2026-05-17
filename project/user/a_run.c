@@ -10,7 +10,6 @@
  * 该模块位于实时主链路，注释强调调用时序和数据依赖，便于赛道现场快速排障。
  */
 #include "zf_common_headfile.h"
-#include "a_run_ring.h"
 
 /* --- 运行状态变量 --- */
 volatile int flat_fly = 0;          /* 飞坡阶段状态：0-普通巡线，1-保持，2-恢复，3-冷却 */
@@ -18,7 +17,7 @@ volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/�
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
 /* --- 周期任务内部变量 --- */
-static int steer_div_10 = 0; /* 2ms 主环分频：用于每 4ms 更新一次转向环 */
+static int steer_div_10 = 0; /* 5ms 主环分频：用于每 10ms 更新一次转向环 */
 static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 
 /**
@@ -37,8 +36,6 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
-    /* 元素仲裁跟随5ms采样链路，避免低优先级状态任务抢断导致圆筒回平滞后。 */
-    a_run_track_element_update_gate();
     if (steer_div_10 > 2)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
@@ -46,10 +43,11 @@ void run_time_1(void)
         steer_div_10 = 0;
     }
     speed_active = app.speed.speed_run;
-    /* 只在序列轮到跷跷板时开放飞坡入口，进入后由飞坡状态机自行完成保持/恢复/冷却。 */
-    a_run_fly_update_speed(&speed_active,
-                           a_run_track_element_get_expected_element() == TRACK_ELEMENT_SEESAW);
-    a_run_ring_update_angle_target(&PID.steer.output);
+    /*
+     * 元素仲裁跟随 5ms 采样链路，并放在转向外环之后执行。
+     * 原因：跷跷板和圆环都可能覆盖 PID.steer.output，必须压住普通循迹目标。
+     */
+    a_run_track_element_update_gate(&speed_active, &PID.steer.output);
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
     diff_output = PID.angle.output;
     left_target = speed_active - diff_output;

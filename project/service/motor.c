@@ -39,23 +39,6 @@ void motor_Init(void)
 }
 
 /**
- * @brief 输出 PWM 限幅
- * @details 将输出限制在 ±MOTOR_OUTPUT_PWM_LIMIT，避免过驱
- */
-static int32 motor_limit_output_pwm(int32 pwm)
-{
-    if (pwm > MOTOR_OUTPUT_PWM_LIMIT)
-    {
-        return MOTOR_OUTPUT_PWM_LIMIT;
-    }
-    if (pwm < -MOTOR_OUTPUT_PWM_LIMIT)
-    {
-        return -MOTOR_OUTPUT_PWM_LIMIT;
-    }
-    return pwm;
-}
-
-/**
  * @brief 按指定上限等比例限制左右 PWM 输出。
  * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
  * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
@@ -75,11 +58,11 @@ static void motor_limit_pwm_pair_to(int32 *lpwm, int32 *rpwm, int32 limit)
         return;
     }
 
-    left_abs = (*lpwm >= 0) ? *lpwm : -*lpwm;
-    right_abs = (*rpwm >= 0) ? *rpwm : -*rpwm;
+    left_abs = func_abs(*lpwm);
+    right_abs = func_abs(*rpwm);
     max_abs = (left_abs > right_abs) ? left_abs : right_abs;
 
-    if (max_abs <= limit || max_abs == 0)
+    if (max_abs <= limit)
     {
         return;
     }
@@ -182,8 +165,8 @@ void motor_output(int32 lpwm, int32 rpwm)
     int32 lpwm_limited;
     int32 rpwm_limited;
 
-    lpwm_limited = motor_limit_output_pwm(lpwm);
-    rpwm_limited = motor_limit_output_pwm(rpwm);
+    lpwm_limited = func_limit(lpwm, MOTOR_OUTPUT_PWM_LIMIT);
+    rpwm_limited = func_limit(rpwm, MOTOR_OUTPUT_PWM_LIMIT);
 
     /* 检查停车标志位，stop 为 0 时正常运行 */
     if (stop == 0)
@@ -231,11 +214,6 @@ void motor_output(int32 lpwm, int32 rpwm)
     }
     else
     {
-        motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
-        motor_last_lpwm_limited = 0;
-        motor_last_rpwm_limited = 0;
-        motor_left_stall_count = 0;
-        motor_right_stall_count = 0;
         /*
          * 保护状态：强制输出极低占空比或直接设为 100
          * 此处 设置成 100，设置成0会出现电机无法完全停止的情况，可能是由于 PWM 输出的非线性或电机特性导致的死区现象
@@ -304,68 +282,4 @@ void dianya_jiance(void)
     {
         stop = 1; /* 锁定停车，保护电池 */
     }
-}
-
-/* --- 电机前馈控制查表数据 --- */
-/* 速度测试点（单位：cm/s 或 编码器原始单位） */
-static const float ff_speed_points[] = {
-    0.0f, 5.4f, 13.0f, 18.4f, 22.2f, 27.6f, 34.2f, 38.0f,
-    45.8f, 49.6f, 57.2f, 64.8f, 67.8f, 76.0f, 81.8f, 88.4f, 93.8f};
-
-/* 对应速度点所需的 PWM 占空比 */
-static const int16 ff_duty_points[] = {
-    0, 500, 1000, 1500, 2000, 2500, 3000, 3500,
-    4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000};
-
-/**
- * @brief 速度前馈查表（线性插值）
- * @details 绕过 PID 积分项缓慢累加过程，直接根据目标速度给定基础 PWM 占空比
- * @param speed 目标速度值
- * @return 对应的 PWM 基础占空比
- */
-int32 motor_speed_to_duty(float speed)
-{
-    float s;    /* 速度绝对值 */
-    int i;      /* 循环索引 */
-    int32 duty; /* 插值计算结果 */
-
-    if (speed > 0.0f)
-        s = speed;
-    else if (speed < 0.0f)
-        s = -speed;
-    else
-        return 0;
-
-    /* 遍历查找速度所在的区间 */
-    for (i = 0; i < 16; i++)
-    {
-        if (s <= ff_speed_points[i + 1])
-        {
-            float x0 = ff_speed_points[i];
-            float x1 = ff_speed_points[i + 1];
-            int32 y0 = (int32)ff_duty_points[i];
-            int32 y1 = (int32)ff_duty_points[i + 1];
-
-            /* 线性插值公式：y = y0 + (s - x0) * (y1 - y0) / (x1 - x0) */
-            float t = (s - x0) / (x1 - x0);
-            duty = (int32)(y0 + t * (float)(y1 - y0));
-
-            /* 恢复速度符号并限幅输出 */
-            if (speed < 0.0f)
-                duty = -duty;
-
-            if (duty > PWM_DUTY_MAX)
-                duty = PWM_DUTY_MAX;
-            if (duty < -PWM_DUTY_MAX)
-                duty = -PWM_DUTY_MAX;
-
-            return duty;
-        }
-    }
-
-    /* 速度超过表格最大值，返回最大占空比 */
-    duty = (int32)ff_duty_points[16];
-    if (speed < 0.0f)
-        duty = -duty;
-    return duty;
 }

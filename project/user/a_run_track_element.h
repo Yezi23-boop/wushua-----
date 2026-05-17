@@ -18,8 +18,11 @@
  * @brief 更新赛道元素仲裁状态机。
  *
  * 5ms 主控制链路直接调用该接口，避免高频路径多一层只转发的包装。
+ *
+ * @param speed 当前目标速度指针，跷跷板流程和完成后阶梯增速会按阶段覆盖。
+ * @param angle_target 当前目标角速度指针，圆环和跷跷板流程会按阶段覆盖。
  */
-void a_run_track_element_update_gate(void);
+void a_run_track_element_update_gate(int *speed, float *angle_target);
 
 /**
  * @brief 读取当前期望赛道元素。

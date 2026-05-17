@@ -65,6 +65,10 @@ static void track_element_enter(enum TrackElement element)
     a_run_ring_reset();
     a_run_cylinder_reset();
     a_run_wall_reset();
+    /*
+     * 跷跷板完成事件只推进元素序列，COOLDOWN 还要继续释放速度。
+     * 切到任意后续元素时都不能清掉 fly_release_speed，否则会一拍回到巡线速度。
+     */
     if (element == ELEMENT_NONE || flat_fly != FLY_STATE_COOLDOWN)
     {
         a_run_fly_reset();
@@ -136,8 +140,11 @@ static void track_element_reset_state(void)
  *
  * `app.start.element_enable` 作为整体元素识别开关；开启后按 `expected_element` 开放当前元素流程。
  * 元素顺序由 `app.start.element_len` 和 `app.start.element_seq[]` 决定，0/不可执行槽位会跳过。
+ *
+ * @param speed 5ms 主控制链路当前目标速度，跷跷板和完成后释放阶段可能覆盖该值。
+ * @param angle_target 转向外环输出的目标角速度，圆环和跷跷板阶段可能覆盖该值。
  */
-void a_run_track_element_update_gate(void)
+void a_run_track_element_update_gate(int *speed, float *angle_target)
 {
     if (app.start.element_enable != 1)
     {
@@ -175,6 +182,7 @@ void a_run_track_element_update_gate(void)
         break;
 
     case ELEMENT_SEESAW:
+        a_run_fly_update_speed(speed, 1);
         if (a_run_fly_take_finish_event() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
@@ -192,4 +200,7 @@ void a_run_track_element_update_gate(void)
         // 当前处于 ELEMENT_NONE 或未知状态，不执行任何元素逻辑
         break;
     }
+
+    a_run_fly_update_release_speed(speed);
+    a_run_ring_update_angle_target(angle_target);
 }

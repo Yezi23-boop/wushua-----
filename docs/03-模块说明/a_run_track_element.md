@@ -6,8 +6,7 @@
 
 ## 对外入口函数
 
-- `a_run_track_element_update_gate()`
-- `a_run_track_element_update_angle_target(float *angle_target)`
+- `a_run_track_element_update_gate(int *speed, float *angle_target)`
 - `a_run_ring_get_state()`
 - `a_run_track_element_get_expected_element()`
 - `a_run_cylinder_get_state()`
@@ -60,12 +59,12 @@
 
 - 左圆环：入口要求四路电感满足特征，并使用连续确认和上升沿约束；环内通过 `ring_data.diff_set` 覆盖目标角速度。
 - 圆桶：通过电感强信号窗口、回地确认和稳定延迟判断完成，并在过顶阶段调用负压模块切换 angle 参数。
-- 跷跷板/飞坡：只开放入口，实际 HOLD/RECOVER/COOLDOWN 由 `a_run_fly` 推进。
+- 跷跷板/飞坡：在 `ELEMENT_SEESAW` 中推进 HOLD/RECOVER；完成后由 `a_run_fly` 的 COOLDOWN 后处理继续阶梯增速，不依赖下一个元素类型。
 - 墙面：圆桶或跷跷板后等待墙面强信号，再计时完成，完成后重新开放左圆环。
 
 ## 高频路径注意事项
 
-- `a_run_track_element_update_gate()` 运行在 5ms 主控制链中，应避免串口输出和复杂计算。
+- `a_run_track_element_update_gate(int *speed, float *angle_target)` 运行在 5ms 主控制链中，应避免串口输出和复杂计算。
 - 圆环角度累计依赖 `gyro_z` 已按 5ms 周期准备好；若 IMU 缩放或周期改变，圆环阈值要重新标定。
 - `expected_element` 是误触发防线，不应被菜单或调试代码直接改写。
 
