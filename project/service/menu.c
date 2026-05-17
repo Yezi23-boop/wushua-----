@@ -63,7 +63,7 @@ static const int menu_have_sub[] = {
     3, 31, 32, 33, 34, 35, 36,
     4,
     5, 51, 52, 53, 54, 55, 56,
-    6, 61, 62, 63, 64,
+    6, 61, 62, 63,
     160, 1601, 1602, 1603, 1604, 1605, 1606};
 
 static void Menu_Clear_Pending_Key_Events(void);
@@ -102,7 +102,6 @@ static void Menu_Sensor_Gain_Adjust(int delta);
 static void Menu_Sensor_Gain_Save(void);
 #endif
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
-static void Menu_Process_Int16_Bounded_Value(int16 *parameter, int16 min_value, int16 max_value);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
 static void Keystroke_Menu_HOME(void);
 static void Menu_Start_Process(void);
@@ -233,7 +232,7 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 5:
         return 6 * MENU_ROW_HEIGHT;
     case 6:
-        return 4 * MENU_ROW_HEIGHT;
+        return 3 * MENU_ROW_HEIGHT;
     case 7:
         return 6 * MENU_ROW_HEIGHT;
     default:
@@ -427,7 +426,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
         break;
     case 61:
         Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
@@ -437,9 +436,6 @@ static void Menu_Render_Current_Page(void)
         break;
     case 63:
         Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
-        break;
-    case 64:
-        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
         break;
     case 160:
         Menu_Draw_Element(0);
@@ -586,14 +582,14 @@ static void Menu_Draw_Start(int edit_line)
 {
     ips114_show_string(8, 0, "<<START");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "Start_Flag");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ring_en");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "elem_en");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "ELEM");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.circle_flags, 3);
+    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_enable, 3);
     ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
     ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
     ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
@@ -676,7 +672,7 @@ static void Menu_Draw_Sensor(void)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "Err");
     ips114_show_float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
     ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
-    ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
+    ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "rdeg");
     ips114_show_float(192, 5 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
 
@@ -806,7 +802,7 @@ static void Menu_Draw_Ring(int edit_line)
 
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
-    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_mode_get_ring_state(), 1);
+    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
     ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "Yd");
     ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
     ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
@@ -814,11 +810,11 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
     ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
     ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "X");
-    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_expected_element(), 1);
+    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
     ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
-    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
+    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(200, 6 * MENU_ROW_HEIGHT, "W");
-    ips114_show_int32(216, 6 * MENU_ROW_HEIGHT, a_run_mode_get_wall_state(), 1);
+    ips114_show_int32(216, 6 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -830,12 +826,10 @@ static void Menu_Draw_Fly(int edit_line)
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_time_1");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fly_time_2");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fly_en");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.count_fly_speed, 4);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.count_fly_time_1, 4);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_ramp_enable, 4);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -861,7 +855,7 @@ static void Menu_Draw_Element_Len(int edit_line)
  * @brief 绘制元素序列槽位页。
  * @param edit_line 当前编辑行，0 表示根页导航模式。
  *
- * E1~E6 的值直接对应 app.start.element_seq[]，编号 0~5 由仲裁层统一解释。
+ * E1~E6 的值直接对应 app.start.element_seq[]，不可执行编号由仲裁层跳过。
  */
 static void Menu_Draw_Element(int edit_line)
 {
@@ -1052,61 +1046,6 @@ static void Menu_Process_Int_Value(int *parameter, int change_unit_min)
         control_apply_config();
 }
 
-/**
- * @brief 处理有界 int16 参数的循环编辑。
- * @param parameter 待修改的 int16 参数地址。
- * @param min_value 最小值，向下越界后从 max_value 回绕。
- * @param max_value 最大值，向上越界后从 min_value 回绕。
- *
- * 元素槽位使用 int16 保存到 EEPROM，不能复用 int* 编辑函数做强转。
- */
-static void Menu_Process_Int16_Bounded_Value(int16 *parameter, int16 min_value, int16 max_value)
-{
-    uint8 event_code;
-    int16 value;
-    uint8 changed;
-
-    changed = 0;
-    ips114_show_string(MENU_STEP_X, 0, "0-5");
-
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Handle_Common_Key(keystroke_label);
-
-    value = *parameter;
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        value++;
-        if (value > max_value)
-        {
-            value = min_value;
-        }
-        changed = 1;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        value--;
-        if (value < min_value)
-        {
-            value = max_value;
-        }
-        changed = 1;
-        break;
-    default:
-        break;
-    }
-
-    if (changed)
-    {
-        *parameter = value;
-        control_apply_config();
-    }
-}
-
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min)
 {
     uint8 event_code;
@@ -1190,7 +1129,7 @@ static void Menu_Start_Process(void)
         break;
     case 12:
         Menu_Draw_Start(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Special_Value(&app.start.circle_flags);
+        Menu_Process_Special_Value(&app.start.element_enable);
         break;
     case 13:
         Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
@@ -1278,7 +1217,7 @@ static void Menu_Element_Len_Process(void)
 /**
  * @brief 处理元素序列槽位页。
  *
- * 根页负责 E1~E6 导航；进入单槽位后只允许在 0~5 之间循环，非法值由配置校验继续兜底。
+ * 根页负责 E1~E6 导航；单槽位复用普通 int 编辑，非法元素值由运行期仲裁跳过。
  */
 static void Menu_Element_Process(void)
 {
@@ -1298,27 +1237,27 @@ static void Menu_Element_Process(void)
         break;
     case 1601:
         Menu_Draw_Element(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Int16_Bounded_Value(&app.start.element_seq[0], TRACK_ELEMENT_NONE, TRACK_ELEMENT_SEESAW);
+        Menu_Process_Int_Value(&app.start.element_seq[0], 1);
         break;
     case 1602:
         Menu_Draw_Element(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Int16_Bounded_Value(&app.start.element_seq[1], TRACK_ELEMENT_NONE, TRACK_ELEMENT_SEESAW);
+        Menu_Process_Int_Value(&app.start.element_seq[1], 1);
         break;
     case 1603:
         Menu_Draw_Element(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Int16_Bounded_Value(&app.start.element_seq[2], TRACK_ELEMENT_NONE, TRACK_ELEMENT_SEESAW);
+        Menu_Process_Int_Value(&app.start.element_seq[2], 1);
         break;
     case 1604:
         Menu_Draw_Element(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Int16_Bounded_Value(&app.start.element_seq[3], TRACK_ELEMENT_NONE, TRACK_ELEMENT_SEESAW);
+        Menu_Process_Int_Value(&app.start.element_seq[3], 1);
         break;
     case 1605:
         Menu_Draw_Element(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Int16_Bounded_Value(&app.start.element_seq[4], TRACK_ELEMENT_NONE, TRACK_ELEMENT_SEESAW);
+        Menu_Process_Int_Value(&app.start.element_seq[4], 1);
         break;
     case 1606:
         Menu_Draw_Element(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Int16_Bounded_Value(&app.start.element_seq[5], TRACK_ELEMENT_NONE, TRACK_ELEMENT_SEESAW);
+        Menu_Process_Int_Value(&app.start.element_seq[5], 1);
         break;
     default:
         break;
@@ -1563,11 +1502,11 @@ static void Menu_Fly_Process(void)
     {
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(4 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(3 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -1582,10 +1521,6 @@ static void Menu_Fly_Process(void)
     case 63:
         Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.count_fly_time_2, 1);
-        break;
-    case 64:
-        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.fly_ramp_enable, 1);
         break;
     default:
         break;
@@ -1647,7 +1582,6 @@ void Keystroke_Menu(void)
     case 61:
     case 62:
     case 63:
-    case 64:
         Menu_Fly_Process();
         break;
     case 160:

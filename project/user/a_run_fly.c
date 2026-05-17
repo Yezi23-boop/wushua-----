@@ -34,60 +34,6 @@ volatile int32 fly_pwm_output_limit = 0; /* HOLD/RECOVER/COOLDOWN 期间限制�
 #define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 200u /* RECOVER 超过 5ms * 200 = 1000ms 仍未完成时恢复丢线保护。 */
 
 /**
- * @brief 判断当前电感是否满足飞坡入口弱磁特征。
- *
- * 飞坡入口通常表现为四路归一化电感同时快速跌低；当前版本不再依赖 acc_z，
- * 入口是否开放完全由赛道元素仲裁的 `allow_entry` 控制。
- *
- * @return int8 1-满足飞坡入口特征，0-不满足。
- *
- * @note 由 5ms 主控制环调用，只做常量比较，避免增加实时链路负担。
- */
-static int8 fly_is_ramp_lost_signal(void)
-{
-    return (ad1 < FLY_AD_SIDE_LOST_TH &&
-            ad2 < FLY_AD_CENTER_LOST_TH &&
-            ad3 < FLY_AD_CENTER_LOST_TH &&
-            ad4 < FLY_AD_SIDE_LOST_TH)
-               ? 1
-               : 0;
-}
-
-/**
- * @brief 判断 HOLD 结束后电感是否已回升到可落地恢复状态。
- *
- * HOLD 阶段只靠固定时间退出会在车还悬空时提前进入 RECOVER；这里要求至少一路
- * 横向或竖向电感回升，说明车已重新接近电磁线，再允许开始吸稳和找线。
- *
- * @return int8 1-电感已有回升，可进入 RECOVER；0-仍处于弱磁/离线阶段。
- */
-static int8 fly_is_landing_signal(void)
-{
-    return (ad1 > FLY_LANDING_SIDE_TH ||
-            ad4 > FLY_LANDING_SIDE_TH ||
-            ad2 > FLY_LANDING_CENTER_TH ||
-            ad3 > FLY_LANDING_CENTER_TH)
-               ? 1
-               : 0;
-}
-
-/**
- * @brief 判断飞坡落地恢复是否已回到中线附近。
- *
- * 中线在控制链路中对应 Err 为 0，同时用横向主电感 ad1/ad4 差值约束电感平衡。
- * 原因是落地后单看 Err 可能受瞬态计算影响，双条件可以减少偏线误退出。
- *
- * @return int8 1-已接近中线，0-仍需继续低速回正。
- */
-static int8 fly_is_center_line(void)
-{
-    return (func_abs((int)ad1 - (int)ad4) < 10 && ad1 > 20 && ad4 > 20 &&
-            Err > -2.0f && Err < 2.0f)
-               ? 1
-               : 0;
-}
-
-/**
  * @brief 取出并清除飞坡/跷跷板完成事件。
  *
  * 完成事件只允许元素仲裁消费一次，避免墙面流程被同一次恢复确认重复触发。
@@ -96,9 +42,8 @@ static int8 fly_is_center_line(void)
  */
 uint8 a_run_fly_take_finish_event(void)
 {
-    uint8 event;
+    uint8 event = fly_finish_event;
 
-    event = fly_finish_event;
     fly_finish_event = 0;
 
     return event;
@@ -137,26 +82,20 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 {
     int target_speed;
 
-    if (app.fly.fly_ramp_enable != 1)
-    {
-        a_run_fly_reset();
-        return;
-    }
-
     switch (flat_fly)
     {
     case FLY_STATE_IDLE:
-        fly_lost_line_blocked = 0;
-        fly_diff_output_limit = 0.0f;
-        fly_pwm_output_limit = 0;
-        if (allow_entry != 0 && fly_is_ramp_lost_signal())
+        if (allow_entry != 0 &&
+            ad1 < FLY_AD_SIDE_LOST_TH &&
+            ad2 < FLY_AD_CENTER_LOST_TH &&
+            ad3 < FLY_AD_CENTER_LOST_TH &&
+            ad4 < FLY_AD_SIDE_LOST_TH)
         {
             fly_detect_count++;
             if (fly_detect_count >= app.fly.count_fly_time_1)
             {
                 fly_detect_count = 0;
                 fly_state_count = 0;
-                fly_recover_count = 0;
                 fly_lost_line_blocked = 1;
                 flat_fly = FLY_STATE_HOLD;
             }
@@ -180,20 +119,28 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
         fly_pwm_output_limit = FLY_PWM_LIMIT_HOLD;
 
         fly_state_count++;
-        if (fly_state_count >= app.fly.count_fly_time_2)
+        if (fly_state_count < app.fly.count_fly_time_2)
         {
-            if (fly_is_landing_signal())
-            {
-                fly_state_count = 0;
-                fly_recover_count = 0;
-                fly_lost_line_blocked = 1;
-                flat_fly = FLY_STATE_RECOVER;
-            }
-            else
-            {
-                fly_state_count = app.fly.count_fly_time_2;
-            }
+            break;
         }
+
+        /*
+         * HOLD 时间到后仍要求电感先回升，避免车还悬空就提前进入 RECOVER。
+         * 若未回升，则钳住计数，后续周期继续等待落地信号。
+         */
+        if (ad1 <= FLY_LANDING_SIDE_TH &&
+            ad4 <= FLY_LANDING_SIDE_TH &&
+            ad2 <= FLY_LANDING_CENTER_TH &&
+            ad3 <= FLY_LANDING_CENTER_TH)
+        {
+            fly_state_count = app.fly.count_fly_time_2;
+            break;
+        }
+
+        fly_state_count = 0;
+        fly_recover_count = 0;
+        fly_lost_line_blocked = 1;
+        flat_fly = FLY_STATE_RECOVER;
         break;
 
     case FLY_STATE_RECOVER:
@@ -220,26 +167,24 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
             fly_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
         }
 
-        if (app.fly.count_fly_speed <= 0)
+        target_speed = app.fly.count_fly_speed;
+        if (target_speed > FLY_RECOVER_SEARCH_SPEED)
         {
-            *speed = 0;
+            target_speed = FLY_RECOVER_SEARCH_SPEED;
         }
-        else if (app.fly.count_fly_speed <= FLY_RECOVER_SEARCH_SPEED)
+        if (target_speed < 0)
         {
-            *speed = app.fly.count_fly_speed;
+            target_speed = 0;
         }
-        else
-        {
-            *speed = FLY_RECOVER_SEARCH_SPEED;
-        }
+        *speed = target_speed;
 
-        if (fly_is_center_line())
+        if (func_abs((int)ad1 - (int)ad4) < 10 && ad1 > 20 && ad4 > 20 &&
+            Err > -2.0f && Err < 2.0f)
         {
             fly_state_count++;
             if (fly_state_count >= FLY_RECOVER_LINE_STABLE_COUNT)
             {
                 fly_state_count = 0;
-                fly_recover_count = 0;
                 fly_lost_line_blocked = 1;
                 fly_release_speed = FLY_RECOVER_SEARCH_SPEED;
                 fly_diff_output_limit = FLY_RECOVER_DIFF_LIMIT;

@@ -10,12 +10,12 @@
 typedef struct
 {
     int16 start_flag;        /**< 启动标志位：1-启动运行，0-停止待机 */
-    int16 circle_flags;      /**< 圆环识别开关：1-开启，0-关闭 */
+    int16 element_enable;    /**< 整体赛道元素识别开关：1-开启，0-关闭 */
     int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
-    int16 element_len;       /**< 元素序列有效长度，范围 1~6。 */
-    int16 element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环预留、3圆桶、4墙面、5跷跷板。 */
+    int element_len;                            /**< 元素序列有效长度，运行期超出 1~6 时进入无元素状态。 */
+    int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板；其他值运行期跳过。 */
 } AppStartConfig;
 
 /**
@@ -68,7 +68,6 @@ typedef struct
     int count_fly_speed;   /**< 飞坡状态下的目标速度（通常为慢速以保安全） */
     int count_fly_time_1;  /**< 飞坡检测确认时间（按 5ms 主环累计的触发次数） */
     int count_fly_time_2;  /**< 飞坡状态持续时间（触发后保持该状态的时长，单位：5ms） */
-    int16 fly_ramp_enable; /**< 飞坡模式功能开关：1-开启检测，0-关闭检测 */
 } AppFlyConfig;
 
 /**

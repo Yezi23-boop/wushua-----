@@ -5,7 +5,7 @@
 
 #define TRACK_ELEMENT_NONE 0       /**< 空槽位，用于跳过或现场临时关闭某个序列位置。 */
 #define TRACK_ELEMENT_LEFT_RING 1  /**< 左圆环流程显示值。 */
-#define TRACK_ELEMENT_RIGHT_RING 2 /**< 右圆环流程预留显示值，当前未实现时会跳过。 */
+#define TRACK_ELEMENT_RIGHT_RING 2 /**< 右圆环流程显示值。 */
 #define TRACK_ELEMENT_CYLINDER 3   /**< 圆桶流程显示值。 */
 #define TRACK_ELEMENT_WALL 4       /**< 墙面流程显示值。 */
 #define TRACK_ELEMENT_SEESAW 5     /**< 跷跷板流程显示值。 */
