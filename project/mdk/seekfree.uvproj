@@ -640,9 +640,39 @@
               <FilePath>..\user\a_run_track_element.c</FilePath>
             </File>
             <File>
+              <FileName>a_run_ring.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_ring.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cylinder.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_cylinder.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_wall.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_wall.c</FilePath>
+            </File>
+            <File>
               <FileName>a_run_track_element.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\a_run_track_element.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_ring.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_ring.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cylinder.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_cylinder.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_wall.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_wall.h</FilePath>
             </File>
             <File>
               <FileName>ADC.c</FileName>

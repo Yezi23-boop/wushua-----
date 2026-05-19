@@ -12,19 +12,29 @@ typedef enum
     FLY_STATE_IDLE = 0,    /**< 普通巡线，允许在元素仲裁授权后检测跷跷板入口 */
     FLY_STATE_HOLD = 1,    /**< 跷跷板保持，锁定速度和目标角速度 */
     FLY_STATE_RECOVER = 2, /**< 落地恢复，弱磁未恢复前继续低速回线 */
-    FLY_STATE_COOLDOWN = 3 /**< 退出冷却，防止弱磁区域重复触发 */
+    FLY_STATE_COOLDOWN = 3 /**< 回线后速度斜坡释放，避免下地后一拍提速 */
 } FlyState;
 
 /**
- * @brief 更新飞坡/跷跷板速度覆盖状态机。
+ * @brief 更新飞坡/跷跷板本体速度覆盖状态机。
  *
  * 该接口只供 a_run_mode 统一调配层调用，入口检测由赛道元素仲裁授权，
  * 避免跷跷板之外的弱磁区域误触发飞坡状态机。
  *
- * @param speed 输出目标速度指针，保持/恢复阶段会被覆盖为飞坡低速值。
+ * @param speed 输出目标速度指针，保持/恢复阶段会被状态机覆盖。
  * @param allow_entry 1-当前轮到跷跷板元素，允许从空闲态检测入口；0-禁止新入口。
  */
 void a_run_fly_update_speed(int *speed, uint8 allow_entry);
+
+/**
+ * @brief 更新跷跷板完成后的阶梯增速。
+ *
+ * 该接口不依赖当前元素是否仍为跷跷板，只要 flat_fly 处于 COOLDOWN，
+ * 就继续限制速度并逐拍释放，直到恢复到巡线目标速度后复位飞坡状态机。
+ *
+ * @param speed 输出目标速度指针，COOLDOWN 阶段会被斜坡释放值覆盖。
+ */
+void a_run_fly_update_release_speed(int *speed);
 
 /**
  * @brief 取出并清除飞坡/跷跷板完成事件。
@@ -40,7 +50,6 @@ uint8 a_run_fly_take_finish_event(void);
 void a_run_fly_reset(void);
 
 extern volatile uint8 fly_lost_line_blocked; /**< 飞坡状态机写、丢线保护读；1 表示临时屏蔽丢线，0 表示恢复丢线保护。 */
-extern volatile float fly_diff_output_limit; /**< 飞坡 RECOVER 写、主控差速读；大于 0 时限制最终左右轮差速量。 */
-extern volatile int32 fly_pwm_output_limit; /**< 飞坡 HOLD/RECOVER 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
+extern volatile int32 fly_pwm_output_limit; /**< 飞坡 HOLD/RECOVER/COOLDOWN 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
 
 #endif /* __A_RUN_FLY_H__ */

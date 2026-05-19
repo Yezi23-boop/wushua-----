@@ -2,7 +2,7 @@
  * @file a_run_mode.c
  * @brief 运行模式统一调配层
  * @details
- * 本模块保留启停状态更新和菜单调试读取接口。5ms 主控链路中的飞坡与
+ * 本模块保留启停、负压状态更新和菜单调试读取接口。5ms 主控链路中的飞坡与
  * 赛道元素更新直接调用对应模块，避免高频路径经过只转发的包装函数。
  */
 #include "zf_common_headfile.h"
@@ -87,46 +87,17 @@ int8 a_run_mode_get_start_state(void)
 }
 
 /**
- * @brief 读取当前环岛状态机阶段，用于菜单调参显示。
- * @return int8 阶段编号：0-no_ring，1-ring，2-pre_ring，3-in_ring，4-pre_out_ring，5-out_ring。
+ * @brief 负压状态更新
+ * @details 启动状态有效且配置允许时才更新负压，避免待机时误动作
  */
-int8 a_run_mode_get_ring_state(void)
+void a_run_mode_update_fuya_state(void)
 {
-    return a_run_track_element_get_ring_state();
-}
-
-/**
- * @brief 读取当前期望赛道元素。
- * @return int8 0-无，1-左圆环，2-右圆环，3-圆桶，4-墙面，5-跷跷板。
- */
-int8 a_run_mode_get_expected_element(void)
-{
-    return a_run_track_element_get_expected_element();
-}
-
-/**
- * @brief 读取当前圆桶状态机阶段。
- * @return int8 0-空闲，1-等顶部，2-等回平，3-稳定延迟。
- */
-int8 a_run_mode_get_cylinder_state(void)
-{
-    return a_run_track_element_get_cylinder_state();
-}
-
-/**
- * @brief 读取当前墙面状态机阶段。
- * @return int8 0-空闲，1-等墙面强信号，2-下墙计时。
- */
-int8 a_run_mode_get_wall_state(void)
-{
-    return a_run_track_element_get_wall_state();
-}
-
-/**
- * @brief 读取圆桶判断使用的 roll 角差。
- * @return float roll 角差，单位：度，范围 -180~180。
- */
-float a_run_mode_get_cylinder_vz(void)
-{
-    return a_run_track_element_get_cylinder_vz();
+    if (current_start_state >= START_STATE_1 && app.start.start_flag == 1)
+    {
+        fuya_set_percent(app.start.fuya_ground_percent);
+    }
+    else
+    {
+        fuya_stop();
+    }
 }

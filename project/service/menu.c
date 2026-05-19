@@ -22,7 +22,7 @@
 #define MENU_ROW_HEIGHT 18
 #define MENU_ROW_MIN (1 * MENU_ROW_HEIGHT)
 #define MENU_HOME_ROW_MAX (6 * MENU_ROW_HEIGHT)
-#define MENU_PAGE_COUNT 7
+#define MENU_PAGE_COUNT 8
 #define MENU_CENTER_X (12 * 8)
 #define MENU_STEP_X (14 * 8)
 #define MENU_STEP_INT_X (15 * 8)
@@ -58,12 +58,13 @@ int display_codename = 0;
 
 static const int menu_have_sub[] = {
     0,
-    1, 11, 12, 13, 14, 15,
+    1, 11, 12, 13, 14, 15, 16,
     2, 21, 22, 23, 24, 25, 26,
     3, 31, 32, 33, 34, 35, 36,
     4,
     5, 51, 52, 53, 54, 55, 56,
-    6, 61, 62, 63, 64};
+    6, 61, 62, 63, 64,
+    160, 1601, 1602, 1603, 1604, 1605, 1606};
 
 static void Menu_Clear_Pending_Key_Events(void);
 static void Menu_Clear_Page(void);
@@ -92,8 +93,9 @@ static void Menu_Draw_Sensor_Gain_Status(void);
 #endif
 static void Menu_Draw_Ring(int edit_line);
 static void Menu_Draw_Fly(int edit_line);
+static void Menu_Draw_Element_Len(int edit_line);
+static void Menu_Draw_Element(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
-static void Menu_Process_Track_Mode(void);
 #if MENU_SENSOR_GAIN_ENABLE
 static void Menu_Sensor_Gain_End(void);
 static void Menu_Sensor_Gain_Adjust(int delta);
@@ -108,6 +110,8 @@ static void Menu_Model_Process(void);
 static void Menu_Sensor_Process(void);
 static void Menu_Ring_Process(void);
 static void Menu_Fly_Process(void);
+static void Menu_Element_Len_Process(void);
+static void Menu_Element_Process(void);
 
 void Menu_Set_Service_Enable(uint8 enabled)
 {
@@ -197,6 +201,11 @@ static uint8 Menu_Read_Key_Event(void)
 
 static int Menu_Get_Page_Root(int page_id)
 {
+    if (page_id == 160 || (page_id >= 1601 && page_id <= 1606))
+    {
+        return 7;
+    }
+
     while (page_id >= 10)
         page_id /= 10;
 
@@ -213,7 +222,7 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 0:
         return MENU_HOME_ROW_MAX;
     case 1:
-        return 5 * MENU_ROW_HEIGHT;
+        return 6 * MENU_ROW_HEIGHT;
     case 2:
         return 6 * MENU_ROW_HEIGHT;
     case 3:
@@ -224,6 +233,8 @@ static int Menu_Get_Page_Row_Max(int page_root)
         return 6 * MENU_ROW_HEIGHT;
     case 6:
         return 4 * MENU_ROW_HEIGHT;
+    case 7:
+        return 6 * MENU_ROW_HEIGHT;
     default:
         return MENU_ROW_MIN;
     }
@@ -324,7 +335,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         break;
     case 11:
         Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
@@ -340,6 +351,9 @@ static void Menu_Render_Current_Page(void)
         break;
     case 15:
         Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
+        break;
+    case 16:
+        Menu_Draw_Element_Len(MENU_ROW_MIN);
         break;
     case 2:
         Menu_Draw_Speed(0);
@@ -412,7 +426,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
         break;
     case 61:
         Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
@@ -425,6 +439,28 @@ static void Menu_Render_Current_Page(void)
         break;
     case 64:
         Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
+        break;
+    case 160:
+        Menu_Draw_Element(0);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        break;
+    case 1601:
+        Menu_Draw_Element(1 * MENU_ROW_HEIGHT);
+        break;
+    case 1602:
+        Menu_Draw_Element(2 * MENU_ROW_HEIGHT);
+        break;
+    case 1603:
+        Menu_Draw_Element(3 * MENU_ROW_HEIGHT);
+        break;
+    case 1604:
+        Menu_Draw_Element(4 * MENU_ROW_HEIGHT);
+        break;
+    case 1605:
+        Menu_Draw_Element(5 * MENU_ROW_HEIGHT);
+        break;
+    case 1606:
+        Menu_Draw_Element(6 * MENU_ROW_HEIGHT);
         break;
     default:
         break;
@@ -543,25 +579,24 @@ static void Menu_Draw_Home(void)
     ips114_show_float(184, 4 * MENU_ROW_HEIGHT, dianya, 4, 2);
     ips114_show_float(184, 5 * MENU_ROW_HEIGHT, left_target, 4, 1);
     ips114_show_float(184, 6 * MENU_ROW_HEIGHT, right_target, 4, 1);
-	
 }
 
 static void Menu_Draw_Start(int edit_line)
 {
     ips114_show_string(8, 0, "<<START");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "Start_Flag");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ring_en");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "elem_en");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "trk_mode");
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "ELEM");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.circle_flags, 3);
+    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_enable, 3);
     ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_ground_percent, 4, 1);
     ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
     ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
-    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.track_mode, 3);
+    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.element_len, 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -640,7 +675,7 @@ static void Menu_Draw_Sensor(void)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "Err");
     ips114_show_float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
     ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
-    ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
+    ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "rdeg");
     ips114_show_float(192, 5 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
 
@@ -770,7 +805,7 @@ static void Menu_Draw_Ring(int edit_line)
 
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
-    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_mode_get_ring_state(), 1);
+    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
     ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "Yd");
     ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
     ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
@@ -778,11 +813,11 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
     ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
     ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "X");
-    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_expected_element(), 1);
+    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
     ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
-    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
+    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(200, 6 * MENU_ROW_HEIGHT, "W");
-    ips114_show_int32(216, 6 * MENU_ROW_HEIGHT, a_run_mode_get_wall_state(), 1);
+    ips114_show_int32(216, 6 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -800,6 +835,49 @@ static void Menu_Draw_Fly(int edit_line)
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.count_fly_time_1, 4);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
     ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_ramp_enable, 4);
+
+    if (edit_line >= MENU_ROW_MIN)
+        ips114_show_string(0, edit_line, ">>");
+}
+
+/**
+ * @brief 绘制元素序列长度编辑页。
+ * @param edit_line 当前编辑行，固定为 MENU_ROW_MIN。
+ *
+ * 该页从 START 第 6 行进入，K3 会继续进入 E1~E6 槽位页。
+ */
+static void Menu_Draw_Element_Len(int edit_line)
+{
+    ips114_show_string(8, 0, "<<ELEM");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "LEN");
+    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.element_len, 3);
+
+    if (edit_line >= MENU_ROW_MIN)
+        ips114_show_string(0, edit_line, ">>");
+}
+
+/**
+ * @brief 绘制元素序列槽位页。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ *
+ * E1~E6 的值直接对应 app.start.element_seq[]，不可执行编号由仲裁层跳过。
+ */
+static void Menu_Draw_Element(int edit_line)
+{
+    ips114_show_string(8, 0, "<<ELEM");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "E1");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "E2");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "E3");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "E4");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "E5");
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "E6");
+
+    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.element_seq[0], 3);
+    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_seq[1], 3);
+    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.start.element_seq[2], 3);
+    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.start.element_seq[3], 3);
+    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.start.element_seq[4], 3);
+    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.element_seq[5], 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -829,48 +907,6 @@ static void Menu_Process_Special_Value(int16 *parameter)
     case KEYSTROKE_TWO:
     case KEYSTROKE_TWO_LONG:
         *parameter = 0;
-        changed = 1;
-        break;
-    default:
-        break;
-    }
-
-    if (changed)
-        control_apply_config();
-}
-
-static void Menu_Process_Track_Mode(void)
-{
-    uint8 event_code;
-    uint8 changed;
-
-    changed = 0;
-    ips114_show_string(MENU_STEP_X, 0, "0-3");
-
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Handle_Common_Key(keystroke_label);
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        app.start.track_mode++;
-        if (app.start.track_mode > 3)
-        {
-            app.start.track_mode = 0;
-        }
-        changed = 1;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        app.start.track_mode--;
-        if (app.start.track_mode < 0)
-        {
-            app.start.track_mode = 3;
-        }
         changed = 1;
         break;
     default:
@@ -1098,7 +1134,7 @@ static void Menu_Start_Process(void)
         break;
     case 12:
         Menu_Draw_Start(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Special_Value(&app.start.circle_flags);
+        Menu_Process_Special_Value(&app.start.element_enable);
         break;
     case 13:
         Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
@@ -1112,9 +1148,121 @@ static void Menu_Start_Process(void)
         Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.angle.gyro_feedback_scale, 0.1f);
         break;
-    case 16:
-        Menu_Draw_Start(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Track_Mode();
+    default:
+        break;
+    }
+}
+
+/**
+ * @brief 处理元素序列长度编辑页。
+ *
+ * K1/K2 在 1~6 内循环修改 LEN；K3 进入 E1~E6 槽位页；K4 返回 START 根页。
+ */
+static void Menu_Element_Len_Process(void)
+{
+    uint8 event_code;
+    uint8 changed;
+
+    changed = 0;
+    Menu_Draw_Element_Len(MENU_ROW_MIN);
+
+    event_code = Menu_Read_Key_Event();
+    if (event_code == 0)
+        return;
+
+    switch (keystroke_label)
+    {
+    case KEYSTROKE_ONE:
+    case KEYSTROKE_ONE_LONG:
+        app.start.element_len++;
+        if (app.start.element_len > TRACK_ELEMENT_SEQUENCE_MAX)
+        {
+            app.start.element_len = 1;
+        }
+        changed = 1;
+        break;
+    case KEYSTROKE_TWO:
+    case KEYSTROKE_TWO_LONG:
+        app.start.element_len--;
+        if (app.start.element_len < 1)
+        {
+            app.start.element_len = TRACK_ELEMENT_SEQUENCE_MAX;
+        }
+        changed = 1;
+        break;
+    case KEYSTROKE_THREE:
+        Menu_Save_Page_Position(display_codename, cursor_row);
+        display_codename = 160;
+        cursor_row = MENU_ROW_MIN;
+        previous_cursor_row = -1;
+        Menu_Clear_Page();
+        Menu_Render_Current_Page();
+        Menu_Clear_Pending_Key_Events();
+        break;
+    case KEYSTROKE_FOUR:
+    case KEYSTROKE_FOUR_LONG:
+        Menu_Save_Page_Position(display_codename, cursor_row);
+        display_codename = 1;
+        cursor_row = Menu_Load_Page_Position(display_codename);
+        previous_cursor_row = -1;
+        Menu_Clear_Page();
+        Menu_Render_Current_Page();
+        Menu_Clear_Pending_Key_Events();
+        break;
+    default:
+        break;
+    }
+
+    if (changed)
+    {
+        control_apply_config();
+    }
+}
+
+/**
+ * @brief 处理元素序列槽位页。
+ *
+ * 根页负责 E1~E6 导航；单槽位复用普通 int 编辑，非法元素值由运行期仲裁跳过。
+ */
+static void Menu_Element_Process(void)
+{
+    uint8 event_code;
+
+    switch (display_codename)
+    {
+    case 160:
+        Menu_Draw_Element(0);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        event_code = Menu_Read_Key_Event();
+        if (event_code == 0)
+            return;
+        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
+        if (menu_next_flag != 0)
+            Menu_Next_Back();
+        break;
+    case 1601:
+        Menu_Draw_Element(1 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[0], 1);
+        break;
+    case 1602:
+        Menu_Draw_Element(2 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[1], 1);
+        break;
+    case 1603:
+        Menu_Draw_Element(3 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[2], 1);
+        break;
+    case 1604:
+        Menu_Draw_Element(4 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[3], 1);
+        break;
+    case 1605:
+        Menu_Draw_Element(5 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[4], 1);
+        break;
+    case 1606:
+        Menu_Draw_Element(6 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[5], 1);
         break;
     default:
         break;
@@ -1404,8 +1552,10 @@ void Keystroke_Menu(void)
     case 13:
     case 14:
     case 15:
-    case 16:
         Menu_Start_Process();
+        break;
+    case 16:
+        Menu_Element_Len_Process();
         break;
     case 2:
     case 21:
@@ -1443,6 +1593,15 @@ void Keystroke_Menu(void)
     case 63:
     case 64:
         Menu_Fly_Process();
+        break;
+    case 160:
+    case 1601:
+    case 1602:
+    case 1603:
+    case 1604:
+    case 1605:
+    case 1606:
+        Menu_Element_Process();
         break;
     default:
         display_codename = 0;

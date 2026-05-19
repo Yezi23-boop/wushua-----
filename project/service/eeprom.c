@@ -26,10 +26,17 @@ static void eeprom_load_defaults(AppConfig *config)
 {
     /* 启动与基础配置默认值 */
     config->start.start_flag = 1;               /* 默认启动 */
-    config->start.circle_flags = 1;             /* 默认关闭圆环识别 */
+    config->start.element_enable = 1;           /* 默认开启整体赛道元素识别 */
     config->start.track_mode = 0;               /* 默认左圆环->圆筒循环 */
     config->start.fuya_ground_percent = 60.00f; /* 默认平地负压百分比 */
     config->start.fuya_wall_percent = 60.00f;   /* 默认墙面负压百分比 */
+    config->start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
+    config->start.element_seq[0] = TRACK_ELEMENT_LEFT_RING;
+    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;
+    config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
+    config->start.element_seq[3] = TRACK_ELEMENT_WALL;
+    config->start.element_seq[4] = TRACK_ELEMENT_NONE;
+    config->start.element_seq[5] = TRACK_ELEMENT_NONE;
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 3.00f; // 4.50
@@ -71,7 +78,7 @@ static void eeprom_load_defaults(AppConfig *config)
 static void eeprom_read_config(AppConfig *config)
 {
     config->start.start_flag = (int16)read_int(1);
-    config->start.circle_flags = (int16)read_int(2);
+    config->start.element_enable = (int16)read_int(2);
 
     config->speed.kp_Err = read_float(4);
     config->start.fuya_ground_percent = read_float(5);
@@ -105,6 +112,13 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.fly_ramp_enable = (int16)read_int(26);
     config->start.fuya_wall_percent = read_float(27);
     config->start.track_mode = (int16)read_int(29);
+    config->start.element_len = (int)read_int(30);
+    config->start.element_seq[0] = (int)read_int(31);
+    config->start.element_seq[1] = (int)read_int(32);
+    config->start.element_seq[2] = (int)read_int(33);
+    config->start.element_seq[3] = (int)read_int(34);
+    config->start.element_seq[4] = (int)read_int(35);
+    config->start.element_seq[5] = (int)read_int(36);
 }
 
 /**
@@ -116,7 +130,7 @@ static void eeprom_read_config(AppConfig *config)
 static void eeprom_write_config(const AppConfig *config)
 {
     save_int(config->start.start_flag, 1);
-    save_int(config->start.circle_flags, 2);
+    save_int(config->start.element_enable, 2);
     save_float(config->angle.limiting_Angle, 3);
 
     save_float(config->speed.kp_Err, 4);
@@ -146,6 +160,13 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.fly_ramp_enable, 26);
     save_float(config->start.fuya_wall_percent, 27);
     save_int(config->start.track_mode, 29);
+    save_int(config->start.element_len, 30);
+    save_int(config->start.element_seq[0], 31);
+    save_int(config->start.element_seq[1], 32);
+    save_int(config->start.element_seq[2], 33);
+    save_int(config->start.element_seq[3], 34);
+    save_int(config->start.element_seq[4], 35);
+    save_int(config->start.element_seq[5], 36);
 }
 
 /**
