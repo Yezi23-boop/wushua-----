@@ -44,10 +44,10 @@ void main()
                 //			printf("%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, P46, speed_r);
                 //			ips114_show_int32(4 * 24, 18 * 0,P36, 4);
                 ////			P43=0;
-                ips114_show_float(4 * 24, 18 * 0, PID.left_speed.speed, 4, 1);
-                ips114_show_float(4 * 24, 18 * 1, PID.right_speed.speed, 4, 1);
+//                ips114_show_float(4 * 24, 18 * 0, PID.left_speed.speed, 4, 1);
+//                ips114_show_float(4 * 24, 18 * 1, PID.right_speed.speed, 4, 1);
 //			system_delay_ms(200);
-//          printf_imu();
+          printf_imu();
 //			printf_adc();
 //			printf_speed_test();
 #endif
