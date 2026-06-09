@@ -75,8 +75,8 @@ def test_filter_keeps_history_sign_fix_as_available_utility():
     assert "FilterEncoderCountMedian3EmaHalf" in filter_header
     assert "FilterEncoderCountMedian3EmaHalf" in filter_source
 
-    assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);" in pid_source
-    assert "low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);" in pid_source
+    assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);" in pid_source
+    assert "low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);" in pid_source
     assert "CorrectEncoderSignByHistory(raw_left_count, &encoder_sign_fix_left)" not in pid_source
     assert "CorrectEncoderSignByHistory(raw_right_count, &encoder_sign_fix_right)" not in pid_source
 
