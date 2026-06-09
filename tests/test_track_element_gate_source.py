@@ -13,6 +13,7 @@ A_RUN_RING_H = ROOT / "project" / "user" / "a_run_ring.h"
 A_RUN_CYLINDER_C = ROOT / "project" / "user" / "a_run_cylinder.c"
 A_RUN_WALL_C = ROOT / "project" / "user" / "a_run_wall.c"
 IMU_C = ROOT / "project" / "user" / "imu.c"
+ADC_C = ROOT / "project" / "user" / "ADC.c"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
 FUYA_C = ROOT / "project" / "user" / "FUYA.c"
 FUYA_H = ROOT / "project" / "user" / "FUYA.h"
@@ -135,6 +136,29 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     assert "FLY_STATE_RECOVER" in fly_source
     assert "FLY_STATE_COOLDOWN" in fly_source
     assert "fly_finish_event = 1;" in fly_source
+
+
+def test_adc_uses_cylinder_abc_while_expected_element_is_cylinder():
+    source = _read(ADC_C)
+    dispose_body = _function_body(source, "static void dispose", "/**\n * @brief 动态扫描")
+
+    assert "#define ADC_CYLINDER_A_1 1.00f" in source
+    assert "#define ADC_CYLINDER_B_1 1.00f" in source
+    assert "#define ADC_CYLINDER_C_L 0.80f" in source
+    assert "float a_value;" in dispose_body
+    assert "float b_value;" in dispose_body
+    assert "float c_value;" in dispose_body
+    assert "a_run_track_element_get_expected_element() == TRACK_ELEMENT_CYLINDER" in dispose_body
+    assert "a_value = ADC_CYLINDER_A_1;" in dispose_body
+    assert "b_value = ADC_CYLINDER_B_1;" in dispose_body
+    assert "c_value = ADC_CYLINDER_C_L;" in dispose_body
+    assert "numer = a_value * (float)ad11 - (float)ad44 +" in dispose_body
+    assert "b_value * (float)ad22 - (float)ad33;" in dispose_body
+    assert "denom = a_value * (float)ad11 + (float)ad44 +" in dispose_body
+    assert "c_value * (float)func_abs(diff23);" in dispose_body
+    assert "app.angle.A_1 * (float)ad11" not in dispose_body
+    assert "app.angle.B_1 * (float)ad22" not in dispose_body
+    assert "app.angle.C_l * (float)func_abs(diff23)" not in dispose_body
 
 
 def test_imu_and_fuya_match_current_fixed_output_strategy():

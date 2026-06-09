@@ -17,6 +17,9 @@
 #define ADC_RAW_MAX 3500 /* ADC 原始采样的理论最大有效值 */
 #define ADC_NORM_MAX 100 /* 归一化后的量程上限 */
 #define SORT_LENGTH 4    /* 滑动排序/均值滤波的样本长度 */
+#define ADC_CYLINDER_A_1 1.00f /* 圆桶流程专用横向主差分权重，仅在当前期望元素为圆桶时参与 Err 解算。 */
+#define ADC_CYLINDER_B_1 1.00f /* 圆桶流程专用竖向差分权重，用于减弱圆桶强磁段的斜入/斜出修正。 */
+#define ADC_CYLINDER_C_L 0.80f /* 圆桶流程专用分母补偿权重，用于强磁变化时抑制偏差放大。 */
 
 /* 内部中间变量 */
 static uint16 AD_value[NUM][SORT_LENGTH] = {{0}}; /* 滤波缓冲区 */
@@ -58,17 +61,35 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 {
     float denom;
     float numer;
+    float a_value;
+    float b_value;
+    float c_value;
     int16 diff23;
+
+    a_value = app.angle.A_1;
+    b_value = app.angle.B_1;
+    c_value = app.angle.C_l;
+
+    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_CYLINDER)
+    {
+        /*
+         * read_AD() 先于元素状态机更新执行，按 expected_element 判断可以覆盖圆桶流程首拍。
+         * 只切换本次解算局部权重，避免修改 app.angle 导致异常退出后参数无法恢复。
+         */
+        a_value = ADC_CYLINDER_A_1;
+        b_value = ADC_CYLINDER_B_1;
+        c_value = ADC_CYLINDER_C_L;
+    }
 
     /* 1) 先计算竖向差分，供分母修正项复用 */
     diff23 = (int16)ad22 - (int16)ad33;
 
     /* 2) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
-    numer = app.angle.A_1 * (float)ad11 - (float)ad44 +
-            app.angle.B_1 * (float)ad22 - (float)ad33;
+    numer = a_value * (float)ad11 - (float)ad44 +
+            b_value * (float)ad22 - (float)ad33;
     /* 3) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
-    denom = app.angle.A_1 * (float)ad11 + (float)ad44 +
-            app.angle.C_l * (float)func_abs(diff23);
+    denom = a_value * (float)ad11 + (float)ad44 +
+            c_value * (float)func_abs(diff23);
 
     /* 4) 分母过小时直接归零，避免瞬态噪声被异常放大 */
     if (denom < 1.0f)
