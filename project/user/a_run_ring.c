@@ -5,7 +5,8 @@
 #include "zf_common_headfile.h"
 #include "a_run_ring.h"
 
-#define RING_ENTRY_CONFIRM_COUNT 3u /* 圆环入口连续确认次数，5ms 调用下约 15ms。 */
+#define RING_ENTRY_CONFIRM_COUNT 8u /* 圆环入口连续确认次数，2ms 调用下约 16ms。 */
+#define RING_YAW_DT_SCALE 0.40f     /* 主环 2ms 后，圆环 yaw 累计保持原 5ms 等效角度。 */
 
 /**
  * @brief 环岛阶段枚举。
@@ -25,7 +26,7 @@ static int8 ring_is_right_entry_signal(void);
 
 static enum RingStep current_state = no_ring; /**< 当前圆环状态机阶段，左右圆环共用。 */
 RingStruct ring_data = {0};                   /**< 环岛过程数据，菜单和调试界面允许直接读取。 */
-static uint8 ring_entry_count = 0;            /**< 圆环入口连续确认计数，由 5ms 状态机递增。 */
+static uint8 ring_entry_count = 0;            /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
 
 /**
  * @brief 根据环岛状态更新角速度目标。
@@ -268,11 +269,11 @@ void a_run_ring_update_integrals(void)
             delta_angle = -delta_angle;
         }
 
-        ring_data.yaw_delta_sum += delta_angle;
+        ring_data.yaw_delta_sum += delta_angle * RING_YAW_DT_SCALE;
     }
 
     if (ring_data.distance == 1)
     {
-        ring_data.encoder += (speed_l + speed_r) * 0.005;
+        ring_data.encoder += (speed_l + speed_r) * 0.002;
     }
 }

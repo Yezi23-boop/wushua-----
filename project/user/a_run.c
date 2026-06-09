@@ -17,13 +17,13 @@ volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/�
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
 /* --- 周期任务内部变量 --- */
-static int steer_div_10 = 0; /* 5ms 主环分频：用于每 10ms 更新一次转向环 */
+static int steer_div_10 = 0; /* 2ms 主环分频：每 3 拍约 6ms 更新一次转向环 */
 static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
 
 /**
- * @brief 主控制核心任务 (运行于 TM0 5ms 中断)
+ * @brief 主控制核心任务 (运行于 TM0 2ms 中断)
  * @details 串行执行传感器采集 -> 姿态获取 -> 转向偏差融合 -> 速度设定 -> 电机执行链路。
- * 必须始终保证函数总体耗时远小于 5ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
+ * 必须始终保证函数总体耗时远小于 2ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
  * 任何超时都会导致电机脱管、失控。
  */
 void run_time_1(void)
@@ -36,7 +36,7 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
-    if (steer_div_10 >= 2)
+    if (steer_div_10 >= 3)
     {
         /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
         pid_steer_update(&PID.steer, Err, 0.0f);
@@ -44,7 +44,7 @@ void run_time_1(void)
     }
     speed_active = app.speed.speed_run;
     /*
-     * 元素仲裁跟随 5ms 采样链路，并放在转向外环之后执行。
+     * 元素仲裁跟随 2ms 采样链路，并放在转向外环之后执行。
      * 原因：跷跷板和圆环都可能覆盖 PID.steer.output，必须压住普通循迹目标。
      */
     a_run_track_element_update_gate(&speed_active, &PID.steer.output);

@@ -23,9 +23,9 @@ def test_uses_float_incremental_pid_update():
 def test_encoder_feedback_uses_current_low_pass_path():
     source = PID_C.read_text(encoding="utf-8")
 
-    assert "speed_r = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.07f;" in source
-    assert "speed_l = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.07f;" in source
-    assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);" in source
-    assert "low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);" in source
+    assert "speed_r = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;" in source
+    assert "speed_l = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;" in source
+    assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);" in source
+    assert "low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);" in source
     assert "encoder_clear_count(TIM3_ENCOEDER);" in source
     assert "encoder_clear_count(TIM4_ENCOEDER);" in source

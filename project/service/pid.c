@@ -81,8 +81,8 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     //                                                        &encoder_filter_left);
     //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
     //                                                         &encoder_filter_right);
-    speed_r = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.07f;
-    speed_l = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.07f;
+    speed_r = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
+    speed_l = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
 //    if (speed_l < 0)
 //    {
 //        speed_l = -speed_l;
@@ -91,8 +91,8 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
 //    {
 //        speed_r = -speed_r;
 //    }
-    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);
-    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);
+    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);
+    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);
     //    speed_l = (float)fixed_left_count * 0.2f;
     //    speed_r = (float)fixed_right_count * 0.2f;
 

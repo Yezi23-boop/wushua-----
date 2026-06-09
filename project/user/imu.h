@@ -21,7 +21,7 @@ void imu_calibrate_gyro_z_zero_drift(void);
 
 /**
  * @brief 由 roll 角更新姿态角差缓存
- * @details 由 5ms 主控制链路调用一次，返回值单位为度，供负压、圆桶和调试显示读取。
+ * @details 由 2ms 主控制链路调用一次，返回值单位为度，供负压、圆桶和调试显示读取。
  */
 void imu_update_gravity_vz_from_roll(void);
 

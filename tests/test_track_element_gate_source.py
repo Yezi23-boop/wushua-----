@@ -50,8 +50,8 @@ def test_track_element_gate_is_wired_directly_in_5ms_control_chain():
     assert "read_AD();" in run_time_1_body
     assert "Encoder_get(&PID.left_speed, &PID.right_speed);" in run_time_1_body
     assert "imu_update_gyro_z_from_imu660rc();" in run_time_1_body
-    assert "if (steer_div_10 >= 2)" in run_time_1_body
-    assert "if (steer_div_10 > 2)" not in run_time_1_body
+    assert "if (steer_div_10 >= 3)" in run_time_1_body
+    assert "if (steer_div_10 >= 2)" not in run_time_1_body
     assert "pid_steer_update(&PID.steer, Err, 0.0f);" in run_time_1_body
     assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" in run_time_1_body
     assert "pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);" in run_time_1_body
@@ -105,8 +105,10 @@ def test_ring_state_is_split_and_directional():
     assert "uint8 a_run_ring_update_5ms(int8 ring_dir)" in ring_source
     assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in ring_source
     assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in ring_source
-    assert "ring_data.yaw_delta_sum += delta_angle;" in ring_source
-    assert "ring_data.encoder += (speed_l + speed_r) * 0.005;" in ring_source
+    assert "#define RING_ENTRY_CONFIRM_COUNT 8u" in ring_source
+    assert "#define RING_YAW_DT_SCALE 0.40f" in ring_source
+    assert "ring_data.yaw_delta_sum += delta_angle * RING_YAW_DT_SCALE;" in ring_source
+    assert "ring_data.encoder += (speed_l + speed_r) * 0.002;" in ring_source
     assert "a_run_ring_update_5ms(1)" in track_source
     assert "a_run_ring_update_5ms(-1)" in track_source
 

@@ -13,7 +13,7 @@
 
 /**
  * @brief 四路归一化后的电感值 (0~100)
- * @note 由于主要在 5ms 周期定时器中断 (TM0) 内被更新，并在主循环读取，故作 volatile 修饰。
+ * @note 由于主要在 2ms 周期定时器中断 (TM0) 内被更新，并在主循环读取，故作 volatile 修饰。
  */
 extern volatile uint16 ad1;
 extern volatile uint16 ad2;
