@@ -1,13 +1,23 @@
+import re
 from pathlib import Path
 
 
-FILTER_H_PATH = Path(__file__).resolve().parents[1] / "project" / "service" / "filter.h"
-FILTER_C_PATH = Path(__file__).resolve().parents[1] / "project" / "service" / "filter.c"
-PID_C_PATH = Path(__file__).resolve().parents[1] / "project" / "service" / "pid.c"
+ROOT = Path(__file__).resolve().parents[1]
+FILTER_H_PATH = ROOT / "project" / "service" / "filter.h"
+FILTER_C_PATH = ROOT / "project" / "service" / "filter.c"
+PID_C_PATH = ROOT / "project" / "service" / "pid.c"
 
-ENC_ZERO_DEADBAND = 2
-ENC_SIGN_FIX_MIN = 8
-ENC_SIGN_MAG_TOL = 16
+
+def _macro_int(source, name):
+    match = re.search(rf"#define\s+{name}\s+(\d+)", source)
+    assert match is not None
+    return int(match.group(1))
+
+
+FILTER_H_SOURCE = FILTER_H_PATH.read_text(encoding="utf-8")
+ENC_ZERO_DEADBAND = _macro_int(FILTER_H_SOURCE, "ENC_ZERO_DEADBAND")
+ENC_SIGN_FIX_MIN = _macro_int(FILTER_H_SOURCE, "ENC_SIGN_FIX_MIN")
+ENC_SIGN_MAG_TOL = _macro_int(FILTER_H_SOURCE, "ENC_SIGN_MAG_TOL")
 
 
 def _sign(value):
@@ -53,7 +63,7 @@ def _correct_sequence(sequence):
     return output
 
 
-def test_source_contains_history_sign_fix_entrypoint():
+def test_filter_keeps_history_sign_fix_as_available_utility():
     filter_header = FILTER_H_PATH.read_text(encoding="utf-8")
     filter_source = FILTER_C_PATH.read_text(encoding="utf-8")
     pid_source = PID_C_PATH.read_text(encoding="utf-8")
@@ -62,10 +72,13 @@ def test_source_contains_history_sign_fix_entrypoint():
     assert "EncoderSignFixState" in filter_header
     assert "CorrectEncoderSignByHistory" in filter_header
     assert "int32 CorrectEncoderSignByHistory" in filter_source
-    assert "CorrectEncoderSignByHistory(raw_left_count, &encoder_sign_fix_left)" in pid_source
-    assert "CorrectEncoderSignByHistory(raw_right_count, &encoder_sign_fix_right)" in pid_source
-    assert "low_pass_filter_mt(&encoder_l" not in pid_source
-    assert "low_pass_filter_mt(&encoder_r" not in pid_source
+    assert "FilterEncoderCountMedian3EmaHalf" in filter_header
+    assert "FilterEncoderCountMedian3EmaHalf" in filter_source
+
+    assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);" in pid_source
+    assert "low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);" in pid_source
+    assert "CorrectEncoderSignByHistory(raw_left_count, &encoder_sign_fix_left)" not in pid_source
+    assert "CorrectEncoderSignByHistory(raw_right_count, &encoder_sign_fix_right)" not in pid_source
 
 
 def test_first_three_samples_passthrough():
@@ -85,7 +98,13 @@ def test_same_sign_noise_is_not_modified():
 
 
 def test_near_zero_values_are_not_corrected():
-    assert _correct_sequence([1, -1, 2, -2]) == [1, -1, 2, -2]
+    near_zero = ENC_ZERO_DEADBAND
+    assert _correct_sequence([near_zero, -near_zero, near_zero - 1, -near_zero + 1]) == [
+        near_zero,
+        -near_zero,
+        near_zero - 1,
+        -near_zero + 1,
+    ]
 
 
 def test_large_magnitude_change_is_not_mistaken_for_sign_error():

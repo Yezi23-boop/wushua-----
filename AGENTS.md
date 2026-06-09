@@ -85,10 +85,10 @@
 ## Subagents
 
 - 本仓库按 Codex 当前约定，将项目级自定义 agent 放在 `.codex/agents/`。
-- 当前调参专用 agent 为 `speed_loop_tuning`，路径为 `.codex/agents/speed-loop-tuning.toml`。
-- 当任务集中在 `project/speed_loop_autotune/` 下的 profile、日志、批次结果、波形摘要和下一步调参建议时，优先使用该 agent。
+- 当前调参专用 agent 配置保留为 `speed_loop_tuning`，路径为 `.codex/agents/speed-loop-tuning.toml`。
+- 当前仓库未包含 `project/speed_loop_autotune/` 专题目录；只有在该目录后续恢复，且任务集中在其 profile、日志、批次结果、波形摘要和下一步调参建议时，才优先使用该 agent。
 - 该 agent 只负责调参分析和建议，不默认改固件实时控制逻辑，也不绕过 `enter_ground`、`save` 这类显式用户边界。
-- 对 `project/speed_loop_autotune/` 的后续修改，默认遵守以下要求：
+- 若后续恢复并修改 `project/speed_loop_autotune/`，默认遵守以下要求：
   - 调参默认必须走 agent 分析模式，而不是本地 heuristic 自动决策模式。
   - 每一轮填写 PID 之前，都必须先基于当前 `decision_request` 做一次新的 agent 分析。
   - 正常情况下按“分析一轮、执行一轮”往返 10 轮后，再统一向用户汇报。

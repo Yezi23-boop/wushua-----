@@ -1,13 +1,22 @@
-import pathlib
 import sys
 
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
-PROJECT_ROOT_TEXT = str(PROJECT_ROOT)
-if PROJECT_ROOT_TEXT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT_TEXT)
+MESSAGE = (
+    "当前仓库未包含 project/speed_loop_autotune，旧版 agent 会话仿真入口已不可用。"
+    "若后续恢复该专题目录，需要同步恢复 host 会话脚本与测试。"
+)
 
-from project.speed_loop_autotune.host.agent_autotune_session_sim import *  # noqa: F401,F403
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    if len(argv) > 0 and argv[0] in ("-h", "--help"):
+        print(MESSAGE)
+        return 0
+
+    print(MESSAGE, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

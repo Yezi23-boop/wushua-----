@@ -8,6 +8,10 @@ A_RUN_FLY_C = ROOT / "project" / "user" / "a_run_fly.c"
 A_RUN_FLY_H = ROOT / "project" / "user" / "a_run_fly.h"
 A_RUN_TRACK_ELEMENT_C = ROOT / "project" / "user" / "a_run_track_element.c"
 A_RUN_TRACK_ELEMENT_H = ROOT / "project" / "user" / "a_run_track_element.h"
+A_RUN_RING_C = ROOT / "project" / "user" / "a_run_ring.c"
+A_RUN_RING_H = ROOT / "project" / "user" / "a_run_ring.h"
+A_RUN_CYLINDER_C = ROOT / "project" / "user" / "a_run_cylinder.c"
+A_RUN_WALL_C = ROOT / "project" / "user" / "a_run_wall.c"
 IMU_C = ROOT / "project" / "user" / "imu.c"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
 FUYA_C = ROOT / "project" / "user" / "FUYA.c"
@@ -21,145 +25,141 @@ def _read(path):
     return path.read_text(encoding="utf-8")
 
 
-def test_track_element_gate_contract_is_wired():
-    header = _read(A_RUN_MODE_H)
+def _function_body(source, start_sig, next_sig):
+    start = source.index(start_sig)
+    end = source.index(next_sig, start)
+    return source[start:end]
+
+
+def test_track_element_gate_is_wired_directly_in_5ms_control_chain():
+    mode_header = _read(A_RUN_MODE_H)
     mode_source = _read(A_RUN_MODE_C)
-    source = _read(A_RUN_TRACK_ELEMENT_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
     track_header = _read(A_RUN_TRACK_ELEMENT_H)
     runner = _read(A_RUN_C)
 
-    assert "void circle_check_l(uint8 allow_entry);" not in header
-    assert "RingStruct" not in header
-    assert "ring_data" not in header
-    assert "FlyState" not in header
-    assert "FLY_STATE_" not in header
-    assert "void a_run_mode_update_track_element_gate(void);" in header
-    assert "int8 a_run_mode_get_expected_element(void);" in header
-    assert "int8 a_run_mode_get_cylinder_state(void);" in header
-    assert "a_run_mode_get_ring_yaw_delta_sum" not in header
-    assert "a_run_mode_get_ring_encoder" not in header
-    assert "a_run_mode_get_ring_diff_set" not in header
+    assert "void a_run_mode_update_track_element_gate" not in mode_header
+    assert "void a_run_track_element_update_gate(int *speed, float *angle_target);" in track_header
+    assert "int8 a_run_track_element_get_expected_element(void);" in track_header
+    assert "static enum TrackElement expected_element = ELEMENT_NONE;" in track_source
 
-    assert "typedef struct" in track_header
-    assert "} RingStruct;" in track_header
-    assert "extern RingStruct ring_data;" in track_header
-    assert "RingStruct ring_data = {0};" in source
-    assert "static RingStruct ring_data" not in source
-    assert "enum TrackElement" in source
-    assert "ELEMENT_LEFT_RING = 1" in source
-    assert "ELEMENT_RIGHT_RING = 2" in source
-    assert "ELEMENT_CYLINDER = 3" in source
-    assert "static enum TrackElement expected_element = ELEMENT_LEFT_RING;" in source
-    assert "enum CylinderStep" in source
-    assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target;" in source
-    assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target;" in source
-    assert "IMU_GYRO_Z_SIGN (-1.0f)" in _read(IMU_C)
-    assert "ring_finish_event = 1;" in source
-    assert "static uint8 ring_take_finish_event(void)" in source
-    assert "void a_run_track_element_update_gate(void)" in source
-    assert "static void circle_check_l(uint8 allow_entry)" in source
-    assert "circle_check_l(1);" in source
-    assert "circle_check_l(0);" in source
-    assert "if (app.start.circle_flags != 1)" in source
-    assert "start_state != START_STATE_2 || app.start.circle_flags != 1" not in source
-    assert "void a_run_track_element_update_gate(void);" in track_header
-    assert "void a_run_track_element_update_integrals(void);" in track_header
-    assert "a_run_track_element_get_ring_yaw_delta_sum" not in track_header
-    assert "a_run_track_element_get_ring_encoder" not in track_header
-    assert "a_run_track_element_get_ring_diff_set" not in track_header
-    assert "a_run_track_element_update_gate();" in mode_source
-    assert "a_run_track_element_update_integrals();" in mode_source
-    assert "a_run_track_element_get_ring_yaw_delta_sum" not in mode_source
-    assert "a_run_track_element_get_ring_encoder" not in mode_source
-    assert "a_run_track_element_get_ring_diff_set" not in mode_source
+    run_time_1_body = _function_body(runner, "void run_time_1(void)", "void run_time_2(void)")
+    run_time_2_body = _function_body(runner, "void run_time_2(void)", "void run_time_3(void)")
 
-    run_time_1_body = runner[runner.index("void run_time_1(void)"):runner.index("void run_time_2(void)")]
-    run_time_2_body = runner[runner.index("void run_time_2(void)"):runner.index("void run_time_3(void)")]
-
-    assert "a_run_mode_update_track_element_gate();" in run_time_1_body
-    assert "gyro_integrals();" in run_time_1_body
-    assert "imu_update_gravity_vz_from_quaternion();" in run_time_1_body
-    assert run_time_1_body.index("imu_update_gravity_vz_from_quaternion();") < run_time_1_body.index("a_run_mode_update_track_element_gate();")
-    assert run_time_1_body.index("a_run_mode_update_track_element_gate();") < run_time_1_body.index("gyro_integrals();")
-    assert "track_gate_div_10" not in runner
-    assert "a_run_mode_update_track_element_gate();" not in run_time_2_body
-    assert "gyro_integrals();" not in run_time_2_body
+    assert "read_AD();" in run_time_1_body
+    assert "Encoder_get(&PID.left_speed, &PID.right_speed);" in run_time_1_body
+    assert "imu_update_gyro_z_from_imu660rc();" in run_time_1_body
+    assert "if (steer_div_10 >= 2)" in run_time_1_body
+    assert "if (steer_div_10 > 2)" not in run_time_1_body
+    assert "pid_steer_update(&PID.steer, Err, 0.0f);" in run_time_1_body
+    assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" in run_time_1_body
+    assert "pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);" in run_time_1_body
+    assert run_time_1_body.index("pid_steer_update(&PID.steer, Err, 0.0f);") < run_time_1_body.index(
+        "a_run_track_element_update_gate(&speed_active, &PID.steer.output);"
+    )
+    assert "a_run_track_element_update_gate" not in mode_source
+    assert "a_run_track_element_update_gate" not in run_time_2_body
 
 
-def test_cylinder_peak_angle_api_is_split_from_element_state_machine():
-    fuya_header = _read(FUYA_H)
-    fuya_source = _read(FUYA_C)
+def test_track_element_sequence_supports_current_executable_elements():
+    source = _read(A_RUN_TRACK_ELEMENT_C)
+    header = _read(A_RUN_TRACK_ELEMENT_H)
+
+    assert "#define TRACK_ELEMENT_LEFT_RING 1" in header
+    assert "#define TRACK_ELEMENT_RIGHT_RING 2" in header
+    assert "#define TRACK_ELEMENT_CYLINDER 3" in header
+    assert "#define TRACK_ELEMENT_WALL 4" in header
+    assert "#define TRACK_ELEMENT_SEESAW 5" in header
+    assert "#define TRACK_ELEMENT_SEQUENCE_MAX 6" in header
+    assert "#define TRACK_ELEMENT_DEFAULT_LEN 4" in header
+
+    assert "app.start.element_enable != 1" in source
+    assert "track_element_enter_from_index(0);" in source
+    assert "element = app.start.element_seq[index];" in source
+    assert "track_element_is_executable(element)" in source
+
+    assert "element == ELEMENT_LEFT_RING" in source
+    assert "element == ELEMENT_RIGHT_RING" in source
+    assert "element == ELEMENT_CYLINDER" in source
+    assert "element == ELEMENT_WALL" in source
+    assert "element == ELEMENT_SEESAW" in source
+
+    assert "a_run_ring_update_5ms(1)" in source
+    assert "a_run_ring_update_5ms(-1)" in source
+    assert "a_run_cylinder_update_5ms()" in source
+    assert "a_run_fly_update_speed(speed, 1)" in source
+    assert "a_run_wall_update_5ms()" in source
+    assert "a_run_fly_update_release_speed(speed);" in source
+    assert "a_run_ring_update_angle_target(angle_target);" in source
+
+
+def test_ring_state_is_split_and_directional():
+    ring_source = _read(A_RUN_RING_C)
+    ring_header = _read(A_RUN_RING_H)
     track_source = _read(A_RUN_TRACK_ELEMENT_C)
 
-    assert "void fuya_apply_cylinder_peak_angle(void);" in fuya_header
-    assert "void fuya_restore_cylinder_peak_angle(void);" in fuya_header
-    assert "void fuya_apply_cylinder_peak_angle(void)" in fuya_source
-    assert "void fuya_restore_cylinder_peak_angle(void)" in fuya_source
-
-    assert "fuya_apply_cylinder_peak_angle();" in track_source
-    assert "fuya_restore_cylinder_peak_angle();" in track_source
-    assert "#define CYLINDER_TOP_GRAVITY_Z -0.3f" in track_source
-    assert "#define CYLINDER_GROUND_GRAVITY_Z 0.3f" in track_source
-    assert "CYLINDER_STABLE_DELAY_COUNT 50u" in track_source
-    assert "cylinder_vz = imu_get_gravity_vz();" in track_source
-    assert "LowPassFilter_t cylinder_vz_low_pass" not in track_source
-    assert "low_pass_filter_mt(&cylinder_vz_low_pass" not in track_source
-    assert "CYLINDER_VZ_FILTER_ALPHA" not in track_source
-    assert "imu_update_gravity_vector_from_quaternion" not in track_source
-    assert "CYLINDER_VZ_FILTER_OLD" not in track_source
-    assert "CYLINDER_VZ_FILTER_NEW" not in track_source
+    assert "} RingStruct;" in ring_header
+    assert "extern RingStruct ring_data;" in ring_header
+    assert "RingStruct ring_data = {0};" in ring_source
+    assert "uint8 a_run_ring_update_5ms(int8 ring_dir)" in ring_source
+    assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in ring_source
+    assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in ring_source
+    assert "ring_data.yaw_delta_sum += delta_angle;" in ring_source
+    assert "ring_data.encoder += (speed_l + speed_r) * 0.005;" in ring_source
+    assert "a_run_ring_update_5ms(1)" in track_source
+    assert "a_run_ring_update_5ms(-1)" in track_source
 
 
-def test_fly_ramp_logic_is_split_behind_run_mode_wrapper():
-    mode_source = _read(A_RUN_MODE_C)
+def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
+    cylinder_source = _read(A_RUN_CYLINDER_C)
+    wall_source = _read(A_RUN_WALL_C)
     fly_source = _read(A_RUN_FLY_C)
     fly_header = _read(A_RUN_FLY_H)
 
-    assert "void a_run_fly_update_speed(int *speed);" in fly_header
-    assert "static int8 fly_is_acc_z_ramp_pose(void)" in fly_source
-    assert "static int8 fly_is_ramp_lost_signal(void)" in fly_source
-    assert "static int8 fly_is_center_line(void)" in fly_source
-    assert "static void fly_reset_state(void)" in fly_source
-    assert "void a_run_fly_update_speed(int *speed)" in fly_source
+    assert "enum CylinderStep" in cylinder_source
+    assert "CYLINDER_TOP_WINDOW_COUNT 100u" in cylinder_source
+    assert "CYLINDER_TOP_HIT_COUNT 3" in cylinder_source
+    assert "CYLINDER_STABLE_DELAY_COUNT 100u" in cylinder_source
+    assert "uint8 a_run_cylinder_update_5ms(void)" in cylinder_source
+
+    assert "enum WallStep" in wall_source
+    assert "WALL_TIMING_COUNT 200u" in wall_source
+    assert "uint8 a_run_wall_update_5ms(void)" in wall_source
+
     assert "} FlyState;" in fly_header
-    assert "FLY_STATE_IDLE = 0" in fly_header
-    assert "enum FlyState" not in fly_source
+    assert "void a_run_fly_update_speed(int *speed, uint8 allow_entry);" in fly_header
+    assert "void a_run_fly_update_release_speed(int *speed);" in fly_header
+    assert "volatile uint8 fly_lost_line_blocked = 0;" in fly_source
+    assert "volatile int32 fly_pwm_output_limit = 0;" in fly_source
+    assert "FLY_STATE_HOLD" in fly_source
+    assert "FLY_STATE_RECOVER" in fly_source
+    assert "FLY_STATE_COOLDOWN" in fly_source
+    assert "fly_finish_event = 1;" in fly_source
 
-    assert "void a_run_mode_update_fly_speed(int *speed)" in mode_source
-    assert "a_run_fly_update_speed(speed);" in mode_source
-    assert "fly_is_ramp_lost_signal" not in mode_source
 
-
-def test_gravity_z_sign_is_normalized_at_imu_boundary():
+def test_imu_and_fuya_match_current_fixed_output_strategy():
     imu_source = _read(IMU_C)
     imu_header = _read(ROOT / "project" / "user" / "imu.h")
     fuya_source = _read(FUYA_C)
+    fuya_header = _read(FUYA_H)
+    runner = _read(A_RUN_C)
 
-    assert "#define IMU_GRAVITY_Z_SIGN (-1.0f)" in imu_source
-    assert "static volatile float imu_gravity_vz = 1.0f;" in imu_source
-    assert "static float imu_gravity_vz_time_comp = 0.0f;" in imu_source
-    assert "#define IMU_GRAVITY_VZ_FLAT_COMP_START 0.80f" in imu_source
-    assert "#define IMU_GRAVITY_VZ_COMP_STEP" in imu_source
-    assert "#define IMU_GRAVITY_VZ_COMP_MAX" not in imu_source
-    assert "#define IMU_GRAVITY_VZ_DROP_WINDOW_COUNT 20u" in imu_source
-    assert "#define IMU_GRAVITY_VZ_FAST_DROP_LIMIT 0.08f" in imu_source
-    assert "#define IMU_GRAVITY_VZ_ELEMENT_COMP_VALUE 0.00001f" in imu_source
-    assert "IMU_GRAVITY_VZ_COMP_RELEASE_RATE" not in imu_source
-    assert "static float imu_gravity_vz_history[IMU_GRAVITY_VZ_DROP_WINDOW_COUNT];" in imu_source
-    assert "void imu_update_gravity_vz_from_quaternion(void)" in imu_source
+    assert "#define IMU_GYRO_Z_SIGN (1.0f)" in imu_source
+    assert "void imu_update_gravity_vz_from_roll(void)" in imu_source
     assert "float imu_get_gravity_vz(void)" in imu_source
-    assert "raw_vz = IMU_GRAVITY_Z_SIGN * (qw * qw - qx * qx - qy * qy + qz * qz);" in imu_source
-    assert "vz_before_update = raw_vz + imu_gravity_vz_time_comp;" in imu_source
-    assert "vz_drop_100ms >= IMU_GRAVITY_VZ_FAST_DROP_LIMIT" in imu_source
-    assert "imu_gravity_vz_time_comp = IMU_GRAVITY_VZ_ELEMENT_COMP_VALUE;" in imu_source
-    assert "        imu_gravity_vz_time_comp = 0.0f;" not in imu_source
-    assert "vz = raw_vz + imu_gravity_vz_time_comp;" in imu_source
-    assert "imu_update_gravity_vector_from_quaternion" not in imu_source
-    assert "imu_update_gravity_vector_from_quaternion" not in imu_header
-    assert "vzc = imu_get_gravity_vz();" in fuya_source
+    assert "imu_update_gravity_vz_from_quaternion" not in imu_source
+    assert "imu_update_gravity_vz_from_quaternion" not in imu_header
+
+    assert "void fuya_set_percent(float percent);" in fuya_header
+    assert "void fuya_stop(void);" in fuya_header
+    assert "fuya_percent_to_pwm" in fuya_source
+    assert "pwm_init(PWMA_CH2N_P03, 50, FUYA_PWM_MIN);" in fuya_source
+    assert "void fuya_apply_cylinder_peak_angle" not in fuya_header
+    assert "void fuya_apply_cylinder_peak_angle" not in fuya_source
+    assert "fuya_set_percent(app.start.fuya_xili);" in runner
 
 
-def test_track_mode_config_and_menu_are_present():
+def test_track_mode_config_and_menu_reflect_current_debug_state():
     eeprom_header = _read(EEPROM_H)
     eeprom_source = _read(EEPROM_C)
     menu_source = _read(MENU_C)
@@ -169,13 +169,11 @@ def test_track_mode_config_and_menu_are_present():
     assert "config->start.track_mode = (int16)read_int(" in eeprom_source
     assert "save_int(config->start.track_mode" in eeprom_source
 
-    assert '"trk_mode"' in menu_source
-    assert "app.start.track_mode" in menu_source
-    assert "a_run_mode_get_expected_element()" in menu_source
-    assert "a_run_mode_get_cylinder_state()" in menu_source
+    assert "a_run_track_element_get_expected_element()" in menu_source
+    assert "a_run_ring_get_state()" in menu_source
+    assert "a_run_cylinder_get_state()" in menu_source
+    assert "a_run_wall_get_state()" in menu_source
     assert "ring_data.yaw_delta_sum" in menu_source
     assert "ring_data.encoder" in menu_source
     assert "ring_data.diff_set" in menu_source
-    assert "a_run_mode_get_ring_yaw_delta_sum" not in menu_source
-    assert "a_run_mode_get_ring_encoder" not in menu_source
-    assert "a_run_mode_get_ring_diff_set" not in menu_source
+    assert '"trk_mode"' not in menu_source

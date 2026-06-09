@@ -31,10 +31,11 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.fuya_xili = 60.00f;         /* 默认平地负压百分比 70*/
     config->start.fuya_wall_percent = 60.00f; /* 默认墙面负压百分比 */
     config->start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
-    config->start.element_seq[0] = TRACK_ELEMENT_LEFT_RING;
-    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;
+    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER;
+    config->start.element_seq[1] = TRACK_ELEMENT_WALL;
     config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
-    config->start.element_seq[3] = TRACK_ELEMENT_WALL;
+    config->start.element_seq[3] = TRACK_ELEMENT_LEFT_RING
+	;
     config->start.element_seq[4] = TRACK_ELEMENT_NONE;
     config->start.element_seq[5] = TRACK_ELEMENT_NONE;
 
