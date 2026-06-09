@@ -6,7 +6,7 @@
 #include "a_run_ring.h"
 
 #define RING_ENTRY_CONFIRM_COUNT 8u /* 圆环入口连续确认次数，2ms 调用下约 16ms。 */
-#define RING_YAW_DT_SCALE 0.40f     /* 主环 2ms 后，圆环 yaw 累计保持原 5ms 等效角度。 */
+#define RING_YAW_DT_SCALE 0.40f     /* 主环迁移到 2ms 后，圆环 yaw 累计保持迁移前等效角度。 */
 
 /**
  * @brief 环岛阶段枚举。

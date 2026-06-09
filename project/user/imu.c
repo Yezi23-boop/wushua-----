@@ -12,7 +12,7 @@
 #include "zf_common_headfile.h"
 #include "math.h"
 #include "imu.h"
-LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，5ms IMU 更新链路写入。 */
+LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，2ms IMU 更新链路写入。 */
 #ifndef M_PI
 #define M_PI 3.14159265358979f
 #endif
@@ -28,7 +28,7 @@ LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，5ms IMU 更新链路写�
 
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
-static volatile float imu_roll_delta_deg = 0.0f; /**< 5ms 主环写入、控制和调试链路读取的 roll 角差，单位：度。 */
+static volatile float imu_roll_delta_deg = 0.0f; /**< 2ms 主环写入、控制和调试链路读取的 roll 角差，单位：度。 */
 float acc_1 = 0.0;                               /**< acc_z 低通滤波输入/输出缓存，单位沿用 IMU660RC 原始 acc_z。 */
 /**
  * @brief 上电标定 gyro_z 零偏
@@ -71,7 +71,7 @@ void imu_calibrate_gyro_z_zero_drift(void)
  * 驱动层已把姿态解算结果更新到 `imu660rc_roll`。当前安装姿态下平地约 180 度，
  * 因此这里得到 `imu660rc_roll - 180` 的角差并折回 -180~180 度。
  *
- * @note 由 5ms 主控制链路调用一次；其他模块读取缓存，避免重复处理 roll 环绕。
+ * @note 由 2ms 主控制链路调用一次；其他模块读取缓存，避免重复处理 roll 环绕。
  */
 void imu_update_gravity_vz_from_roll(void)
 {
@@ -93,7 +93,7 @@ void imu_update_gravity_vz_from_roll(void)
 }
 
 /**
- * @brief 读取最近一次 5ms 更新的 roll 角差。
+ * @brief 读取最近一次 2ms 更新的 roll 角差。
  * @return float 已折回到 -180.0f~180.0f 的 roll 角差，单位：度；平地约 0。
  */
 float imu_get_gravity_vz(void)

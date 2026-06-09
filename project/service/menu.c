@@ -686,7 +686,7 @@ static void Menu_Draw_Sensor(void)
  * @brief 绘制 SENSOR 页右侧 TPL0102 增益调试状态。
  *
  * 该页面只在前台菜单路径执行，显示缓存值不会触发 I2C 访问；
- * 只有明确按键事件才会进入写入或保存流程，避免影响 5ms 控制链路。
+ * 只有明确按键事件才会进入写入或保存流程，避免影响 2ms 控制链路。
  */
 static void Menu_Draw_Sensor_Gain_Status(void)
 {

@@ -32,7 +32,7 @@ def _function_body(source, start_sig, next_sig):
     return source[start:end]
 
 
-def test_track_element_gate_is_wired_directly_in_5ms_control_chain():
+def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     mode_header = _read(A_RUN_MODE_H)
     mode_source = _read(A_RUN_MODE_C)
     track_source = _read(A_RUN_TRACK_ELEMENT_C)

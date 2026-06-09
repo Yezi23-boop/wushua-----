@@ -79,7 +79,7 @@ void printf_adc(void)
 void printf_imu(void)
 {
     float roll_delta_deg;
-    /* 调试页直接显示 5ms IMU 缓存，避免圆桶仲裁关闭时看到旧缓存。 */
+    /* 调试页直接显示 2ms IMU 缓存，避免圆桶仲裁关闭时看到旧缓存。 */
     roll_delta_deg = imu_get_gravity_vz();
 
     ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);

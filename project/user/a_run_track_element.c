@@ -26,7 +26,7 @@ static void track_element_enter_from_index(uint8 start_index);
 static void track_element_reset_state(void);
 
 static enum TrackElement expected_element = ELEMENT_NONE; /**< 当前期望赛道元素，用于串行屏蔽非当前元素的入口识别。 */
-static uint8 element_index = 0;                           /**< 当前元素序列下标，只在 5ms 元素仲裁中更新。 */
+static uint8 element_index = 0;                           /**< 当前元素序列下标，只在 2ms 元素仲裁中更新。 */
 static uint8 element_sequence_started = 0;                /**< 元素识别开启后是否已经按 E1~E6 完成首元素初始化。 */
 
 /**
@@ -141,7 +141,7 @@ static void track_element_reset_state(void)
  * `app.start.element_enable` 作为整体元素识别开关；开启后按 `expected_element` 开放当前元素流程。
  * 元素顺序由 `app.start.element_len` 和 `app.start.element_seq[]` 决定，0/不可执行槽位会跳过。
  *
- * @param speed 5ms 主控制链路当前目标速度，跷跷板和完成后释放阶段可能覆盖该值。
+ * @param speed 2ms 主控制链路当前目标速度，跷跷板和完成后释放阶段可能覆盖该值。
  * @param angle_target 转向外环输出的目标角速度，圆环和跷跷板阶段可能覆盖该值。
  */
 void a_run_track_element_update_gate(int *speed, float *angle_target)

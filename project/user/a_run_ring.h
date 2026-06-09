@@ -32,7 +32,7 @@ extern RingStruct ring_data;
 void a_run_ring_reset(void);
 
 /**
- * @brief 5ms 更新圆环状态机。
+ * @brief 按主控制环周期更新圆环状态机。
  * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
  * @return uint8 1-当前圆环流程完成，0-未完成。
  */

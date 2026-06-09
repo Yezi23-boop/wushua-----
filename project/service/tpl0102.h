@@ -42,7 +42,7 @@ typedef enum
  *
  * @return 1 表示两颗器件进入调试模式成功；0 表示 I2C NACK 或读取缓存失败。
  *
- * @note 不要在 `hardware_init()`、中断或 5ms 控制链路中调用。
+ * @note 不要在 `hardware_init()`、中断或 2ms 控制链路中调用。
  */
 uint8 tpl0102_debug_begin(void);
 
