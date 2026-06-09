@@ -9,7 +9,7 @@
 void a_run_wall_reset(void);
 
 /**
- * @brief 5ms 更新墙面状态机。
+ * @brief 按主控制环周期更新墙面状态机。
  * @return uint8 1-墙面流程完成，0-未完成。
  */
 uint8 a_run_wall_update_5ms(void);

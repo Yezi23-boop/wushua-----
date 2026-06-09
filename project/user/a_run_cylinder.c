@@ -8,10 +8,10 @@
 #define CYLINDER_AD_BOTH_HIGH_THRESHOLD 60     /* 圆桶双路强信号阈值：ad1/ad4 同时超过该值算一次命中。 */
 #define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 80   /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
 #define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 80 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
-#define CYLINDER_TOP_WINDOW_COUNT 100u         /* 圆桶命中统计窗口，5ms * 100 = 500ms。 */
-#define CYLINDER_TOP_HIT_COUNT 3               /* 500ms 窗口内横向强信号达到该次数才认定进入圆桶段。 */
-#define CYLINDER_GROUND_CONFIRM_COUNT 3u       /* 5ms * 3 = 15ms，强信号消失后连续确认回地。 */
-#define CYLINDER_STABLE_DELAY_COUNT 100u       /* 5ms * 100 = 500ms，回地稳定后切入下一元素。 */
+#define CYLINDER_TOP_WINDOW_COUNT 250u         /* 圆桶命中统计窗口，2ms * 250 = 500ms。 */
+#define CYLINDER_TOP_HIT_COUNT 8               /* 500ms 窗口内强信号达到该次数才认定进入圆桶段。 */
+#define CYLINDER_GROUND_CONFIRM_COUNT 8u       /* 2ms * 8 = 16ms，强信号消失后连续确认回地。 */
+#define CYLINDER_STABLE_DELAY_COUNT 250u       /* 2ms * 250 = 500ms，回地稳定后切入下一元素。 */
 
 enum CylinderStep
 {
@@ -21,7 +21,7 @@ enum CylinderStep
     CYL_STABLE_DELAY = 3
 };
 
-static enum CylinderStep cylinder_state = CYL_IDLE; /**< 圆桶状态机阶段，由 5ms 主环推进。 */
+static enum CylinderStep cylinder_state = CYL_IDLE; /**< 圆桶状态机阶段，由 2ms 主环推进。 */
 static uint8 cylinder_top_count = 0;                /**< 圆桶窗口内命中次数，达到阈值后认定进入圆桶段。 */
 static uint8 cylinder_top_window_count = 0;         /**< 圆桶命中统计窗口计数，首个强信号后开始计时。 */
 static uint8 cylinder_ground_count = 0;             /**< 圆桶回地确认计数，横向强信号连续消失后才认定回地。 */
@@ -77,7 +77,7 @@ uint8 a_run_cylinder_update_5ms(void)
         cylinder_ground_count = 0;
         cylinder_stable_count = 0;
         cylinder_state = CYL_WAIT_TOP;
-        /* 刚切入圆桶时同一拍继续按 WAIT_TOP 处理，避免白白空等一个 5ms 周期。 */
+        /* 刚切入圆桶时同一拍继续按 WAIT_TOP 处理，避免白白空等一个主控制环周期。 */
 
     case CYL_WAIT_TOP:
         if (cylinder_ad_high != 0 || cylinder_top_window_count != 0)

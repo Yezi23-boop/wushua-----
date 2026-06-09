@@ -9,7 +9,7 @@
 void a_run_cylinder_reset(void);
 
 /**
- * @brief 5ms 更新圆桶状态机。
+ * @brief 按主控制环周期更新圆桶状态机。
  * @return uint8 1-圆桶流程完成，0-未完成。
  */
 uint8 a_run_cylinder_update_5ms(void);

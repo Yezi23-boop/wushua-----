@@ -120,13 +120,13 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     fly_header = _read(A_RUN_FLY_H)
 
     assert "enum CylinderStep" in cylinder_source
-    assert "CYLINDER_TOP_WINDOW_COUNT 100u" in cylinder_source
-    assert "CYLINDER_TOP_HIT_COUNT 3" in cylinder_source
-    assert "CYLINDER_STABLE_DELAY_COUNT 100u" in cylinder_source
+    assert "CYLINDER_TOP_WINDOW_COUNT 250u" in cylinder_source
+    assert "CYLINDER_TOP_HIT_COUNT 8" in cylinder_source
+    assert "CYLINDER_STABLE_DELAY_COUNT 250u" in cylinder_source
     assert "uint8 a_run_cylinder_update_5ms(void)" in cylinder_source
 
     assert "enum WallStep" in wall_source
-    assert "WALL_TIMING_COUNT 200u" in wall_source
+    assert "WALL_TIMING_COUNT 500u" in wall_source
     assert "uint8 a_run_wall_update_5ms(void)" in wall_source
 
     assert "} FlyState;" in fly_header
@@ -137,6 +137,9 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     assert "FLY_STATE_HOLD" in fly_source
     assert "FLY_STATE_RECOVER" in fly_source
     assert "FLY_STATE_COOLDOWN" in fly_source
+    assert "#define FLY_RECOVER_LINE_STABLE_COUNT 25u" in fly_source
+    assert "#define FLY_RECOVER_PWM_LIMIT_EARLY_COUNT 150u" in fly_source
+    assert "#define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 500u" in fly_source
     assert "fly_finish_event = 1;" in fly_source
 
 

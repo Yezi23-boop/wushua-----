@@ -7,7 +7,7 @@
 
 #define WALL_AD_SIDE_THRESHOLD 35 /* 墙面横向有效阈值，ad1/ad4 同时超过才允许推进墙面波形。 */
 #define WALL_AD_HIGH_THRESHOLD 55 /* 墙面纵向高值阈值，ad2/ad3 任一路超过该值认为到达上墙峰值。 */
-#define WALL_TIMING_COUNT 200u    /* 墙面强信号确认后的下墙计时，5ms * 200 = 1000ms。 */
+#define WALL_TIMING_COUNT 500u    /* 墙面强信号确认后的下墙计时，2ms * 500 = 1000ms。 */
 
 enum WallStep
 {
@@ -16,8 +16,8 @@ enum WallStep
     WALL_TIMING = 2
 };
 
-static enum WallStep wall_state = WALL_IDLE; /**< 墙面状态机阶段，圆桶/跷跷板完成后由 5ms 主环推进。 */
-static uint16 wall_timer_count = 0;          /**< 墙面完整波形确认后的下墙计时，单位：5ms。 */
+static enum WallStep wall_state = WALL_IDLE; /**< 墙面状态机阶段，圆桶/跷跷板完成后由 2ms 主环推进。 */
+static uint16 wall_timer_count = 0;          /**< 墙面完整波形确认后的下墙计时，单位：2ms。 */
 
 /**
  * @brief 读取当前墙面状态机阶段。
