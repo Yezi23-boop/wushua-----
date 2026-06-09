@@ -4,7 +4,7 @@
 #include "../service/menu.h"
 
 /* 定时器中断周期定义（单位：ms） */
-#define TIME_0 5  /* 主控控制环周期 */
+#define TIME_0 2  /* 主控控制环周期 */
 #define TIME_1 10 /* 按键与菜单服务周期 */
 
 /* 内部私有初始化函数声明 */
@@ -80,8 +80,8 @@ static void timer1_service_10ms(void)
 static void control_init(void)
 {
     /* 速度环初始化，默认提供一组安全基础参数 */
-    pid_speed_init(&PID.left_speed, 120.0f, 25.0f, 0.0f, 9000.0f, 9000.0f);
-    pid_speed_init(&PID.right_speed, 120.0f, 25.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.left_speed, 120.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.right_speed, 120.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);

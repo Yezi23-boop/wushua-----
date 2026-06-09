@@ -66,8 +66,8 @@ typedef struct
 typedef struct
 {
     int count_fly_speed;   /**< 飞坡状态下的目标速度（通常为慢速以保安全） */
-    int count_fly_time_1;  /**< 飞坡检测确认时间（按 5ms 主环累计的触发次数） */
-    int count_fly_time_2;  /**< 飞坡状态持续时间（触发后保持该状态的时长，单位：5ms） */
+    int count_fly_time_1;  /**< 飞坡检测确认时间（按主控制环周期累计的触发次数） */
+    int count_fly_time_2;  /**< 飞坡状态持续时间（触发后保持该状态的时长，单位：主控制环周期） */
 } AppFlyConfig;
 
 /**

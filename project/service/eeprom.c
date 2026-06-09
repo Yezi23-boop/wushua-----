@@ -41,7 +41,7 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 3.50f; // 3.50
-    config->speed.kd_Err = 8.00f; // 7.00
+    config->speed.kd_Err = 10.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 45.00f;     /* 默认基础速度 50 */
     config->speed.limiting_Err = 600.00f; /* 转向限幅 */
@@ -49,7 +49,7 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 电感偏差解算默认参数 */
     config->angle.kp_Angle = 0.85f; // 0.85
-    config->angle.kd_Angle = 0.40f; // 0.4
+    config->angle.kd_Angle = 0.70f; // 2ms 主环第一版保守微分
     config->angle.gyro_feedback_scale = 1.00f;
     config->angle.limiting_Angle = 43.00f; // 48
     config->angle.A_1 = 1.00f;
@@ -66,8 +66,8 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 飞坡策略默认参数 */
     config->fly.count_fly_speed = 23;  /* 飞坡慢速值 */
-    config->fly.count_fly_time_1 = 3;  /* 触发检测次数 (3 * 5ms = 15ms) */
-    config->fly.count_fly_time_2 = 30; /* 状态保持时间 (10 * 5ms = 50ms) */
+    config->fly.count_fly_time_1 = 8;  /* 触发检测次数 (8 * 2ms = 16ms) */
+    config->fly.count_fly_time_2 = 75; /* 状态保持时间 (75 * 2ms = 150ms) */
 }
 
 /**
