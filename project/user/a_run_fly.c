@@ -12,7 +12,7 @@ static int fly_detect_count = 0;          /* 入口弱磁连续确认计数，�
 static int fly_state_count = 0;           /* 保持和恢复阶段共用计数，单位为 2ms 周期。 */
 static uint8 fly_finish_event = 0;        /* 跷跷板恢复完成事件，由元素仲裁在 2ms 链路中单次消费。 */
 static uint16 fly_recover_count = 0;      /* 进入 RECOVER 后的总时长计数，单位为 2ms 周期。 */
-static int fly_release_speed = 0;         /* COOLDOWN 速度斜坡当前输出值，单位同 app.speed.speed_run。 */
+static float fly_release_speed = 0.0f;    /* COOLDOWN 速度斜坡当前输出值，保留 app.speed.speed_run 的小数精度。 */
 volatile uint8 fly_lost_line_blocked = 0; /* 飞坡高风险窗口屏蔽丢线；RECOVER 超过 1s 后恢复保护。 */
 volatile int32 fly_pwm_output_limit = 0;  /* HOLD/RECOVER/COOLDOWN 期间限制最终 PWM 占空比，0 表示不额外限制。 */
 
@@ -61,7 +61,7 @@ void a_run_fly_reset(void)
     fly_detect_count = 0;
     fly_state_count = 0;
     fly_recover_count = 0;
-    fly_release_speed = 0;
+    fly_release_speed = 0.0f;
     fly_finish_event = 0;
     fly_lost_line_blocked = 0;
     fly_pwm_output_limit = 0;
@@ -74,11 +74,11 @@ void a_run_fly_reset(void)
  * 完成事件只表示跷跷板本体可以切到序列中的下一个元素，不代表速度保护结束。
  * 因此该函数独立于当前元素运行，只要处于 COOLDOWN 就继续按主控制环周期释放速度。
  *
- * @param speed 输出的目标速度指针。
+ * @param speed 输出的目标速度指针，保留小数速度设定。
  */
-void a_run_fly_update_release_speed(int *speed)
+void a_run_fly_update_release_speed(float *speed)
 {
-    int target_speed;
+    float target_speed;
 
     if (flat_fly != FLY_STATE_COOLDOWN)
     {
@@ -90,22 +90,22 @@ void a_run_fly_update_release_speed(int *speed)
      * 原因：负压、轮胎贴地和循迹误差都需要短暂恢复窗口，若完成事件后一拍
      * 回到巡线速度，后续无论接墙面、圆桶还是普通赛道都容易被惯性带偏。
      */
-    target_speed = (int)app.speed.speed_run;
-    if (target_speed < 0)
+    target_speed = app.speed.speed_run;
+    if (target_speed < 0.0f)
     {
-        target_speed = 0;
+        target_speed = 0.0f;
     }
 
-    if (target_speed <= FLY_RECOVER_SEARCH_SPEED)
+    if (target_speed <= (float)FLY_RECOVER_SEARCH_SPEED)
     {
         *speed = target_speed;
         a_run_fly_reset();
         return;
     }
 
-    if (fly_release_speed < FLY_RECOVER_SEARCH_SPEED)
+    if (fly_release_speed < (float)FLY_RECOVER_SEARCH_SPEED)
     {
-        fly_release_speed = FLY_RECOVER_SEARCH_SPEED;
+        fly_release_speed = (float)FLY_RECOVER_SEARCH_SPEED;
     }
 
     if (fly_release_speed >= target_speed)
@@ -116,7 +116,7 @@ void a_run_fly_update_release_speed(int *speed)
     }
 
     *speed = fly_release_speed;
-    fly_release_speed += FLY_RELEASE_SPEED_STEP;
+    fly_release_speed += (float)FLY_RELEASE_SPEED_STEP;
     if (fly_release_speed > target_speed)
     {
         fly_release_speed = target_speed;
@@ -133,10 +133,10 @@ void a_run_fly_update_release_speed(int *speed)
  * 只在元素仲裁允许时开放；进入 COOLDOWN 后由 a_run_fly_update_release_speed()
  * 继续完成阶梯增速，避免元素切换打断释放过程。
  *
- * @param speed 输出的目标速度指针。
+ * @param speed 输出的目标速度指针，保留小数速度设定。
  * @param allow_entry 1-当前期望元素为跷跷板，允许空闲态检测入口；0-禁止新入口。
  */
-void a_run_fly_update_speed(int *speed, uint8 allow_entry)
+void a_run_fly_update_speed(float *speed, uint8 allow_entry)
 {
     switch (flat_fly)
     {
@@ -169,7 +169,7 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
 
     case FLY_STATE_HOLD:
         /* 离地/弱磁期间冻结外环目标，避免 Err 瞬态失真把车头拉偏。 */
-        *speed = app.fly.count_fly_speed;
+        *speed = (float)app.fly.count_fly_speed;
         PID.steer.output = 0.0f;
         fly_pwm_output_limit = FLY_PWM_LIMIT_HOLD;
 
@@ -221,7 +221,7 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
             fly_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
         }
 
-        *speed = func_limit_ab(app.fly.count_fly_speed, 0, FLY_RECOVER_SEARCH_SPEED);
+        *speed = (float)func_limit_ab(app.fly.count_fly_speed, 0, FLY_RECOVER_SEARCH_SPEED);
 
         if (func_abs((int)ad1 - (int)ad4) < 10 && ad1 > 20 && ad4 > 20 &&
             Err > -2.0f && Err < 2.0f)
@@ -231,7 +231,7 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry)
             {
                 fly_state_count = 0;
                 fly_lost_line_blocked = 1;
-                fly_release_speed = FLY_RECOVER_SEARCH_SPEED;
+                fly_release_speed = (float)FLY_RECOVER_SEARCH_SPEED;
                 fly_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
                 fly_finish_event = 1;
                 flat_fly = FLY_STATE_COOLDOWN;

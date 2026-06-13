@@ -21,10 +21,10 @@ typedef enum
  * 该接口只供 a_run_mode 统一调配层调用，入口检测由赛道元素仲裁授权，
  * 避免跷跷板之外的弱磁区域误触发飞坡状态机。
  *
- * @param speed 输出目标速度指针，保持/恢复阶段会被状态机覆盖。
+ * @param speed 输出目标速度指针，保留小数速度设定；保持/恢复阶段会被状态机覆盖。
  * @param allow_entry 1-当前轮到跷跷板元素，允许从空闲态检测入口；0-禁止新入口。
  */
-void a_run_fly_update_speed(int *speed, uint8 allow_entry);
+void a_run_fly_update_speed(float *speed, uint8 allow_entry);
 
 /**
  * @brief 更新跷跷板完成后的阶梯增速。
@@ -32,9 +32,9 @@ void a_run_fly_update_speed(int *speed, uint8 allow_entry);
  * 该接口不依赖当前元素是否仍为跷跷板，只要 flat_fly 处于 COOLDOWN，
  * 就继续限制速度并逐拍释放，直到恢复到巡线目标速度后复位飞坡状态机。
  *
- * @param speed 输出目标速度指针，COOLDOWN 阶段会被斜坡释放值覆盖。
+ * @param speed 输出目标速度指针，保留小数速度设定；COOLDOWN 阶段会被斜坡释放值覆盖。
  */
-void a_run_fly_update_release_speed(int *speed);
+void a_run_fly_update_release_speed(float *speed);
 
 /**
  * @brief 取出并清除飞坡/跷跷板完成事件。

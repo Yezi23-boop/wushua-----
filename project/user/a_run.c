@@ -17,8 +17,8 @@ volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/�
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
 /* --- 周期任务内部变量 --- */
-static int steer_div_10 = 0; /* 2ms 主环分频：每 3 拍约 6ms 更新一次转向环 */
-static int speed_active = 0; /* 当前参与速度环计算的目标速度 */
+static int steer_div_10 = 0;        /* 2ms 主环分频：每 3 拍约 6ms 更新一次转向环 */
+static float speed_active = 0.0f;   /* 当前参与速度环计算的目标速度，保留 speed_run 的小数调参精度。 */
 
 /**
  * @brief 主控制核心任务 (运行于 TM0 2ms 中断)

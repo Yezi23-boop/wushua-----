@@ -40,7 +40,7 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     runner = _read(A_RUN_C)
 
     assert "void a_run_mode_update_track_element_gate" not in mode_header
-    assert "void a_run_track_element_update_gate(int *speed, float *angle_target);" in track_header
+    assert "void a_run_track_element_update_gate(float *speed, float *angle_target);" in track_header
     assert "int8 a_run_track_element_get_expected_element(void);" in track_header
     assert "static enum TrackElement expected_element = ELEMENT_NONE;" in track_source
 
@@ -53,6 +53,9 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "if (steer_div_10 >= 3)" in run_time_1_body
     assert "if (steer_div_10 >= 2)" not in run_time_1_body
     assert "pid_steer_update(&PID.steer, Err, 0.0f);" in run_time_1_body
+    assert "static float speed_active = 0.0f;" in runner
+    assert "static int speed_active" not in runner
+    assert "speed_active = app.speed.speed_run;" in run_time_1_body
     assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" in run_time_1_body
     assert "pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);" in run_time_1_body
     assert run_time_1_body.index("pid_steer_update(&PID.steer, Err, 0.0f);") < run_time_1_body.index(
@@ -130,8 +133,12 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     assert "uint8 a_run_wall_update_5ms(void)" in wall_source
 
     assert "} FlyState;" in fly_header
-    assert "void a_run_fly_update_speed(int *speed, uint8 allow_entry);" in fly_header
-    assert "void a_run_fly_update_release_speed(int *speed);" in fly_header
+    assert "void a_run_fly_update_speed(float *speed, uint8 allow_entry);" in fly_header
+    assert "void a_run_fly_update_release_speed(float *speed);" in fly_header
+    assert "static float fly_release_speed = 0.0f;" in fly_source
+    assert "float target_speed;" in fly_source
+    assert "target_speed = app.speed.speed_run;" in fly_source
+    assert "(int)app.speed.speed_run" not in fly_source
     assert "volatile uint8 fly_lost_line_blocked = 0;" in fly_source
     assert "volatile int32 fly_pwm_output_limit = 0;" in fly_source
     assert "FLY_STATE_HOLD" in fly_source
