@@ -28,10 +28,10 @@ volatile int32 fly_pwm_output_limit = 0;  /* HOLD/RECOVER/COOLDOWN 期间限制�
 #define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 500u /* RECOVER 超过 2ms * 500 = 1000ms 仍未完成时恢复丢线保护。 */
 
 /* --- 速度与 PWM 限制 --- */
-#define FLY_PWM_LIMIT_HOLD 3000          /* 离线保持期实际 PWM 上限，避免空中/弱磁阶段速度环过冲。 */
-#define FLY_PWM_LIMIT_RECOVER_EARLY 2000 /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
-#define FLY_PWM_LIMIT_RECOVER_LATE 4000  /* RECOVER 后段实际 PWM 上限，给循迹留出有限纠偏能力。 */
-#define FLY_RECOVER_SEARCH_SPEED 10      /* RECOVER 固定找线速度，低速保留差速纠偏余量。 */
+#define FLY_PWM_LIMIT_HOLD 3200          /* 离线保持期实际 PWM 上限，避免空中/弱磁阶段速度环过冲。 */
+#define FLY_PWM_LIMIT_RECOVER_EARLY 2500 /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
+#define FLY_PWM_LIMIT_RECOVER_LATE 4500  /* RECOVER 后段实际 PWM 上限，给循迹留出有限纠偏能力。 */
+#define FLY_RECOVER_SEARCH_SPEED 15      /* RECOVER 固定找线速度，低速保留差速纠偏余量。 */
 #define FLY_RELEASE_SPEED_STEP 1         /* 回线后每个 2ms 周期释放 1 个速度单位，避免一拍跳到巡线速度。 */
 
 /**

@@ -82,8 +82,13 @@ def test_element_counts_keep_original_wall_clock_time_at_2ms():
     assert "#define CYLINDER_STABLE_DELAY_COUNT 250u" in cylinder
     assert "#define WALL_TIMING_COUNT 500u" in wall
     assert "#define FLY_RECOVER_LINE_STABLE_COUNT 25u" in fly
+    assert "#define FLY_PWM_LIMIT_HOLD 3200" in fly
+    assert "#define FLY_RECOVER_SEARCH_SPEED 15" in fly
     assert "#define FLY_RECOVER_PWM_LIMIT_EARLY_COUNT 150u" in fly
     assert "#define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 500u" in fly
+    assert "#define FLY_PWM_LIMIT_RECOVER_EARLY 2500" in fly
+    assert "#define FLY_PWM_LIMIT_RECOVER_LATE 4500" in fly
+    assert "#define FLY_RELEASE_SPEED_STEP 1" in fly
 
 
 def test_motor_start_ramp_keeps_original_wall_clock_time_at_2ms():
