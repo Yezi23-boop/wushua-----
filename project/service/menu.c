@@ -787,17 +787,17 @@ static void Menu_Draw_Ring(int edit_line)
 {
     ips114_show_string(8, 0, "<<RING");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "entry_E");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "pre_r_T");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "pre_pwm");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "pre_r_Gz");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "in_r_Gz");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "pre_o_T");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "out_pwm");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "pre_o_Gz");
 
     ips114_show_float(88, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
-    ips114_show_float(88, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
+    ips114_show_float(88, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_steer_output, 3, 2);
     ips114_show_float(88, 3 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyroz, 3, 2);
     ips114_show_float(88, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
-    ips114_show_float(88, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
+    ips114_show_float(88, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_steer_output, 3, 2);
     ips114_show_float(88, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
 
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
@@ -808,7 +808,7 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
     ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
     ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
-    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
+    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.steer_output_set, 4, 0);
     ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "X");
     ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
     ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
@@ -1471,7 +1471,7 @@ static void Menu_Ring_Process(void)
         break;
     case 52:
         Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 1.0f);
+        Menu_Process_Float_Value(&app.ring.pre_ring_steer_output, 1.0f);
         break;
     case 53:
         Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
@@ -1483,7 +1483,7 @@ static void Menu_Ring_Process(void)
         break;
     case 55:
         Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 1.0f);
+        Menu_Process_Float_Value(&app.ring.pre_out_ring_steer_output, 1.0f);
         break;
     case 56:
         Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);

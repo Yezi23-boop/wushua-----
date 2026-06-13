@@ -30,13 +30,29 @@ static uint8 ring_entry_count = 0;            /**< 圆环入口连续确认计�
 
 /**
  * @brief 根据环岛状态覆盖方向差速输出。
+ *
+ * 圆环阶段使用固定差速替代普通循迹方向输出，而不是与普通 PID 输出叠加。
+ * 覆盖值最终会直接参与 `left_pwm = speed_pwm - steer_output` 和
+ * `right_pwm = speed_pwm + steer_output`，因此这里按 PID.steer 限幅再写回。
+ *
  * @param steer_output 指向方向环最终差速 PWM 修正量的指针，由调用方提供上下文。
  */
 void a_run_ring_update_steer_output(float *steer_output)
 {
-    if (ring_data.diff_set != 0)
+    float steer_output_value;
+
+    if (ring_data.steer_output_set != 0.0f)
     {
-        *steer_output = ring_data.diff_set;
+        steer_output_value = ring_data.steer_output_set;
+        if (steer_output_value > PID.steer.max_output)
+        {
+            steer_output_value = PID.steer.max_output;
+        }
+        else if (steer_output_value < -PID.steer.min_output)
+        {
+            steer_output_value = -PID.steer.min_output;
+        }
+        *steer_output = steer_output_value;
     }
 }
 
@@ -52,7 +68,7 @@ int8 a_run_ring_get_state(void)
 /**
  * @brief 复位环岛状态机和环岛输出覆盖量。
  *
- * 菜单关闭圆环或元素切换时清掉阶段、计时和目标角速度覆盖，避免残留控制量影响主控链路。
+ * 菜单关闭圆环或元素切换时清掉阶段、计时和方向输出覆盖，避免残留控制量影响主控链路。
  */
 void a_run_ring_reset(void)
 {
@@ -64,7 +80,7 @@ void a_run_ring_reset(void)
     ring_data.flast_l = 0;
     ring_data.flast_r = 0;
     ring_data.last_yaw = 0;
-    ring_data.diff_set = 0;
+    ring_data.steer_output_set = 0;
     ring_data.distance = 0;
     ring_data.encoder = 0;
     ring_data.gyro_flat = 0;
@@ -184,7 +200,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         break;
 
     case ring:
-        ring_data.diff_set = 0;
+        ring_data.steer_output_set = 0;
         ring_data.distance = 1;
         ring_data.yaw_delta_sum = 0;
 
@@ -200,10 +216,10 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         break;
 
     case pre_ring:
-        ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;
+        ring_data.steer_output_set = app.ring.pre_ring_steer_output * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz)
         {
-            ring_data.diff_set = 0;
+            ring_data.steer_output_set = 0;
             current_state = in_ring;
         }
         break;
@@ -216,10 +232,10 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         break;
 
     case pre_out_ring:
-        ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;
+        ring_data.steer_output_set = app.ring.pre_out_ring_steer_output * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_out_ring_Gyroz)
         {
-            ring_data.diff_set = 0;
+            ring_data.steer_output_set = 0;
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;
             timedestroy(&ring_data.out_ring_time);
@@ -234,7 +250,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
             ring_data.flast_l = 0;
             ring_data.flast_r = 0;
             ring_data.last_yaw = 0;
-            ring_data.diff_set = 0;
+            ring_data.steer_output_set = 0;
             ring_data.distance = 0;
             ring_data.encoder = 0;
             ring_data.gyro_flat = 0;

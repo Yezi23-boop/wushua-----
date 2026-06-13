@@ -108,13 +108,31 @@ def test_ring_state_is_split_and_directional():
     ring_source = _read(A_RUN_RING_C)
     ring_header = _read(A_RUN_RING_H)
     track_source = _read(A_RUN_TRACK_ELEMENT_C)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    menu_source = _read(MENU_C)
 
     assert "} RingStruct;" in ring_header
     assert "extern RingStruct ring_data;" in ring_header
     assert "RingStruct ring_data = {0};" in ring_source
     assert "uint8 a_run_ring_update_5ms(int8 ring_dir)" in ring_source
-    assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in ring_source
-    assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in ring_source
+    assert "float pre_ring_steer_output;" in eeprom_header
+    assert "float pre_out_ring_steer_output;" in eeprom_header
+    assert "pre_ring_Gyro_target" not in eeprom_header
+    assert "pre_out_ring_Gyro_target" not in eeprom_header
+    assert "pre_ring_Gyro_target" not in eeprom_source
+    assert "pre_out_ring_Gyro_target" not in eeprom_source
+    assert "ring_data.steer_output_set = app.ring.pre_ring_steer_output * ring_dir;" in ring_source
+    assert "ring_data.steer_output_set = app.ring.pre_out_ring_steer_output * ring_dir;" in ring_source
+    assert "ring_data.diff_set" not in ring_source
+    assert "steer_output_value = ring_data.steer_output_set;" in ring_source
+    assert "if (steer_output_value > PID.steer.max_output)" in ring_source
+    assert "else if (steer_output_value < -PID.steer.min_output)" in ring_source
+    assert "*steer_output = steer_output_value;" in ring_source
+    assert "pre_pwm" in menu_source
+    assert "out_pwm" in menu_source
+    assert "pre_r_T" not in menu_source
+    assert "pre_o_T" not in menu_source
     assert "#define RING_ENTRY_CONFIRM_COUNT 8u" in ring_source
     assert "#define RING_YAW_DT_SCALE 0.40f" in ring_source
     assert "ring_data.yaw_delta_sum += delta_angle * RING_YAW_DT_SCALE;" in ring_source
@@ -218,5 +236,5 @@ def test_track_mode_config_and_menu_reflect_current_debug_state():
     assert "a_run_wall_get_state()" in menu_source
     assert "ring_data.yaw_delta_sum" in menu_source
     assert "ring_data.encoder" in menu_source
-    assert "ring_data.diff_set" in menu_source
+    assert "ring_data.steer_output_set" in menu_source
     assert '"trk_mode"' not in menu_source

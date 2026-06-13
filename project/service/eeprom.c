@@ -57,12 +57,12 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 7.0;         /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 15.00f;    /* pre_ring固定目标角速度 */
-    config->ring.pre_ring_Gyroz = 20.00f;          /* pre_ring->in_ring累计转角阈值 */
-    config->ring.in_ring_Gyroz = 210.00f;          /* in_ring->pre_out_ring累计转角阈值150 */
-    config->ring.pre_out_ring_Gyro_target = 5.00f; /* pre_out_ring固定目标角速度 15*/
-    config->ring.pre_out_ring_Gyroz = 220.00f;     /* pre_out_ring->out_ring累计转角阈值160 */
+    config->ring.ring_entry_encoder = 7.0;          /* ring->pre_ring 编码器积分阈值。 */
+    config->ring.pre_ring_steer_output = 15.00f;    /* pre_ring 固定方向 PWM 差速修正量，沿用 EEPROM 槽位 17。 */
+    config->ring.pre_ring_Gyroz = 20.00f;           /* pre_ring->in_ring 累计转角阈值。 */
+    config->ring.in_ring_Gyroz = 210.00f;           /* in_ring->pre_out_ring 累计转角阈值。 */
+    config->ring.pre_out_ring_steer_output = 5.00f; /* pre_out_ring 固定方向 PWM 差速修正量，沿用 EEPROM 槽位 20。 */
+    config->ring.pre_out_ring_Gyroz = 220.00f;      /* pre_out_ring->out_ring 累计转角阈值。 */
 
     /* 飞坡策略默认参数 */
     config->fly.count_fly_speed = 23;  /* 飞坡慢速值 */
@@ -100,10 +100,10 @@ static void eeprom_read_config(AppConfig *config)
     config->angle.gyro_feedback_scale = read_float(28);
 
     config->ring.ring_entry_encoder = read_float(16);
-    config->ring.pre_ring_Gyro_target = read_float(17);
+    config->ring.pre_ring_steer_output = read_float(17);
     config->ring.pre_ring_Gyroz = read_float(18);
     config->ring.in_ring_Gyroz = read_float(19);
-    config->ring.pre_out_ring_Gyro_target = read_float(20);
+    config->ring.pre_out_ring_steer_output = read_float(20);
     config->ring.pre_out_ring_Gyroz = read_float(21);
 
     config->fly.count_fly_speed = (int)read_int(22);
@@ -147,10 +147,10 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->angle.gyro_feedback_scale, 28);
 
     save_float(config->ring.ring_entry_encoder, 16);
-    save_float(config->ring.pre_ring_Gyro_target, 17);
+    save_float(config->ring.pre_ring_steer_output, 17);
     save_float(config->ring.pre_ring_Gyroz, 18);
     save_float(config->ring.in_ring_Gyroz, 19);
-    save_float(config->ring.pre_out_ring_Gyro_target, 20);
+    save_float(config->ring.pre_out_ring_steer_output, 20);
     save_float(config->ring.pre_out_ring_Gyroz, 21);
 
     save_int(config->fly.count_fly_speed, 22);

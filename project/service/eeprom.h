@@ -53,10 +53,10 @@ typedef struct
 typedef struct
 {
     float ring_entry_encoder;       /**< ring阶段编码器积分阈值，达到后进入pre_ring */
-    float pre_ring_Gyro_target;     /**< pre_ring阶段固定目标角速度 */
+    float pre_ring_steer_output;    /**< pre_ring阶段固定方向PWM差速修正量，正值表示左轮减、右轮加。 */
     float pre_ring_Gyroz;           /**< pre_ring阶段累计转角阈值，达到后进入in_ring */
     float in_ring_Gyroz;            /**< in_ring阶段累计转角阈值，达到后进入pre_out_ring */
-    float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
+    float pre_out_ring_steer_output; /**< pre_out_ring阶段固定方向PWM差速修正量，正值表示左轮减、右轮加。 */
     float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入out_ring */
 } AppRingConfig;
 

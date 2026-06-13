@@ -12,7 +12,7 @@ typedef struct
     float encoder;        // 环岛阶段的里程累计量，用于出入环距离判定
     float yaw_delta_sum;  /**< 环岛阶段累计的 gyro_z 绝对角增量，单位为度。 */
     float last_yaw;       // 保留给历史 yaw 差值方案，当前 gyro_z 绝对积分不依赖该字段
-    float diff_set;       // 环岛阶段固定方向差速输出，非 0 时覆盖普通循迹方向输出
+    float steer_output_set; // 环岛阶段固定方向PWM差速修正量，非 0 时替代普通循迹方向输出
     int8 distance;        // 编码器累计使能：1-累计，0-停止累计
     uint32 time_r;        // 右环识别计时器
     uint32 time_l;        // 左环识别计时器
