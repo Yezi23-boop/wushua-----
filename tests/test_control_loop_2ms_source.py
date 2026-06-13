@@ -39,6 +39,9 @@ def test_conservative_default_control_parameters_for_2ms_loop():
     assert "pid_speed_init(&PID.left_speed, 120.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);" in int_user
     assert "pid_speed_init(&PID.right_speed, 120.0f, 10.0f, 0.0f, 9000.0f, 9000.0f);" in int_user
     assert "config->speed.kd_Err = 10.00f;" in eeprom
+    assert "config->speed.limiting_Err = 5000.00f;" in eeprom
+    assert "config->ring.pre_ring_steer_output = 2200.00f;" in eeprom
+    assert "config->ring.pre_out_ring_steer_output = 1800.00f;" in eeprom
     assert "config->angle.kd_Angle = 0.70f;" in eeprom
     assert "config->fly.count_fly_time_1 = 8;" in eeprom
     assert "config->fly.count_fly_time_2 = 75;" in eeprom

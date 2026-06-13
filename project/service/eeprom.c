@@ -44,7 +44,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->speed.kd_Err = 10.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 45.00f;     /* 默认基础速度 50 */
-    config->speed.limiting_Err = 600.00f; /* 转向限幅 */
+    config->speed.limiting_Err = 5000.00f; /* 双串方向 PWM 差速限幅，匹配速度环约 5000 的常态输出。 */
     config->speed.kp2_Err = 0.00f;
 
     /* 电感偏差解算默认参数 */
@@ -58,10 +58,10 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 圆环策略默认参数 */
     config->ring.ring_entry_encoder = 7.0;          /* ring->pre_ring 编码器积分阈值。 */
-    config->ring.pre_ring_steer_output = 15.00f;    /* pre_ring 固定方向 PWM 差速修正量，沿用 EEPROM 槽位 17。 */
+    config->ring.pre_ring_steer_output = 2200.00f;  /* pre_ring 固定方向 PWM 差速修正量，沿用 EEPROM 槽位 17。 */
     config->ring.pre_ring_Gyroz = 20.00f;           /* pre_ring->in_ring 累计转角阈值。 */
     config->ring.in_ring_Gyroz = 210.00f;           /* in_ring->pre_out_ring 累计转角阈值。 */
-    config->ring.pre_out_ring_steer_output = 5.00f; /* pre_out_ring 固定方向 PWM 差速修正量，沿用 EEPROM 槽位 20。 */
+    config->ring.pre_out_ring_steer_output = 1800.00f; /* pre_out_ring 固定方向 PWM 差速修正量，沿用 EEPROM 槽位 20。 */
     config->ring.pre_out_ring_Gyroz = 220.00f;      /* pre_out_ring->out_ring 累计转角阈值。 */
 
     /* 飞坡策略默认参数 */
