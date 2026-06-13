@@ -235,6 +235,10 @@ def test_track_mode_config_and_menu_reflect_current_debug_state():
     assert "config->start.track_mode = 0;" in eeprom_source
     assert "config->start.track_mode = (int16)read_int(" in eeprom_source
     assert "save_int(config->start.track_mode" in eeprom_source
+    assert "config->speed.kp_Err = 45.00f;" in eeprom_source
+    assert "config->speed.kd_Err = 160.00f;" in eeprom_source
+    assert "Menu_Process_Float_Value(&app.speed.kp_Err, 1.0f);" in menu_source
+    assert "Menu_Process_Float_Value(&app.speed.kd_Err, 10.0f);" in menu_source
 
     assert "a_run_track_element_get_expected_element()" in menu_source
     assert "a_run_ring_get_state()" in menu_source

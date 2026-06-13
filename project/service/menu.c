@@ -1282,11 +1282,11 @@ static void Menu_Speed_Process(void)
         break;
     case 21:
         Menu_Draw_Speed(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kp_Err, 0.01f);
+        Menu_Process_Float_Value(&app.speed.kp_Err, 1.0f);
         break;
     case 22:
         Menu_Draw_Speed(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kd_Err, 0.01f);
+        Menu_Process_Float_Value(&app.speed.kd_Err, 10.0f);
         break;
     case 23:
         Menu_Draw_Speed(3 * MENU_ROW_HEIGHT);
