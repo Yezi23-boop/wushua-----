@@ -57,6 +57,18 @@ void run_time_1(void)
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
     steer_output = PID.steer.output;
+    /*
+     * 最终 PWM 前向限幅：方向差速不得大于当前基础推力。
+     * 这样内侧轮最低降到 0，不反转，避免高速循迹时反拖、打滑和速度环互相打架。
+     */
+    if (steer_output > PID.left_speed.output)
+    {
+        steer_output = PID.left_speed.output;
+    }
+    else if (steer_output < -PID.right_speed.output)
+    {
+        steer_output = -PID.right_speed.output;
+    }
     left_pwm = PID.left_speed.output - steer_output;
     right_pwm = PID.right_speed.output + steer_output;
 

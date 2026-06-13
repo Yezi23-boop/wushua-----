@@ -62,6 +62,10 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "left_target = speed_active;" in run_time_1_body
     assert "right_target = speed_active;" in run_time_1_body
     assert "steer_output = PID.steer.output;" in run_time_1_body
+    assert "if (steer_output > PID.left_speed.output)" in run_time_1_body
+    assert "steer_output = PID.left_speed.output;" in run_time_1_body
+    assert "else if (steer_output < -PID.right_speed.output)" in run_time_1_body
+    assert "steer_output = -PID.right_speed.output;" in run_time_1_body
     assert "left_pwm = PID.left_speed.output - steer_output;" in run_time_1_body
     assert "right_pwm = PID.right_speed.output + steer_output;" in run_time_1_body
     assert "motor_output((int32)left_pwm, (int32)right_pwm);" in run_time_1_body
