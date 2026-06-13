@@ -38,7 +38,7 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc(); /* 圆环仍使用 gyro_z 积分判定阶段，主控不再做角速度内环。 */
-    if (steer_div_10 >= 3)
+    if (steer_div_10 >= 2)
     {
         /* 方向环直接生成最终差速 PWM 修正量，左轮减、右轮加为正方向。 */
         pid_steer_update(&PID.steer, Err, 0.0f);
@@ -50,28 +50,17 @@ void run_time_1(void)
      * 原因：跷跷板可能覆盖速度，圆环可能覆盖方向差速，必须压住普通循迹目标。
      */
     a_run_track_element_update_gate(&speed_active, &PID.steer.output);
-    left_target = speed_active;
-    right_target = speed_active;
+
 
     /* 左右速度环保持同一基础速度目标，方向环只在最终 PWM 层叠加差速。 */
-    pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
-    pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
+    pid_speed_update(&PID.left_speed, speed_active, PID.left_speed.speed);
+    pid_speed_update(&PID.right_speed, speed_active, PID.right_speed.speed);
     steer_output = PID.steer.output;
-    /*
-     * 最终 PWM 前向限幅：方向差速不得大于当前基础推力。
-     * 这样内侧轮最低降到 0，不反转，避免高速循迹时反拖、打滑和速度环互相打架。
-     */
-    if (steer_output > PID.left_speed.output)
-    {
-        steer_output = PID.left_speed.output;
-    }
-    else if (steer_output < -PID.right_speed.output)
-    {
-        steer_output = -PID.right_speed.output;
-    }
+
     left_pwm = PID.left_speed.output - steer_output;
     right_pwm = PID.right_speed.output + steer_output;
-
+    left_target = - steer_output;
+    right_target = + steer_output;
     /* 7. 仅在运行态时允许电机输出 */
     if (start_state == 2)
     {

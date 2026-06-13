@@ -23,7 +23,7 @@ void test_diff_func(void)
 
     time_test++;
     a_run_apply_iap_guard();
-    fuya_set_percent(30); /* 运行态全力负压，其他状态关闭负压 */
+ //   fuya_set_percent(30); /* 运行态全力负压，其他状态关闭负压 */
     diff_output = test_diff_value;
 
     /* 1. 刷新四元数中断已缓存的陀螺仪 Z 轴反馈量 */

@@ -41,9 +41,9 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 45.00f;  /* 双串方向差速比例项，输出量级为最终 PWM 修正量。 */
-    config->speed.kd_Err = 160.00f; /* 双串方向差速微分项，2ms 主环下抑制快速偏差变化。 */
+    config->speed.kd_Err = 80.00f; /* 双串方向差速微分项，2ms 主环下抑制快速偏差变化。 */
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 45.00f;     /* 默认基础速度 50 */
+    config->speed.speed_run = 25.00f;     /* 默认基础速度 50 */
     config->speed.limiting_Err = 5000.00f; /* 双串方向 PWM 差速限幅，匹配速度环约 5000 的常态输出。 */
     config->speed.kp2_Err = 0.00f;
 
