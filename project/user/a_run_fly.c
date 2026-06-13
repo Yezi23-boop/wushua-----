@@ -129,7 +129,8 @@ void a_run_fly_update_release_speed(float *speed)
 /**
  * @brief 飞坡/跷跷板本体速度修正。
  *
- * 根据四路电感特征推进飞坡状态机，并在高风险阶段覆盖速度和转向输出。入口检测
+ * 根据四路电感特征推进飞坡状态机，并在高风险阶段覆盖速度和 PWM 上限。方向环继续循迹，
+ * 避免弱磁/落地阶段完全丢掉电感纠偏能力。入口检测
  * 只在元素仲裁允许时开放；进入 COOLDOWN 后由 a_run_fly_update_release_speed()
  * 继续完成阶梯增速，避免元素切换打断释放过程。
  *
@@ -168,9 +169,8 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
         /* 触发成立的同一控制周期立即锁角，避免飞坡入口多放行一个主控制环周期。 */
 
     case FLY_STATE_HOLD:
-        /* 离地/弱磁期间冻结外环目标，避免 Err 瞬态失真把车头拉偏。 */
+        /* 离地/弱磁期间只降低速度和限制总 PWM，方向环继续循迹以保留落地纠偏能力。 */
         *speed = (float)app.fly.count_fly_speed;
-        PID.steer.output = 0.0f;
         fly_pwm_output_limit = FLY_PWM_LIMIT_HOLD;
 
         fly_state_count++;

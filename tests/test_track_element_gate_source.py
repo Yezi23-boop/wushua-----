@@ -164,6 +164,8 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     assert "float target_speed;" in fly_source
     assert "target_speed = app.speed.speed_run;" in fly_source
     assert "(int)app.speed.speed_run" not in fly_source
+    assert "PID.steer.output = 0.0f;" not in fly_source
+    assert "方向环继续循迹" in fly_source
     assert "volatile uint8 fly_lost_line_blocked = 0;" in fly_source
     assert "volatile int32 fly_pwm_output_limit = 0;" in fly_source
     assert "FLY_STATE_HOLD" in fly_source

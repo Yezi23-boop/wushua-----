@@ -10,7 +10,7 @@
 typedef enum
 {
     FLY_STATE_IDLE = 0,    /**< 普通巡线，允许在元素仲裁授权后检测跷跷板入口 */
-    FLY_STATE_HOLD = 1,    /**< 跷跷板保持，锁定速度和目标角速度 */
+    FLY_STATE_HOLD = 1,    /**< 跷跷板保持，降低速度并限制总 PWM，方向环继续循迹 */
     FLY_STATE_RECOVER = 2, /**< 落地恢复，弱磁未恢复前继续低速回线 */
     FLY_STATE_COOLDOWN = 3 /**< 回线后速度斜坡释放，避免下地后一拍提速 */
 } FlyState;
