@@ -29,14 +29,14 @@ RingStruct ring_data = {0};                   /**< 环岛过程数据，菜单�
 static uint8 ring_entry_count = 0;            /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
 
 /**
- * @brief 根据环岛状态更新角速度目标。
- * @param angle_target 指向目标角速度的指针，由调用方提供上下文。
+ * @brief 根据环岛状态覆盖方向差速输出。
+ * @param steer_output 指向方向环最终差速 PWM 修正量的指针，由调用方提供上下文。
  */
-void a_run_ring_update_angle_target(float *angle_target)
+void a_run_ring_update_steer_output(float *steer_output)
 {
     if (ring_data.diff_set != 0)
     {
-        *angle_target = ring_data.diff_set;
+        *steer_output = ring_data.diff_set;
     }
 }
 

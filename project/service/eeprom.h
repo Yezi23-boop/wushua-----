@@ -38,10 +38,10 @@ typedef struct
  */
 typedef struct
 {
-    float kp_Angle;            /**< 角速度内环比例系数 Kp（跟踪转向目标角速度） */
-    float kd_Angle;            /**< 角速度内环微分系数 Kd（抑制角速度过冲） */
-    float gyro_feedback_scale; /**< 角速度反馈缩放系数 N（匹配 gyro_z 与目标角速度量级） */
-    float limiting_Angle;      /**< 角速度内环输出限幅（差速目标限幅） */
+    float kp_Angle;            /**< 旧角速度内环比例系数，双串主链路暂不使用，保留 EEPROM 布局。 */
+    float kd_Angle;            /**< 旧角速度内环微分系数，双串主链路暂不使用，保留 EEPROM 布局。 */
+    float gyro_feedback_scale; /**< 旧角速度反馈缩放系数，双串主链路暂不使用，保留 EEPROM 布局。 */
+    float limiting_Angle;      /**< 旧角速度内环输出限幅，双串主链路暂不使用，保留 EEPROM 布局。 */
     float A_1;                 /**< 主亮度权重，用于横向主差分归一化 */
     float B_1;                 /**< 竖向差分权重，用于斜入/斜出姿态修正 */
     float C_l;                 /**< 分母补偿权重，用于弱信号时抑制偏差放大 */

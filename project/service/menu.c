@@ -585,7 +585,7 @@ static void Menu_Draw_Start(int edit_line)
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "elem_en");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "old_gyro");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "ELEM");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
@@ -623,9 +623,9 @@ static void Menu_Draw_Speed(int edit_line)
 static void Menu_Draw_Model(int edit_line)
 {
     ips114_show_string(8, 0, "<<MODEL");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "kp_Ang");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "kd_Ang");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "lim_Ang");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "old_kp");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "old_kd");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "old_lim");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "A_1");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "B_1");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "C_l");

@@ -31,6 +31,12 @@ void debug_vofa_service(void)
  */
 void printf_date(void)
 {
+    float left_pwm;
+    float right_pwm;
+
+    left_pwm = PID.left_speed.output - PID.steer.output;
+    right_pwm = PID.right_speed.output + PID.steer.output;
+
     /* 第一列：显示偏差与四路电感归一化值 */
     ips114_show_int32(1 * 24, 18 * 0, Err, 3);
     ips114_show_int32(1 * 24, 18 * 1, ad1, 3);
@@ -38,10 +44,10 @@ void printf_date(void)
     ips114_show_int32(1 * 24, 18 * 3, ad3, 3);
     ips114_show_int32(1 * 24, 18 * 4, ad4, 3);
 
-    /* 第三列：显示 PID 转向输出及左右目标速度 */
+    /* 第三列：显示方向差速输出及双串合成后的左右 PWM */
     ips114_show_float(3 * 24, 18 * 0, PID.steer.output, 3, 1);
-    ips114_show_float(3 * 24, 18 * 1, app.speed.speed_run + PID.steer.output, 3, 1);
-    ips114_show_float(3 * 24, 18 * 2, app.speed.speed_run - PID.steer.output, 3, 1);
+    ips114_show_float(3 * 24, 18 * 1, left_pwm, 3, 1);
+    ips114_show_float(3 * 24, 18 * 2, right_pwm, 3, 1);
 
     /* 第六列：显示实时电池电压 */
     ips114_show_int32(6 * 24, 18 * 1, (int32)dianya, 5);

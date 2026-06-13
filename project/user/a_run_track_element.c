@@ -142,9 +142,9 @@ static void track_element_reset_state(void)
  * 元素顺序由 `app.start.element_len` 和 `app.start.element_seq[]` 决定，0/不可执行槽位会跳过。
  *
  * @param speed 2ms 主控制链路当前目标速度，保留小数速度设定；跷跷板和完成后释放阶段可能覆盖该值。
- * @param angle_target 转向外环输出的目标角速度，圆环和跷跷板阶段可能覆盖该值。
+ * @param steer_output 方向环输出的最终差速 PWM 修正量，圆环阶段可能覆盖该值。
  */
-void a_run_track_element_update_gate(float *speed, float *angle_target)
+void a_run_track_element_update_gate(float *speed, float *steer_output)
 {
     if (app.start.element_enable != 1)
     {
@@ -202,5 +202,5 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
     }
 
     a_run_fly_update_release_speed(speed);
-    a_run_ring_update_angle_target(angle_target);
+    a_run_ring_update_steer_output(steer_output);
 }

@@ -48,10 +48,10 @@ static void eeprom_load_defaults(AppConfig *config)
     config->speed.kp2_Err = 0.00f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.kp_Angle = 0.85f; // 0.85
-    config->angle.kd_Angle = 0.70f; // 2ms 主环第一版保守微分
-    config->angle.gyro_feedback_scale = 1.00f;
-    config->angle.limiting_Angle = 43.00f; // 48
+    config->angle.kp_Angle = 0.85f;            /* 旧角速度内环参数，双串主链路暂不使用。 */
+    config->angle.kd_Angle = 0.70f;            /* 旧角速度内环参数，双串主链路暂不使用。 */
+    config->angle.gyro_feedback_scale = 1.00f; /* 旧角速度内环参数，双串主链路暂不使用。 */
+    config->angle.limiting_Angle = 43.00f;     /* 旧角速度内环参数，双串主链路暂不使用。 */
     config->angle.A_1 = 1.00f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
@@ -88,10 +88,10 @@ static void eeprom_read_config(AppConfig *config)
     config->speed.limiting_Err = read_float(9);
     config->speed.gyro_damp_Err = read_float(10);
 
-    /* 槽位 3 复用为角速度内环限幅，保留原 EEPROM 布局。 */
+    /* 槽位 3 为旧角速度内环限幅，双串主链路暂不使用，保留原 EEPROM 布局。 */
     config->angle.limiting_Angle = read_float(3);
 
-    /* 11/12 映射为角速度内环参数，保留原 EEPROM 布局以兼容旧数据 */
+    /* 11/12 映射为旧角速度内环参数，双串主链路暂不使用，保留原 EEPROM 布局以兼容旧数据。 */
     config->angle.kp_Angle = read_float(11);
     config->angle.kd_Angle = read_float(12);
     config->angle.B_1 = read_float(13);

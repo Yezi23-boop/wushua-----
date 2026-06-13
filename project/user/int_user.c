@@ -85,7 +85,7 @@ static void control_init(void)
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-    /* 角速度内环控制器独立实例，避免与外环共享状态 */
+    /* 旧角速度内环实例保留用于参数兼容，双串主链路不再调用。 */
     pid_steer_init(&PID.angle, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
     /* 同步 EEPROM 参数 */
@@ -118,7 +118,7 @@ void control_apply_config(void)
     PID.steer.max_output = app.speed.limiting_Err;
     PID.steer.min_output = app.speed.limiting_Err;
 
-    /* 2. 同步角速度内环，直接使用独立限幅参数 */
+    /* 2. 保留旧角速度内环参数同步，避免 EEPROM 布局和菜单旧项失效。 */
     angle_limit = app.angle.limiting_Angle;
 
     PID.angle.Kp = app.angle.kp_Angle;

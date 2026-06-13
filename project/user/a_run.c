@@ -3,7 +3,7 @@
  * @brief 主控制任务调度与执行入口
  * @details
  * 本文件承接定时中断任务链，将“采样-解算-控制输出”组织为固定周期流程：
- * - run_time_1(): 高频控制环，负责电感/转向差速/速度闭环与电机输出
+ * - run_time_1(): 高频控制环，负责电感/方向差速/双速度闭环与电机输出
  * - run_time_2(): 低频状态环，负责保护检测、状态机与软定时器
  * - run_time_3(): 差速实验链路，用于算法验证
  *
@@ -22,45 +22,48 @@ static float speed_active = 0.0f;   /* 当前参与速度环计算的目标速�
 
 /**
  * @brief 主控制核心任务 (运行于 TM0 2ms 中断)
- * @details 串行执行传感器采集 -> 姿态获取 -> 转向偏差融合 -> 速度设定 -> 电机执行链路。
+ * @details 串行执行传感器采集 -> 姿态获取 -> 方向差速 -> 双速度闭环 -> 电机执行链路。
  * 必须始终保证函数总体耗时远小于 2ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
  * 任何超时都会导致电机脱管、失控。
  */
 void run_time_1(void)
 {
-    float diff_output;
+    float steer_output;
+    float left_pwm;
+    float right_pwm;
     int8 start_state;
     steer_div_10++;
     a_run_apply_iap_guard();
     start_state = a_run_mode_get_start_state();
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
-    imu_update_gyro_z_from_imu660rc();
+    imu_update_gyro_z_from_imu660rc(); /* 圆环仍使用 gyro_z 积分判定阶段，主控不再做角速度内环。 */
     if (steer_div_10 >= 3)
     {
-        /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
+        /* 方向环直接生成最终差速 PWM 修正量，左轮减、右轮加为正方向。 */
         pid_steer_update(&PID.steer, Err, 0.0f);
         steer_div_10 = 0;
     }
     speed_active = app.speed.speed_run;
     /*
      * 元素仲裁跟随 2ms 采样链路，并放在转向外环之后执行。
-     * 原因：跷跷板和圆环都可能覆盖 PID.steer.output，必须压住普通循迹目标。
+     * 原因：跷跷板可能覆盖速度，圆环可能覆盖方向差速，必须压住普通循迹目标。
      */
     a_run_track_element_update_gate(&speed_active, &PID.steer.output);
-    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
-    diff_output = PID.angle.output;
-    left_target = speed_active - diff_output;
-    right_target = speed_active + diff_output;
+    left_target = speed_active;
+    right_target = speed_active;
 
-    /* 速度环保持高频更新，保证电机执行链路带宽 */
+    /* 左右速度环保持同一基础速度目标，方向环只在最终 PWM 层叠加差速。 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
+    steer_output = PID.steer.output;
+    left_pwm = PID.left_speed.output - steer_output;
+    right_pwm = PID.right_speed.output + steer_output;
 
     /* 7. 仅在运行态时允许电机输出 */
     if (start_state == 2)
     {
-        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
+        motor_output((int32)left_pwm, (int32)right_pwm);
     }
     else
     {

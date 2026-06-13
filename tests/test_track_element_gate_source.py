@@ -40,7 +40,7 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     runner = _read(A_RUN_C)
 
     assert "void a_run_mode_update_track_element_gate" not in mode_header
-    assert "void a_run_track_element_update_gate(float *speed, float *angle_target);" in track_header
+    assert "void a_run_track_element_update_gate(float *speed, float *steer_output);" in track_header
     assert "int8 a_run_track_element_get_expected_element(void);" in track_header
     assert "static enum TrackElement expected_element = ELEMENT_NONE;" in track_source
 
@@ -57,7 +57,14 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "static int speed_active" not in runner
     assert "speed_active = app.speed.speed_run;" in run_time_1_body
     assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" in run_time_1_body
-    assert "pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);" in run_time_1_body
+    assert "pid_angle_update(" not in run_time_1_body
+    assert "PID.angle.output" not in run_time_1_body
+    assert "left_target = speed_active;" in run_time_1_body
+    assert "right_target = speed_active;" in run_time_1_body
+    assert "steer_output = PID.steer.output;" in run_time_1_body
+    assert "left_pwm = PID.left_speed.output - steer_output;" in run_time_1_body
+    assert "right_pwm = PID.right_speed.output + steer_output;" in run_time_1_body
+    assert "motor_output((int32)left_pwm, (int32)right_pwm);" in run_time_1_body
     assert run_time_1_body.index("pid_steer_update(&PID.steer, Err, 0.0f);") < run_time_1_body.index(
         "a_run_track_element_update_gate(&speed_active, &PID.steer.output);"
     )
@@ -94,7 +101,7 @@ def test_track_element_sequence_supports_current_executable_elements():
     assert "a_run_fly_update_speed(speed, 1)" in source
     assert "a_run_wall_update_5ms()" in source
     assert "a_run_fly_update_release_speed(speed);" in source
-    assert "a_run_ring_update_angle_target(angle_target);" in source
+    assert "a_run_ring_update_steer_output(steer_output);" in source
 
 
 def test_ring_state_is_split_and_directional():

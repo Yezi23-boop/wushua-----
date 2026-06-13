@@ -53,6 +53,10 @@ def test_steer_encoder_and_ring_scaling_match_2ms_loop():
 
     assert "if (steer_div_10 >= 3)" in run_time_1_body
     assert "if (steer_div_10 >= 2)" not in run_time_1_body
+    assert "pid_angle_update(" not in run_time_1_body
+    assert "left_pwm = PID.left_speed.output - steer_output;" in run_time_1_body
+    assert "right_pwm = PID.right_speed.output + steer_output;" in run_time_1_body
+    assert "motor_output((int32)left_pwm, (int32)right_pwm);" in run_time_1_body
     assert "speed_r = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;" in pid
     assert "speed_l = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;" in pid
     assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);" in pid

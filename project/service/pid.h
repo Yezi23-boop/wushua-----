@@ -46,8 +46,8 @@ typedef struct
 {
     PID_Speed left_speed;  /**< 左轮速度环控制器 */
     PID_Speed right_speed; /**< 右轮速度环控制器 */
-    PID_Steer steer;       /**< 转向差速控制器（基于电感偏差） */
-    PID_Steer angle;       /**< 角速度内环控制器（跟踪转向目标角速度） */
+    PID_Steer steer;       /**< 方向差速控制器（基于电感偏差，输出直接叠加到左右 PWM） */
+    PID_Steer angle;       /**< 旧角速度内环控制器，双串主链路暂不调用，保留参数兼容。 */
 } PID_Controllers;
 
 /* --- 函数声明 --- */
@@ -83,7 +83,7 @@ void pid_speed_update(PID_Speed *pid, float target, float actual);
 void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback);
 
 /**
- * @brief 更新角速度内环 PID 计算（位置式）
+ * @brief 更新旧角速度内环 PID 计算（位置式）
  * @param pid PID 结构指针
  * @param error 目标角速度
  * @param gyro 当前角速度反馈
