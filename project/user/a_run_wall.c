@@ -5,9 +5,13 @@
 #include "zf_common_headfile.h"
 #include "a_run_wall.h"
 
-#define WALL_AD_SIDE_THRESHOLD 35 /* 墙面横向有效阈值，ad1/ad4 同时超过才允许推进墙面波形。 */
-#define WALL_AD_HIGH_THRESHOLD 55 /* 墙面纵向高值阈值，ad2/ad3 任一路超过该值认为到达上墙峰值。 */
+#define WALL_AD_SIDE_THRESHOLD 30 /* 墙面横向有效阈值，ad1/ad4 同时超过才允许推进墙面波形。 */
+#define WALL_AD_HIGH_THRESHOLD 50 /* 墙面纵向高值阈值，ad2/ad3 任一路超过该值认为到达上墙峰值。 */
 #define WALL_TIMING_COUNT 500u    /* 墙面强信号确认后的下墙计时，2ms * 500 = 1000ms。 */
+
+/* --- 墙面降速参数 --- */
+#define WALL_SLOW_SPEED 50   /* 墙面降速目标值，低速给负压留出吸合时间。 */
+#define WALL_SLOW_TIME 150u  /* 降速持续时间，2ms * 200 = 400ms。 */
 
 enum WallStep
 {
@@ -18,6 +22,7 @@ enum WallStep
 
 static enum WallStep wall_state = WALL_IDLE; /**< 墙面状态机阶段，圆桶/跷跷板完成后由 2ms 主环推进。 */
 static uint16 wall_timer_count = 0;          /**< 墙面完整波形确认后的下墙计时，单位：2ms。 */
+static uint16 wall_slow_count = 0;           /**< 降速阶段计时，单位：2ms。 */
 
 /**
  * @brief 读取当前墙面状态机阶段。
@@ -37,13 +42,19 @@ void a_run_wall_reset(void)
 {
     wall_state = WALL_IDLE;
     wall_timer_count = 0;
+    wall_slow_count = 0;
 }
 
 /**
  * @brief 更新墙面识别/下墙计时状态机。
+ *
+ * TIMING 前段覆盖速度为 WALL_SLOW_SPEED 并限制 PWM，让负压有时间安稳吸住车身；
+ * 后段恢复正常控制，继续计时到 WALL_TIMING_COUNT 后完成。
+ *
+ * @param speed 输出目标速度指针；TIMING 前段会被降速值覆盖。
  * @return uint8 1-墙面流程完成，可重新开放下一元素；0-仍在墙面流程中。
  */
-uint8 a_run_wall_update_5ms(void)
+uint8 a_run_wall_update_5ms(float *speed)
 {
     uint8 side_valid = 0;
     uint8 high_valid = 0;
@@ -66,6 +77,7 @@ uint8 a_run_wall_update_5ms(void)
     case WALL_WAIT_SIGNAL:
         if (side_valid != 0 && high_valid != 0)
         {
+//					stop=1;
             wall_timer_count = 0;
             wall_state = WALL_TIMING;
         }
@@ -73,8 +85,14 @@ uint8 a_run_wall_update_5ms(void)
 
     case WALL_TIMING:
         wall_timer_count++;
+        if (wall_slow_count < WALL_SLOW_TIME)
+        {
+            wall_slow_count++;
+            *speed = (float)WALL_SLOW_SPEED;
+        }
         if (wall_timer_count >= WALL_TIMING_COUNT)
         {
+	//						stop=1;
             a_run_wall_reset();
             return 1;
         }

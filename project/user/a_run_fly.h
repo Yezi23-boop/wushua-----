@@ -10,10 +10,25 @@
 typedef enum
 {
     FLY_STATE_IDLE = 0,    /**< 普通巡线，允许在元素仲裁授权后检测跷跷板入口 */
-    FLY_STATE_HOLD = 1,    /**< 跷跷板保持，锁定速度和目标角速度 */
+    FLY_STATE_HOLD = 1,    /**< 跷跷板保持低速通过，转向继续循迹 */
     FLY_STATE_RECOVER = 2, /**< 落地恢复，弱磁未恢复前继续低速回线 */
     FLY_STATE_COOLDOWN = 3 /**< 回线后速度斜坡释放，避免下地后一拍提速 */
 } FlyState;
+
+/**
+ * @brief 跷跷板停止等待控制阶段。
+ * @details seesaw_state 使用该枚举值保存当前阶段。
+ */
+typedef enum
+{
+    SEESAW_IDLE = 0,      /**< 等待入口检测 */
+    SEESAW_STOP = 1,      /**< 停车，目标速度为 0 */
+    SEESAW_BRAKE = 2,     /**< 短反拖刹车，抵消上板惯性 */
+    SEESAW_WAIT = 3,      /**< 等待跷跷板倾斜 */
+    SEESAW_CHECK = 4,     /**< 检查电感信号恢复 */
+    SEESAW_RECOVER = 5,   /**< 阶梯增速恢复 */
+    SEESAW_COOLDOWN = 6   /**< 复用飞坡 COOLDOWN */
+} SeesawState;
 
 /**
  * @brief 更新飞坡/跷跷板本体速度覆盖状态机。
@@ -49,7 +64,24 @@ uint8 a_run_fly_take_finish_event(void);
  */
 void a_run_fly_reset(void);
 
+/**
+ * @brief 更新跷跷板停止等待模式速度状态机。
+ *
+ * 检测到跷跷板后停车等待 1 秒，利用重力让跷跷板倾斜，
+ * 电感信号恢复后出发，阶梯增速恢复到巡线速度。
+ *
+ * @param speed 输出目标速度指针。
+ * @param allow_entry 1-当前期望元素为跷跷板，允许从空闲态检测入口；0-禁止新入口。
+ */
+void a_run_seesaw_update_speed(float *speed, uint8 allow_entry);
+
+/**
+ * @brief 复位跷跷板停止等待状态机。
+ */
+void a_run_seesaw_reset(void);
+
 extern volatile uint8 fly_lost_line_blocked; /**< 飞坡状态机写、丢线保护读；1 表示临时屏蔽丢线，0 表示恢复丢线保护。 */
 extern volatile int32 fly_pwm_output_limit; /**< 飞坡 HOLD/RECOVER/COOLDOWN 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
+extern volatile int32 seesaw_brake_pwm; /**< 停止等待模式短反拖刹车 PWM；大于 0 时主控直接输出反向 PWM。 */
 
 #endif /* __A_RUN_FLY_H__ */

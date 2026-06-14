@@ -10,8 +10,8 @@
 #define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 80 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
 #define CYLINDER_TOP_WINDOW_COUNT 250u         /* 圆桶命中统计窗口，2ms * 250 = 500ms。 */
 #define CYLINDER_TOP_HIT_COUNT 8               /* 500ms 窗口内强信号达到该次数才认定进入圆桶段。 */
-#define CYLINDER_GROUND_CONFIRM_COUNT 8u       /* 2ms * 8 = 16ms，强信号消失后连续确认回地。 */
-#define CYLINDER_STABLE_DELAY_COUNT 250u       /* 2ms * 250 = 500ms，回地稳定后切入下一元素。 */
+#define CYLINDER_GROUND_CONFIRM_COUNT 25       /* 2ms * 8 = 16ms，强信号消失后连续确认回地。 */
+#define CYLINDER_STABLE_DELAY_COUNT 100u       /* 2ms * 250 = 500ms，回地稳定后切入下一元素。 */
 
 enum CylinderStep
 {
@@ -125,6 +125,7 @@ uint8 a_run_cylinder_update_5ms(void)
         cylinder_stable_count++;
         if (cylinder_stable_count >= CYLINDER_STABLE_DELAY_COUNT)
         {
+//					stop=1;
             cylinder_stable_count = 0;
             cylinder_state = CYL_IDLE;
             return 1;

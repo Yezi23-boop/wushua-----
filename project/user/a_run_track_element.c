@@ -71,7 +71,14 @@ static void track_element_enter(enum TrackElement element)
      */
     if (element == ELEMENT_NONE || flat_fly != FLY_STATE_COOLDOWN)
     {
-        a_run_fly_reset();
+        if (app.fly.seesaw_mode == 0)
+        {
+            a_run_fly_reset();
+        }
+        else
+        {
+            a_run_seesaw_reset();
+        }
     }
 
     expected_element = element;
@@ -182,7 +189,16 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         break;
 
     case ELEMENT_SEESAW:
-        a_run_fly_update_speed(speed, 1);
+        if (app.fly.seesaw_mode == 0)
+        {
+            /* 飞坡模式 */
+            a_run_fly_update_speed(speed, 1);
+        }
+        else
+        {
+            /* 停止等待模式 */
+            a_run_seesaw_update_speed(speed, 1);
+        }
         if (a_run_fly_take_finish_event() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
@@ -190,14 +206,14 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         break;
 
     case ELEMENT_WALL:
-        if (a_run_wall_update_5ms() != 0)
+        if (a_run_wall_update_5ms(speed) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
     default:
-        // 当前处于 ELEMENT_NONE 或未知状态，不执行任何元素逻辑
+        /* 当前处于 ELEMENT_NONE 或未知状态，不执行任何元素逻辑 */
         break;
     }
 

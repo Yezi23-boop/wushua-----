@@ -264,7 +264,7 @@
             <uUch>0</uUch>
             <uFlt64>0</uFlt64>
             <Fuzzy>3</Fuzzy>
-            <Optim>0</Optim>
+            <Optim>1</Optim>
             <wLevel>3</wLevel>
             <SizSpd>0</SizSpd>
             <AcaOpt>0</AcaOpt>
@@ -640,24 +640,14 @@
               <FilePath>..\user\a_run_track_element.c</FilePath>
             </File>
             <File>
-              <FileName>a_run_ring.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\a_run_ring.c</FilePath>
-            </File>
-            <File>
-              <FileName>a_run_cylinder.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\a_run_cylinder.c</FilePath>
-            </File>
-            <File>
-              <FileName>a_run_wall.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\user\a_run_wall.c</FilePath>
-            </File>
-            <File>
               <FileName>a_run_track_element.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\a_run_track_element.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_ring.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_ring.c</FilePath>
             </File>
             <File>
               <FileName>a_run_ring.h</FileName>
@@ -665,9 +655,19 @@
               <FilePath>..\user\a_run_ring.h</FilePath>
             </File>
             <File>
+              <FileName>a_run_cylinder.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_cylinder.c</FilePath>
+            </File>
+            <File>
               <FileName>a_run_cylinder.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\a_run_cylinder.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_wall.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_wall.c</FilePath>
             </File>
             <File>
               <FileName>a_run_wall.h</FileName>

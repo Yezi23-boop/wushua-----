@@ -63,7 +63,7 @@ static const int menu_have_sub[] = {
     3, 31, 32, 33, 34, 35, 36,
     4,
     5, 51, 52, 53, 54, 55, 56,
-    6, 61, 62, 63,
+    6, 61, 62, 63, 64, 65, 66, 67,
     160, 1601, 1602, 1603, 1604, 1605, 1606};
 
 static void Menu_Clear_Pending_Key_Events(void);
@@ -232,7 +232,7 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 5:
         return 6 * MENU_ROW_HEIGHT;
     case 6:
-        return 3 * MENU_ROW_HEIGHT;
+        return 7 * MENU_ROW_HEIGHT;
     case 7:
         return 6 * MENU_ROW_HEIGHT;
     default:
@@ -426,7 +426,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         break;
     case 61:
         Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
@@ -436,6 +436,18 @@ static void Menu_Render_Current_Page(void)
         break;
     case 63:
         Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
+        break;
+    case 64:
+        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
+        break;
+    case 65:
+        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
+        break;
+    case 66:
+        Menu_Draw_Fly(6 * MENU_ROW_HEIGHT);
+        break;
+    case 67:
+        Menu_Draw_Fly(7 * MENU_ROW_HEIGHT);
         break;
     case 160:
         Menu_Draw_Element(0);
@@ -825,11 +837,19 @@ static void Menu_Draw_Fly(int edit_line)
     ips114_show_string(8, 0, "<<FLY");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_time_1");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fly_time_2");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "hit_count");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "seesaw_mode");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "seesaw_wait");
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "recover_spd");
+    ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "release_stp");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.count_fly_speed, 4);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.count_fly_time_1, 4);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
+    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);
+    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
+    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.fly.recover_speed, 4);
+    ips114_show_float(112, 7 * MENU_ROW_HEIGHT, app.fly.release_step, 4, 2);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -1502,11 +1522,11 @@ static void Menu_Fly_Process(void)
     {
     case 6:
         Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(3 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(7 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -1521,6 +1541,22 @@ static void Menu_Fly_Process(void)
     case 63:
         Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.count_fly_time_2, 1);
+        break;
+    case 64:
+        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
+        Menu_Process_Special_Value(&app.fly.seesaw_mode);
+        break;
+    case 65:
+        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
+        break;
+    case 66:
+        Menu_Draw_Fly(6 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.fly.recover_speed, 1);
+        break;
+    case 67:
+        Menu_Draw_Fly(7 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.fly.release_step, 0.01f);
         break;
     default:
         break;
@@ -1582,6 +1618,10 @@ void Keystroke_Menu(void)
     case 61:
     case 62:
     case 63:
+    case 64:
+    case 65:
+    case 66:
+    case 67:
         Menu_Fly_Process();
         break;
     case 160:
