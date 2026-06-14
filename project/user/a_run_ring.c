@@ -200,6 +200,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         break;
 
     case pre_ring:
+			stop=1;
         ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz)
         {
@@ -255,7 +256,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
 /**
  * @brief 更新环岛判定所需的里程与转角量。
  *
- * `encoder` 继续按速度估计累计里程；`yaw_delta_sum` 使用 `gyro_z` 的绝对值积分。
+ * `encoder` 按左右轮平均速度和现场标定系数累计里程；`yaw_delta_sum` 使用 `gyro_z` 的绝对值积分。
  */
 void a_run_ring_update_integrals(void)
 {
@@ -274,6 +275,6 @@ void a_run_ring_update_integrals(void)
 
     if (ring_data.distance == 1)
     {
-        ring_data.encoder += (speed_l + speed_r) * 0.002;
+        ring_data.encoder += (speed_l + speed_r) * 0.5f * 0.012f;
     }
 }

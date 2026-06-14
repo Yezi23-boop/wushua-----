@@ -20,6 +20,9 @@
 #define ADC_CYLINDER_A_1 1.00f /* 圆桶流程专用横向主差分权重，仅在当前期望元素为圆桶时参与 Err 解算。 */
 #define ADC_CYLINDER_B_1 1.00f /* 圆桶流程专用竖向差分权重，用于减弱圆桶强磁段的斜入/斜出修正。 */
 #define ADC_CYLINDER_C_L 0.80f /* 圆桶流程专用分母补偿权重，用于强磁变化时抑制偏差放大。 */
+#define ADC_SEESAW_CENTER_A_1 1.00f /* 跷跷板前挪/恢复期横向主差分权重，强调左右主电感居中。 */
+#define ADC_SEESAW_CENTER_B_1 0.30f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
+#define ADC_SEESAW_CENTER_C_L 1.00f /* 跷跷板前挪/恢复期弱信号分母补偿，抑制偏差突变。 */
 
 /* 内部中间变量 */
 static uint16 AD_value[NUM][SORT_LENGTH] = {{0}}; /* 滤波缓冲区 */
@@ -79,6 +82,16 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
         a_value = ADC_CYLINDER_A_1;
         b_value = ADC_CYLINDER_B_1;
         c_value = ADC_CYLINDER_C_L;
+    }
+    if (seesaw_centering_active != 0)
+    {
+        /*
+         * 跷跷板前挪和落地恢复只临时改变本次解算权重，避免污染菜单中的全局 ABC。
+         * 该阶段优先贴主横向中线，降低刚起步时竖向差分把车带向旁线的风险。
+         */
+        a_value = ADC_SEESAW_CENTER_A_1;
+        b_value = ADC_SEESAW_CENTER_B_1;
+        c_value = ADC_SEESAW_CENTER_C_L;
     }
 
     /* 1) 先计算竖向差分，供分母修正项复用 */

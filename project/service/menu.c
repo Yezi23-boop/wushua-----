@@ -836,7 +836,7 @@ static void Menu_Draw_Fly(int edit_line)
 {
     ips114_show_string(8, 0, "<<FLY");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_time_1");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "creep_cm");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "hit_count");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "seesaw_mode");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "seesaw_wait");
@@ -844,7 +844,7 @@ static void Menu_Draw_Fly(int edit_line)
     ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "release_stp");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.count_fly_speed, 4);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.count_fly_time_1, 4);
+    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
     ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);
     ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
@@ -1536,7 +1536,7 @@ static void Menu_Fly_Process(void)
         break;
     case 62:
         Menu_Draw_Fly(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_time_1, 1);
+        Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
         break;
     case 63:
         Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
