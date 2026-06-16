@@ -7,11 +7,6 @@
 
 #define WALL_AD_SIDE_THRESHOLD 30 /* 墙面横向有效阈值，ad1/ad4 同时超过才允许推进墙面波形。 */
 #define WALL_AD_HIGH_THRESHOLD 50 /* 墙面纵向高值阈值，ad2/ad3 任一路超过该值认为到达上墙峰值。 */
-#define WALL_TIMING_COUNT 500u    /* 墙面强信号确认后的下墙计时，2ms * 500 = 1000ms。 */
-
-/* --- 墙面降速参数 --- */
-#define WALL_SLOW_SPEED 50   /* 墙面降速目标值，低速给负压留出吸合时间。 */
-#define WALL_SLOW_TIME 150u  /* 降速持续时间，2ms * 200 = 400ms。 */
 
 enum WallStep
 {
@@ -48,8 +43,8 @@ void a_run_wall_reset(void)
 /**
  * @brief 更新墙面识别/下墙计时状态机。
  *
- * TIMING 前段覆盖速度为 WALL_SLOW_SPEED 并限制 PWM，让负压有时间安稳吸住车身；
- * 后段恢复正常控制，继续计时到 WALL_TIMING_COUNT 后完成。
+ * TIMING 前段按 app.wall.slow_speed 降速，让负压有时间安稳吸住车身；
+ * 后段恢复正常控制，继续计时到 app.wall.timing_count 后完成。
  *
  * @param speed 输出目标速度指针；TIMING 前段会被降速值覆盖。
  * @return uint8 1-墙面流程完成，可重新开放下一元素；0-仍在墙面流程中。
@@ -58,6 +53,26 @@ uint8 a_run_wall_update_5ms(float *speed)
 {
     uint8 side_valid = 0;
     uint8 high_valid = 0;
+    int slow_speed;
+    int slow_time;
+    int timing_count;
+
+    slow_speed = app.wall.slow_speed;
+    slow_time = app.wall.slow_time;
+    timing_count = app.wall.timing_count;
+
+    if (slow_speed < 0)
+    {
+        slow_speed = 0;
+    }
+    if (slow_time < 0)
+    {
+        slow_time = 0;
+    }
+    if (timing_count < 1)
+    {
+        timing_count = 1;
+    }
 
     if (ad1 > WALL_AD_SIDE_THRESHOLD && ad4 > WALL_AD_SIDE_THRESHOLD)
     {
@@ -85,12 +100,12 @@ uint8 a_run_wall_update_5ms(float *speed)
 
     case WALL_TIMING:
         wall_timer_count++;
-        if (wall_slow_count < WALL_SLOW_TIME)
+        if (wall_slow_count < (uint16)slow_time)
         {
             wall_slow_count++;
-            *speed = (float)WALL_SLOW_SPEED;
+            *speed = (float)slow_speed;
         }
-        if (wall_timer_count >= WALL_TIMING_COUNT)
+        if (wall_timer_count >= (uint16)timing_count)
         {
 	//						stop=1;
             a_run_wall_reset();
