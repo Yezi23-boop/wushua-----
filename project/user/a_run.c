@@ -37,7 +37,18 @@ void run_time_1(void)
     imu_update_gyro_z_from_imu660rc();
     if (steer_div_10 >= 3)
     {
-        /* 串级结构：外环先根据电感偏差生成目标角速度，内环再用 gyro 反馈闭环 */
+        /* 圆桶期临时放大/收敛方向差速响应，退出后恢复普通循迹方向环参数。 */
+        if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_CYLINDER)
+        {
+            PID.steer.Kp = app.cylinder.kp_Err;
+            PID.steer.Kd = app.cylinder.kd_Err;
+        }
+        else
+        {
+            PID.steer.Kp = app.speed.kp_Err;
+            PID.steer.Kd = app.speed.kd_Err;
+        }
+        /* 方向外环根据电感偏差生成差速目标，后续再结合 gyro 阻尼输出最终差速。 */
         pid_steer_update(&PID.steer, Err, 0.0f);
         steer_div_10 = 0;
     }
