@@ -5,7 +5,6 @@
 #include "zf_common_headfile.h"
 #include "a_run_cylinder.h"
 
-#define CYLINDER_AD_BOTH_HIGH_THRESHOLD 60     /* 圆桶双路强信号阈值：ad1/ad4 同时超过该值算一次命中。 */
 #define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 80   /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
 #define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 80 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
 #define CYLINDER_TOP_WINDOW_COUNT 250u         /* 圆桶命中统计窗口，2ms * 250 = 500ms。 */
@@ -57,10 +56,17 @@ void a_run_cylinder_reset(void)
 uint8 a_run_cylinder_update_5ms(void)
 {
     uint8 cylinder_ad_high;
+    int both_high_threshold;
 
     cylinder_ad_high = 0;
-    if ((ad1 > CYLINDER_AD_BOTH_HIGH_THRESHOLD &&
-         ad4 > CYLINDER_AD_BOTH_HIGH_THRESHOLD) ||
+    both_high_threshold = app.cylinder.ad_both_high_threshold;
+    if (both_high_threshold < 0)
+    {
+        both_high_threshold = 0;
+    }
+
+    if ((ad1 > (uint16)both_high_threshold &&
+         ad4 > (uint16)both_high_threshold) ||
         ad1 > CYLINDER_AD_SINGLE_HIGH_THRESHOLD ||
         ad4 > CYLINDER_AD_SINGLE_HIGH_THRESHOLD ||
         ad2 > CYLINDER_AD_VERTICAL_HIGH_THRESHOLD ||
