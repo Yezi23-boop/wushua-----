@@ -76,20 +76,46 @@ typedef struct
 } AppFlyConfig;
 
 /**
+ * @brief 圆桶元素识别与控制相关配置
+ */
+typedef struct
+{
+    float encoder_target;       /**< 圆桶编码器积分阈值，后续切换到里程退出时使用。 */
+    int ad_both_high_threshold; /**< 圆桶双路强信号阈值，后续替代固定宏调参。 */
+    float adc_a_1;              /**< 圆桶专用横向主差分权重。 */
+    float adc_b_1;              /**< 圆桶专用竖向差分权重。 */
+    float adc_c_l;              /**< 圆桶专用分母补偿权重。 */
+    float kp_Err;               /**< 圆桶专用方向环比例系数，后续运行期切换 PID 时使用。 */
+    float kd_Err;               /**< 圆桶专用方向环微分系数，后续运行期切换 PID 时使用。 */
+} AppCylinderConfig;
+
+/**
+ * @brief 墙面元素控制配置
+ */
+typedef struct
+{
+    int slow_speed;   /**< 墙面阶段降速目标值。 */
+    int slow_time;    /**< 墙面阶段降速持续时间，单位为 2ms 主控制周期。 */
+    int timing_count; /**< 墙面阶段下墙计时，单位为 2ms 主控制周期。 */
+} AppWallConfig;
+
+/**
  * @brief 应用程序全局配置聚合结构体
  * @details 包含所有子模块的配置参数，整个结构体会被保存到 EEPROM
  */
 typedef struct
 {
-    AppStartConfig start; /**< 启动与基础配置 */
-    AppSpeedConfig speed; /**< 速度与转向 PID 配置 */
-    AppAngleConfig angle; /**< 电感偏差解算配置 */
-    AppRingConfig ring;   /**< 圆环处理策略配置 */
-    AppFlyConfig fly;     /**< 飞坡处理策略配置 */
+    AppStartConfig start;       /**< 启动与基础配置 */
+    AppSpeedConfig speed;       /**< 速度与转向 PID 配置 */
+    AppAngleConfig angle;       /**< 电感偏差解算配置 */
+    AppRingConfig ring;         /**< 圆环处理策略配置 */
+    AppFlyConfig fly;           /**< 飞坡处理策略配置 */
+    AppCylinderConfig cylinder; /**< 圆桶处理策略配置 */
+    AppWallConfig wall;         /**< 墙面处理策略配置 */
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[200]; /**< EEPROM 数据读写缓冲区（200字节） */
+extern uint8 date_buff[250]; /**< EEPROM 数据读写缓冲区，新增圆桶/墙面和版本槽位后使用 250 字节。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

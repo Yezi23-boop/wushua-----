@@ -1,11 +1,18 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区，用于与 IAP 接口交换数据，大小为 200 字节 */
-uint8 date_buff[200];
+/* 数据缓冲区，用于与 IAP 接口交换数据，大小为 250 字节 */
+uint8 date_buff[250];
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
 AppConfig app;
+
+/*
+ * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
+ * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
+ */
+#define EEPROM_CONFIG_VERSION 2L
+#define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
 static void eeprom_load_defaults(AppConfig *config);
@@ -72,6 +79,20 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.recover_speed = 10;      /* 落地后固定找线速度 */
     config->fly.release_step = 0.3f;     /* COOLDOWN 每 2ms 提速步长 */
     config->fly.seesaw_creep_cm = 4.00f; /* 短反拖后前挪距离，单位 cm */
+
+    /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
+    config->cylinder.encoder_target = 280.0f;     /* 后续圆桶里程退出阈值 */
+    config->cylinder.ad_both_high_threshold = 60; /* 圆桶双路强信号阈值 */
+    config->cylinder.adc_a_1 = 1.00f;             /* 圆桶专用横向主差分权重 */
+    config->cylinder.adc_b_1 = 1.00f;             /* 圆桶专用竖向差分权重 */
+    config->cylinder.adc_c_l = 0.80f;             /* 保持当前圆桶硬编码 C_l 默认值 */
+    config->cylinder.kp_Err = 1.00f;              /* 圆桶专用方向环比例系数 */
+    config->cylinder.kd_Err = 1.00f;              /* 圆桶专用方向环微分系数 */
+
+    /* 墙面策略默认参数，保持当前固定宏行为不变。 */
+    config->wall.slow_speed = 50;    /* 墙面降速目标值 */
+    config->wall.slow_time = 150;    /* 墙面降速持续时间，2ms * 150 = 300ms */
+    config->wall.timing_count = 500; /* 墙面下墙计时，2ms * 500 = 1000ms */
 }
 
 /**
@@ -131,6 +152,18 @@ static void eeprom_read_config(AppConfig *config)
     config->start.element_seq[3] = (int)read_int(34);
     config->start.element_seq[4] = (int)read_int(35);
     config->start.element_seq[5] = (int)read_int(36);
+
+    config->cylinder.encoder_target = read_float(41);
+    config->cylinder.ad_both_high_threshold = (int)read_int(42);
+    config->cylinder.adc_a_1 = read_float(43);
+    config->cylinder.adc_b_1 = read_float(44);
+    config->cylinder.adc_c_l = read_float(45);
+    config->cylinder.kp_Err = read_float(46);
+    config->cylinder.kd_Err = read_float(47);
+
+    config->wall.slow_speed = (int)read_int(48);
+    config->wall.slow_time = (int)read_int(49);
+    config->wall.timing_count = (int)read_int(50);
 }
 
 /**
@@ -183,6 +216,19 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->start.element_seq[3], 34);
     save_int(config->start.element_seq[4], 35);
     save_int(config->start.element_seq[5], 36);
+
+    save_float(config->cylinder.encoder_target, 41);
+    save_int(config->cylinder.ad_both_high_threshold, 42);
+    save_float(config->cylinder.adc_a_1, 43);
+    save_float(config->cylinder.adc_b_1, 44);
+    save_float(config->cylinder.adc_c_l, 45);
+    save_float(config->cylinder.kp_Err, 46);
+    save_float(config->cylinder.kd_Err, 47);
+
+    save_int(config->wall.slow_speed, 48);
+    save_int(config->wall.slow_time, 49);
+    save_int(config->wall.timing_count, 50);
+    save_int(EEPROM_CONFIG_VERSION, EEPROM_CONFIG_VERSION_SLOT);
 }
 
 /**
@@ -196,9 +242,11 @@ static void eeprom_write_config(const AppConfig *config)
  */
 void eeprom_init(void)
 {
+    int32 config_version;
+
     /* 初始化 IAP (In-Application Programming) 模块 */
     iap_init();
-    /* 从扇区 0 读取 200 字节到缓冲区 */
+    /* 从扇区 0 读取 250 字节到缓冲区 */
     iap_read_buff(0x00, date_buff, sizeof(date_buff));
 
     /* 预加载默认值到内存结构体（防止读取失败时无初值） */
@@ -206,10 +254,11 @@ void eeprom_init(void)
 
     /* 检查索引 0 的标志位，判断是否为有效配置 */
     eeprom_init_time = (uint8)read_int(0);
+    config_version = read_int(EEPROM_CONFIG_VERSION_SLOT);
 
-    if (eeprom_init_time != 1)
+    if (eeprom_init_time != 1 || config_version != EEPROM_CONFIG_VERSION)
     {
-        /* 若未初始化，则写入初始化标志并保存默认配置 */
+        /* 旧布局只保存了 init_flag，新版本必须整体刷新，避免新增槽位读到错位参数。 */
         eeprom_init_time = 1;
         save_int(eeprom_init_time, 0);
         eeprom_flash();
