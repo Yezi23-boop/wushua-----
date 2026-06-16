@@ -257,14 +257,14 @@
             </OnChipMemories>
           </Target251Misc>
           <C251>
-            <RegColor>0</RegColor>
+            <RegColor>1</RegColor>
             <uOrder>0</uOrder>
             <uAlias>0</uAlias>
             <uRentF>0</uRentF>
             <uUch>0</uUch>
             <uFlt64>0</uFlt64>
             <Fuzzy>3</Fuzzy>
-            <Optim>1</Optim>
+            <Optim>2</Optim>
             <wLevel>3</wLevel>
             <SizSpd>0</SizSpd>
             <AcaOpt>0</AcaOpt>
