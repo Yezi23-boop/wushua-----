@@ -21,7 +21,7 @@
 /* 阻塞式菜单固定使用 18 像素行高。 */
 #define MENU_ROW_HEIGHT 18
 #define MENU_ROW_MIN (1 * MENU_ROW_HEIGHT)
-#define MENU_HOME_ROW_MAX (6 * MENU_ROW_HEIGHT)
+#define MENU_HOME_ROW_MAX (5 * MENU_ROW_HEIGHT)
 #define MENU_PAGE_COUNT 8
 #define MENU_CENTER_X (12 * 8)
 #define MENU_STEP_X (14 * 8)
@@ -61,9 +61,11 @@ static const int menu_have_sub[] = {
     1, 11, 12, 13, 14, 15, 16,
     2, 21, 22, 23, 24, 25, 26,
     3, 31, 32, 33, 34, 35, 36,
-    4,
-    5, 51, 52, 53, 54, 55, 56,
-    6, 61, 62, 63, 64, 65, 66, 67,
+    4, 41, 411, 412, 413, 414, 415, 416,
+        42, 421, 422, 423, 424, 425, 426, 427,
+        43, 431, 432, 433,
+        44, 441, 442, 443, 444, 445, 446, 447,
+    5,
     160, 1601, 1602, 1603, 1604, 1605, 1606};
 
 static void Menu_Clear_Pending_Key_Events(void);
@@ -91,8 +93,11 @@ static void Menu_Draw_Sensor(void);
 #if MENU_SENSOR_GAIN_ENABLE
 static void Menu_Draw_Sensor_Gain_Status(void);
 #endif
-static void Menu_Draw_Ring(int edit_line);
-static void Menu_Draw_Fly(int edit_line);
+static void Menu_Draw_Yuanshu(int edit_line);
+static void Menu_Draw_Ring_Sub(int edit_line);
+static void Menu_Draw_Cylinder_Sub(int edit_line);
+static void Menu_Draw_Wall_Sub(int edit_line);
+static void Menu_Draw_Fly_Sub(int edit_line);
 static void Menu_Draw_Element_Len(int edit_line);
 static void Menu_Draw_Element(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
@@ -108,8 +113,7 @@ static void Menu_Start_Process(void);
 static void Menu_Speed_Process(void);
 static void Menu_Model_Process(void);
 static void Menu_Sensor_Process(void);
-static void Menu_Ring_Process(void);
-static void Menu_Fly_Process(void);
+static void Menu_Yuanshu_Process(void);
 static void Menu_Element_Len_Process(void);
 static void Menu_Element_Process(void);
 
@@ -228,11 +232,9 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 3:
         return 6 * MENU_ROW_HEIGHT;
     case 4:
-        return MENU_ROW_MIN;
+        return 4 * MENU_ROW_HEIGHT;
     case 5:
-        return 6 * MENU_ROW_HEIGHT;
-    case 6:
-        return 7 * MENU_ROW_HEIGHT;
+        return MENU_ROW_MIN;
     case 7:
         return 6 * MENU_ROW_HEIGHT;
     default:
@@ -400,54 +402,96 @@ static void Menu_Render_Current_Page(void)
         Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
         break;
     case 4:
-        Menu_Draw_Sensor();
+        Menu_Draw_Yuanshu(0);
+        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
         break;
-    case 5:
-        Menu_Draw_Ring(0);
+    case 41:
+        Menu_Draw_Ring_Sub(0);
         Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         break;
-    case 51:
-        Menu_Draw_Ring(1 * MENU_ROW_HEIGHT);
+    case 411:
+        Menu_Draw_Ring_Sub(1 * MENU_ROW_HEIGHT);
         break;
-    case 52:
-        Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
+    case 412:
+        Menu_Draw_Ring_Sub(2 * MENU_ROW_HEIGHT);
         break;
-    case 53:
-        Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
+    case 413:
+        Menu_Draw_Ring_Sub(3 * MENU_ROW_HEIGHT);
         break;
-    case 54:
-        Menu_Draw_Ring(4 * MENU_ROW_HEIGHT);
+    case 414:
+        Menu_Draw_Ring_Sub(4 * MENU_ROW_HEIGHT);
         break;
-    case 55:
-        Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
+    case 415:
+        Menu_Draw_Ring_Sub(5 * MENU_ROW_HEIGHT);
         break;
-    case 56:
-        Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);
+    case 416:
+        Menu_Draw_Ring_Sub(6 * MENU_ROW_HEIGHT);
         break;
-    case 6:
-        Menu_Draw_Fly(0);
+    case 42:
+        Menu_Draw_Cylinder_Sub(0);
         Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         break;
-    case 61:
-        Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
+    case 421:
+        Menu_Draw_Cylinder_Sub(1 * MENU_ROW_HEIGHT);
         break;
-    case 62:
-        Menu_Draw_Fly(2 * MENU_ROW_HEIGHT);
+    case 422:
+        Menu_Draw_Cylinder_Sub(2 * MENU_ROW_HEIGHT);
         break;
-    case 63:
-        Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
+    case 423:
+        Menu_Draw_Cylinder_Sub(3 * MENU_ROW_HEIGHT);
         break;
-    case 64:
-        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
+    case 424:
+        Menu_Draw_Cylinder_Sub(4 * MENU_ROW_HEIGHT);
         break;
-    case 65:
-        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
+    case 425:
+        Menu_Draw_Cylinder_Sub(5 * MENU_ROW_HEIGHT);
         break;
-    case 66:
-        Menu_Draw_Fly(6 * MENU_ROW_HEIGHT);
+    case 426:
+        Menu_Draw_Cylinder_Sub(6 * MENU_ROW_HEIGHT);
         break;
-    case 67:
-        Menu_Draw_Fly(7 * MENU_ROW_HEIGHT);
+    case 427:
+        Menu_Draw_Cylinder_Sub(7 * MENU_ROW_HEIGHT);
+        break;
+    case 43:
+        Menu_Draw_Wall_Sub(0);
+        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        break;
+    case 431:
+        Menu_Draw_Wall_Sub(1 * MENU_ROW_HEIGHT);
+        break;
+    case 432:
+        Menu_Draw_Wall_Sub(2 * MENU_ROW_HEIGHT);
+        break;
+    case 433:
+        Menu_Draw_Wall_Sub(3 * MENU_ROW_HEIGHT);
+        break;
+    case 44:
+        Menu_Draw_Fly_Sub(0);
+        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
+        break;
+    case 441:
+        Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
+        break;
+    case 442:
+        Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
+        break;
+    case 443:
+        Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
+        break;
+    case 444:
+        Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
+        break;
+    case 445:
+        Menu_Draw_Fly_Sub(5 * MENU_ROW_HEIGHT);
+        break;
+    case 446:
+        Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
+        break;
+    case 447:
+        Menu_Draw_Fly_Sub(7 * MENU_ROW_HEIGHT);
+        break;
+    case 5:
+        Menu_Draw_Sensor();
         break;
     case 160:
         Menu_Draw_Element(0);
@@ -571,16 +615,15 @@ static void Menu_Draw_Home(void)
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "START");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "CTRL");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "MODEL");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "SENSOR");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "RING");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "FLY");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "YUANSHU");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "SENSOR");
 
     ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "Err");
     ips114_show_string(105, 2 * MENU_ROW_HEIGHT, "steer");
     ips114_show_string(105, 3 * MENU_ROW_HEIGHT, "gyro_z");
     ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "V_bat");
-    ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "L_tar");
-    ips114_show_string(105, 6 * MENU_ROW_HEIGHT, "R_tar");
+    ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "L_pwm");
+    ips114_show_string(105, 6 * MENU_ROW_HEIGHT, "R_pwm");
 
     ips114_show_float(184, 1 * MENU_ROW_HEIGHT, Err, 3, 2);
     ips114_show_float(184, 2 * MENU_ROW_HEIGHT, PID.steer.output, 3, 1);
@@ -795,7 +838,39 @@ static void Menu_Draw_Sensor_Gain_Status(void)
 }
 #endif
 
-static void Menu_Draw_Ring(int edit_line)
+/**
+ * @brief 绘制元素参数导航页面（YUANSHU）。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ *
+ * 包含 RING、CYLINDER、WALL、FLY 四个子页面入口，避免首页超过屏幕可见行。
+ */
+static void Menu_Draw_Yuanshu(int edit_line)
+{
+    ips114_show_string(8, 0, "<<YUANSHU");
+
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "RING");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "CYLINDER");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "WALL");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "FLY");
+
+    ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "S");
+    ips114_show_int32(120, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
+    ips114_show_string(105, 2 * MENU_ROW_HEIGHT, "C");
+    ips114_show_int32(120, 2 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+    ips114_show_string(105, 3 * MENU_ROW_HEIGHT, "W");
+    ips114_show_int32(120, 3 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
+    ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "X");
+    ips114_show_int32(120, 4 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
+
+    if (edit_line >= MENU_ROW_MIN)
+        ips114_show_string(0, edit_line, ">>");
+}
+
+/**
+ * @brief 绘制圆环参数子页面。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ */
+static void Menu_Draw_Ring_Sub(int edit_line)
 {
     ips114_show_string(8, 0, "<<RING");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "entry_E");
@@ -805,12 +880,12 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "pre_o_T");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "pre_o_Gz");
 
-    ips114_show_float(88, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
-    ips114_show_float(88, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
-    ips114_show_float(88, 3 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyroz, 3, 2);
-    ips114_show_float(88, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
-    ips114_show_float(88, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
-    ips114_show_float(88, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
+    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
+    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
+    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyroz, 3, 2);
+    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
+    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
+    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
 
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
@@ -819,20 +894,69 @@ static void Menu_Draw_Ring(int edit_line)
     ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
     ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
     ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
-    ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
-    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
-    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "X");
-    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
-    ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
-    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
-    ips114_show_string(200, 6 * MENU_ROW_HEIGHT, "W");
-    ips114_show_int32(216, 6 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
+    if (edit_line >= MENU_ROW_MIN)
+        ips114_show_string(0, edit_line, ">>");
+}
+
+/**
+ * @brief 绘制圆桶参数子页面。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ */
+static void Menu_Draw_Cylinder_Sub(int edit_line)
+{
+    ips114_show_string(8, 0, "<<CYLINDER");
+
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "cyl_enc");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "cyl_both");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "adc_a_1");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "adc_b_1");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "adc_c_l");
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "cyl_kp");
+    ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "cyl_kd");
+
+    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.cylinder.encoder_target, 3, 2);
+    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.cylinder.ad_both_high_threshold, 3);
+    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.cylinder.adc_a_1, 3, 2);
+    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.cylinder.adc_b_1, 3, 2);
+    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.cylinder.adc_c_l, 3, 2);
+    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.cylinder.kp_Err, 3, 2);
+    ips114_show_float(112, 7 * MENU_ROW_HEIGHT, app.cylinder.kd_Err, 3, 2);
+
+    ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "C");
+    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
 }
 
-static void Menu_Draw_Fly(int edit_line)
+/**
+ * @brief 绘制墙面参数子页面。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ */
+static void Menu_Draw_Wall_Sub(int edit_line)
+{
+    ips114_show_string(8, 0, "<<WALL");
+
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "wall_spd");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "wall_slow_t");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "wall_timing");
+
+    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.wall.slow_speed, 3);
+    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.wall.slow_time, 3);
+    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.wall.timing_count, 3);
+
+    ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "W");
+    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
+
+    if (edit_line >= MENU_ROW_MIN)
+        ips114_show_string(0, edit_line, ">>");
+}
+
+/**
+ * @brief 绘制飞坡参数子页面。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ */
+static void Menu_Draw_Fly_Sub(int edit_line)
 {
     ips114_show_string(8, 0, "<<FLY");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
@@ -1469,14 +1593,24 @@ static void Menu_Sensor_Process(void)
 #endif
 }
 
-static void Menu_Ring_Process(void)
+static void Menu_Yuanshu_Process(void)
 {
     uint8 event_code;
 
     switch (display_codename)
     {
-    case 5:
-        Menu_Draw_Ring(0);
+    case 4:
+        Menu_Draw_Yuanshu(0);
+        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        event_code = Menu_Read_Key_Event();
+        if (event_code == 0)
+            return;
+        Menu_Cursor_Update(4 * MENU_ROW_HEIGHT);
+        if (menu_next_flag != 0)
+            Menu_Next_Back();
+        break;
+    case 41:
+        Menu_Draw_Ring_Sub(0);
         Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
@@ -1485,43 +1619,32 @@ static void Menu_Ring_Process(void)
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
-    case 51:
-        Menu_Draw_Ring(1 * MENU_ROW_HEIGHT);
+    case 411:
+        Menu_Draw_Ring_Sub(1 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.ring_entry_encoder, 1.0f);
         break;
-    case 52:
-        Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
+    case 412:
+        Menu_Draw_Ring_Sub(2 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 1.0f);
         break;
-    case 53:
-        Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
+    case 413:
+        Menu_Draw_Ring_Sub(3 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.pre_ring_Gyroz, 1.0f);
         break;
-    case 54:
-        Menu_Draw_Ring(4 * MENU_ROW_HEIGHT);
+    case 414:
+        Menu_Draw_Ring_Sub(4 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.in_ring_Gyroz, 1.0f);
         break;
-    case 55:
-        Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
+    case 415:
+        Menu_Draw_Ring_Sub(5 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 1.0f);
         break;
-    case 56:
-        Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);
+    case 416:
+        Menu_Draw_Ring_Sub(6 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 1.0f);
         break;
-    default:
-        break;
-    }
-}
-
-static void Menu_Fly_Process(void)
-{
-    uint8 event_code;
-
-    switch (display_codename)
-    {
-    case 6:
-        Menu_Draw_Fly(0);
+    case 42:
+        Menu_Draw_Cylinder_Sub(0);
         Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
@@ -1530,32 +1653,92 @@ static void Menu_Fly_Process(void)
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
-    case 61:
-        Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
+    case 421:
+        Menu_Draw_Cylinder_Sub(1 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cylinder.encoder_target, 10.0f);
+        break;
+    case 422:
+        Menu_Draw_Cylinder_Sub(2 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.cylinder.ad_both_high_threshold, 5);
+        break;
+    case 423:
+        Menu_Draw_Cylinder_Sub(3 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cylinder.adc_a_1, 0.1f);
+        break;
+    case 424:
+        Menu_Draw_Cylinder_Sub(4 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cylinder.adc_b_1, 0.1f);
+        break;
+    case 425:
+        Menu_Draw_Cylinder_Sub(5 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cylinder.adc_c_l, 0.1f);
+        break;
+    case 426:
+        Menu_Draw_Cylinder_Sub(6 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cylinder.kp_Err, 0.1f);
+        break;
+    case 427:
+        Menu_Draw_Cylinder_Sub(7 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cylinder.kd_Err, 0.1f);
+        break;
+    case 43:
+        Menu_Draw_Wall_Sub(0);
+        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
+        event_code = Menu_Read_Key_Event();
+        if (event_code == 0)
+            return;
+        Menu_Cursor_Update(3 * MENU_ROW_HEIGHT);
+        if (menu_next_flag != 0)
+            Menu_Next_Back();
+        break;
+    case 431:
+        Menu_Draw_Wall_Sub(1 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.wall.slow_speed, 5);
+        break;
+    case 432:
+        Menu_Draw_Wall_Sub(2 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.wall.slow_time, 10);
+        break;
+    case 433:
+        Menu_Draw_Wall_Sub(3 * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.wall.timing_count, 10);
+        break;
+    case 44:
+        Menu_Draw_Fly_Sub(0);
+        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
+        event_code = Menu_Read_Key_Event();
+        if (event_code == 0)
+            return;
+        Menu_Cursor_Update(7 * MENU_ROW_HEIGHT);
+        if (menu_next_flag != 0)
+            Menu_Next_Back();
+        break;
+    case 441:
+        Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.count_fly_speed, 1);
         break;
-    case 62:
-        Menu_Draw_Fly(2 * MENU_ROW_HEIGHT);
+    case 442:
+        Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
         break;
-    case 63:
-        Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
+    case 443:
+        Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.count_fly_time_2, 1);
         break;
-    case 64:
-        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
+    case 444:
+        Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
         Menu_Process_Special_Value(&app.fly.seesaw_mode);
         break;
-    case 65:
-        Menu_Draw_Fly(5 * MENU_ROW_HEIGHT);
+    case 445:
+        Menu_Draw_Fly_Sub(5 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
         break;
-    case 66:
-        Menu_Draw_Fly(6 * MENU_ROW_HEIGHT);
+    case 446:
+        Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
         Menu_Process_Int_Value(&app.fly.recover_speed, 1);
         break;
-    case 67:
-        Menu_Draw_Fly(7 * MENU_ROW_HEIGHT);
+    case 447:
+        Menu_Draw_Fly_Sub(7 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.fly.release_step, 0.01f);
         break;
     default:
@@ -1603,26 +1786,37 @@ void Keystroke_Menu(void)
         Menu_Model_Process();
         break;
     case 4:
-        Menu_Sensor_Process();
+    case 41:
+    case 411:
+    case 412:
+    case 413:
+    case 414:
+    case 415:
+    case 416:
+    case 42:
+    case 421:
+    case 422:
+    case 423:
+    case 424:
+    case 425:
+    case 426:
+    case 427:
+    case 43:
+    case 431:
+    case 432:
+    case 433:
+    case 44:
+    case 441:
+    case 442:
+    case 443:
+    case 444:
+    case 445:
+    case 446:
+    case 447:
+        Menu_Yuanshu_Process();
         break;
     case 5:
-    case 51:
-    case 52:
-    case 53:
-    case 54:
-    case 55:
-    case 56:
-        Menu_Ring_Process();
-        break;
-    case 6:
-    case 61:
-    case 62:
-    case 63:
-    case 64:
-    case 65:
-    case 66:
-    case 67:
-        Menu_Fly_Process();
+        Menu_Sensor_Process();
         break;
     case 160:
     case 1601:
