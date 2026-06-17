@@ -268,18 +268,18 @@ void dianya_jiance(void)
     dianya = (float)adc_raw * 0.0092f;
 
     /* 锂电池欠压判定：低于 11.3V（假设为 3S 锂电） */
-    if (dianya < 11.2f)
-    {
-        dianya_count++;
-    }
-    else
-    {
-        dianya_count = 0;
-    }
+//    if (dianya < 11.2f)
+//    {
+//        dianya_count++;
+//    }
+//    else
+//    {
+//        dianya_count = 0;
+//    }
 
-    /* 持续欠压 3000 次（软件滤波，防止启动大电流导致电压跌落误判） */
-    if (dianya_count > 3000)
-    {
-        stop = 1; /* 锁定停车，保护电池 */
-    }
+////    /* 持续欠压 3000 次（软件滤波，防止启动大电流导致电压跌落误判） */
+////    if (dianya_count > 3000)
+////    {
+////        stop = 1; /* 锁定停车，保护电池 */
+////    }
 }

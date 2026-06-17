@@ -37,8 +37,8 @@ void run_time_1(void)
     imu_update_gyro_z_from_imu660rc();
     if (steer_div_10 >= 3)
     {
-        /* 圆桶期临时放大/收敛方向差速响应，退出后恢复普通循迹方向环参数。 */
-        if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_CYLINDER)
+        /* 圆桶窗口确认后才切专用方向环，避免元素序列轮到圆桶时起步提前降增益。 */
+        if (a_run_cylinder_get_state() == A_RUN_CYLINDER_STATE_WAIT_GROUND)
         {
             PID.steer.Kp = app.cylinder.kp_Err;
             PID.steer.Kd = app.cylinder.kd_Err;

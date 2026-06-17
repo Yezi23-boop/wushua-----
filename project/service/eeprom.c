@@ -35,7 +35,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.element_enable = 1;         /* 默认开启整体赛道元素识别 */
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
-    config->start.fuya_xili = 80.00f;         /* 默认平地负压百分比 70*/
+    config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 70*/
     config->start.fuya_wall_percent = 70.00f; /* 默认墙面负压百分比 */
     config->start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
     config->start.element_seq[0] = TRACK_ELEMENT_LEFT_RING; // TRACK_ELEMENT_CYLINDER
@@ -47,7 +47,7 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 速度环 PID 默认参数 */
     config->speed.kp_Err = 5.50f; // 3.50
-    config->speed.kd_Err = 5.00f; // 2ms 主环第一版保守微分
+    config->speed.kd_Err = 10.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 60.00f;     /* 默认基础速度 50 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
@@ -66,9 +66,9 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.ring_entry_encoder = 5.0;          /* ring->pre_ring编码器积分阈值 */
     config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
     config->ring.pre_ring_Gyroz = 20.00f;           /* pre_ring->in_ring累计转角阈值 */
-    config->ring.in_ring_Gyroz = 200.00f;           /* in_ring->pre_out_ring累计转角阈值150 */
-    config->ring.pre_out_ring_Gyro_target = 10.00f; /* pre_out_ring固定目标角速度 15*/
-    config->ring.pre_out_ring_Gyroz = 220.00f;      /* pre_out_ring->out_ring累计转角阈值160 */
+    config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值150 */
+    config->ring.pre_out_ring_Gyro_target = 25.00f; /* pre_out_ring固定目标角速度 15*/
+    config->ring.pre_out_ring_Gyroz = 310.00f;      /* pre_out_ring->out_ring累计转角阈值160 */
 
     /* 飞坡策略默认参数 */
     config->fly.count_fly_speed = 5;     /* 飞坡慢速值 */
@@ -77,8 +77,8 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.seesaw_mode = 1;         /* 默认停止等待模式 */
     config->fly.seesaw_wait_count = 500; /* 停车等待时间 (500 * 2ms = 1000ms) */
     config->fly.recover_speed = 10;      /* 落地后固定找线速度 */
-    config->fly.release_step = 0.3f;     /* COOLDOWN 每 2ms 提速步长 */
-    config->fly.seesaw_creep_cm = 4.00f; /* 短反拖后前挪距离，单位 cm */
+    config->fly.release_step = 0.4f;     /* COOLDOWN 每 2ms 提速步长 */
+    config->fly.seesaw_creep_cm = 8.00f; /* 短反拖后前挪距离，单位 cm */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 280.0f;     /* 后续圆桶里程退出阈值 */

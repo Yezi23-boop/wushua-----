@@ -11,7 +11,7 @@
 - 当前参赛组别为智能车竞赛“飞檐走壁组”。
 
 ## 开发目标
-
+- 不需要过多安全/边界兜底和防御性代码
 - 优先保证执行效率、实时响应速度和控制链路稳定性。
 - 在高速循迹场景下尽量减少延迟、抖动和误判。
 - 避免因传感器处理不及时、控制链路过慢而丢失电磁线。
@@ -34,8 +34,8 @@
 - 修改代码时优先考虑 Keil5 C251 的兼容性。
 - 可以使用 `int32`，但仍需注意目标平台上的类型宽度和运算开销。
 - `AGENTS.md` 与包含中文注释或字符串的源码文件统一使用 UTF-8 编码；若遇到 Keil5 C251 的特殊兼容性问题，以可编译和可读性为先。
-- 编译工具路径为 `D:\keil_5\UV4\UV4.exe`。
-- 常规工程编译验证使用 PowerShell 执行 `& 'D:\keil_5\UV4\UV4.exe' -b 'project\mdk\seekfree.uvproj'`，并读取 `project/mdk/out_file/SEEKFREE.build_log.htm` 确认 `Error(s)` 与 `Warning(s)`；若 Keil 增量构建未重编刚修改的源文件，可按工程参数用 `D:\keil_5\C251\BIN\C251.EXE` 对该文件做单文件辅助编译验证。
+- 编译工具路径为 `D:\Keil_v5\UV4\UV4.exe`。
+- 常规工程编译验证使用 PowerShell 执行 `& 'D:\Keil_v5\UV4\UV4.exe' -b 'project\mdk\seekfree.uvproj'`，并读取 `project/mdk/out_file/SEEKFREE.build_log.htm` 确认 `Error(s)` 与 `Warning(s)`；若 Keil 增量构建未重编刚修改的源文件，可按工程参数用 `D:\Keil_v5\C251\BIN\C251.EXE` 对该文件做单文件辅助编译验证。
 - 头文件统一通过 `#include "zf_common_headfile.h"` 管理，避免分散包含造成依赖失控。
 - 读取日志相关的文件统一放在 `log/` 目录下，不要分散存放。
 - Git 提交信息要求使用中文。
@@ -73,25 +73,3 @@
 - 能缓存的结果尽量缓存，避免每周期重复推导。
 - 传感器量的限幅、去抖和滤波要尽早处理，但滤波不能明显拖慢响应。
 - 调参变量、赛道阈值和状态标志的命名应清晰，方便现场快速排查与调整。
-
-## 多 Agent 协作策略
-
-- 若任务可稳定拆分为多个独立子任务，且子任务之间不共享状态、不同时修改同一文件，并且主 agent 可以独占共享入口、最终集成和最终验证，则默认可启用 Codex 多 agent 工作流，除非用户明确要求单 agent。
-- 若任务涉及共享硬件资源、共享状态机、共享配置结构或主链路编排，则默认不启用并行实现，回退为单主 agent。
-- 如需显式指定 subagent 配置，默认使用 `gpt-5.4` 与 `high`。
-- 若无特殊需要，优先让 subagent 继承主会话配置，不要额外显式传入 `model` 或 `reasoning_effort`。
-- 除非用户明确要求，否则不要使用 `gpt-5.1-codex-mini` 或其他降级模型。
-
-## Subagents
-
-- 本仓库按 Codex 当前约定，将项目级自定义 agent 放在 `.codex/agents/`。
-- 当前调参专用 agent 配置保留为 `speed_loop_tuning`，路径为 `.codex/agents/speed-loop-tuning.toml`。
-- 当前仓库未包含 `project/speed_loop_autotune/` 专题目录；只有在该目录后续恢复，且任务集中在其 profile、日志、批次结果、波形摘要和下一步调参建议时，才优先使用该 agent。
-- 该 agent 只负责调参分析和建议，不默认改固件实时控制逻辑，也不绕过 `enter_ground`、`save` 这类显式用户边界。
-- 若后续恢复并修改 `project/speed_loop_autotune/`，默认遵守以下要求：
-  - 调参默认必须走 agent 分析模式，而不是本地 heuristic 自动决策模式。
-  - 每一轮填写 PID 之前，都必须先基于当前 `decision_request` 做一次新的 agent 分析。
-  - 正常情况下按“分析一轮、执行一轮”往返 10 轮后，再统一向用户汇报。
-  - 中途只有失败边界、非法 agent 输出、串口或硬件异常、orchestrator 拒绝消费请求时，才允许提前打断并汇报。
-  - 不要在未获得用户明确动作的情况下，自动跨到下一批、自动 `enter_ground` 或自动 `save`。
-  - `decision_heuristic.py` 只作为显式 fallback 或调试路径，不能静默替代 `speed_loop_tuning` 成为默认主决策源。

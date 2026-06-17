@@ -12,9 +12,9 @@
 
 enum CylinderStep
 {
-    CYL_IDLE = 0,
-    CYL_WAIT_TOP = 1,
-    CYL_WAIT_GROUND = 2
+    CYL_IDLE = A_RUN_CYLINDER_STATE_IDLE,
+    CYL_WAIT_TOP = A_RUN_CYLINDER_STATE_WAIT_TOP,
+    CYL_WAIT_GROUND = A_RUN_CYLINDER_STATE_WAIT_GROUND
 };
 
 static enum CylinderStep cylinder_state = CYL_IDLE; /**< 圆桶状态机阶段，由 2ms 主环推进。 */

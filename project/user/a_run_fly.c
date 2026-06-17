@@ -30,8 +30,8 @@ volatile int32 seesaw_brake_pwm = 0;           /**< 短反拖刹车 PWM，主控
 volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临时居中权重开关。 */
 
 /* --- 入口/落地电感阈值 --- */
-#define FLY_AD_SIDE_LOST_TH 20u      /* 横向电感低于该值时认为主线信号正在消失。 */
-#define FLY_AD_CENTER_LOST_TH 5u     /* 竖向电感阈值更低，避免普通弱弯误触发飞坡。 */
+#define FLY_AD_SIDE_LOST_TH 25u      /* 横向电感低于或等于该值时认为主线信号正在消失。 */
+#define FLY_AD_CENTER_LOST_TH 10u     /* 竖向电感低于或等于该值时认为主线信号正在消失。 */
 #define SEESAW_ENTRY_WINDOW_COUNT 10 /* 跷跷板入口确认窗口，10 * 2ms = 20ms。 */
 #define FLY_LANDING_SIDE_TH 20u      /* HOLD 结束后横向电感任一路回升到该值，才允许进入落地恢复。 */
 #define FLY_LANDING_CENTER_TH 10u    /* HOLD 结束后竖向电感任一路回升到该值，辅助确认车已接近地面电磁线。 */
@@ -46,11 +46,8 @@ volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临
 #define FLY_PWM_LIMIT_RECOVER_EARLY 2000     /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
 #define FLY_PWM_LIMIT_RECOVER_LATE 4000      /* RECOVER 后段实际 PWM 上限，给循迹留出有限纠偏能力。 */
 #define FLY_HOLD_COUNT_DEFAULT 75            /* 旧飞坡 HOLD 默认 75 * 2ms = 150ms。 */
-#define SEESAW_BRAKE_PWM 4000                /* 停止等待前短反拖 PWM，-3000 实测为正确反拖方向。 */
-#define SEESAW_BRAKE_COUNT 30                /* 120 * 2ms = 240ms，用于先抵消上板惯性。 */
-#define SEESAW_WAIT_COUNT_DEFAULT 500        /* 停止等待默认 500 * 2ms = 1000ms。 */
-#define FLY_RECOVER_SEARCH_SPEED_DEFAULT 10  /* RECOVER 默认找线速度，低速保留差速纠偏余量。 */
-#define FLY_RELEASE_SPEED_STEP_DEFAULT 0.01f /* 默认每个 2ms 周期释放 0.01 个速度单位。 */
+#define SEESAW_BRAKE_PWM 2000                /* 停止等待前短反拖 PWM，-3000 实测为正确反拖方向。 */
+#define SEESAW_BRAKE_COUNT 10               /* 30 * 2ms = 60ms，用于先抵消上板惯性。 */
 
 /**
  * @brief 取出并清除飞坡/跷跷板完成事件。
@@ -130,23 +127,8 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
     uint8 entry_hit;
 
     seesaw_wait_limit = app.fly.seesaw_wait_count;
-    if (seesaw_wait_limit < 1)
-    {
-        seesaw_wait_limit = SEESAW_WAIT_COUNT_DEFAULT;
-    }
-
     recover_speed = app.fly.recover_speed;
-    if (recover_speed < 1)
-    {
-        recover_speed = FLY_RECOVER_SEARCH_SPEED_DEFAULT;
-    }
-
     seesaw_hit_limit = app.fly.count_fly_time_2;
-    if (seesaw_hit_limit < 1)
-    {
-        seesaw_hit_limit = 1;
-    }
-
     creep_target = app.fly.seesaw_creep_cm;
 
     switch (seesaw_state)
@@ -157,10 +139,10 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
          * 四路弱磁且 ad1/ad4 同时递减，确认整车正在离开电磁线后再刹车。
          */
         weak_line = (uint8)(allow_entry != 0 &&
-                            ad1 < FLY_AD_SIDE_LOST_TH &&
-                            ad2 < FLY_AD_CENTER_LOST_TH &&
-                            ad3 < FLY_AD_CENTER_LOST_TH &&
-                            ad4 < FLY_AD_SIDE_LOST_TH);
+                            ad1 <= FLY_AD_SIDE_LOST_TH &&
+                            ad2 <= FLY_AD_CENTER_LOST_TH &&
+                            ad3 <= FLY_AD_CENTER_LOST_TH &&
+                            ad4 <= FLY_AD_SIDE_LOST_TH);
         entry_hit = 0;
         if (weak_line != 0)
         {
@@ -247,7 +229,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
             seesaw_creep_distance = 0.0f;
             if (creep_target > 0.0f)
             {
-                seesaw_centering_active = 1;
+                seesaw_centering_active = 0;
                 seesaw_state = SEESAW_CREEP;
             }
             else
@@ -266,7 +248,6 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         *speed = (float)recover_speed;
         fly_lost_line_blocked = 1;
         seesaw_brake_pwm = 0;
-        seesaw_centering_active = 1;
         stop = 0;
         creep_delta = (speed_l + speed_r) * 0.5f * 0.012f;
         if (creep_delta > 0.0f)
@@ -284,21 +265,17 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
     case SEESAW_WAIT:
         /* 等待时间由菜单配置，单位为 2ms 主控制周期。 */
         *speed = 0.0f;
-        seesaw_brake_pwm = 0;
-        seesaw_centering_active = 0;
         stop = 1;
         seesaw_wait_count++;
         if (seesaw_wait_count >= seesaw_wait_limit)
         {
-           seesaw_state = SEESAW_CHECK;
+            seesaw_state = SEESAW_CHECK;
         }
         break;
 
     case SEESAW_CHECK:
         /* 检查电感信号恢复，与飞坡 LANDING 阈值相同 */
         *speed = 0.0f;
-        seesaw_brake_pwm = 0;
-        seesaw_centering_active = 0;
         stop = 1;
         if (ad1 > FLY_LANDING_SIDE_TH ||
             ad4 > FLY_LANDING_SIDE_TH ||
@@ -313,9 +290,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         /* 阶梯增速恢复，复用 COOLDOWN 逻辑 */
         pid_speed_reset(&PID.left_speed);
         pid_speed_reset(&PID.right_speed);
-        seesaw_brake_pwm = 0;
         stop = 0;
-        seesaw_centering_active = 1;
         fly_release_speed = (float)recover_speed;
         fly_finish_event = 1;
         flat_fly = FLY_STATE_COOLDOWN;
@@ -324,10 +299,6 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
 
     case SEESAW_COOLDOWN:
         /* 释放阶段由 a_run_fly_update_release_speed() 执行 */
-        break;
-
-    default:
-        a_run_seesaw_reset();
         break;
     }
 }
@@ -343,8 +314,6 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
 void a_run_fly_update_release_speed(float *speed)
 {
     float target_speed;
-    int recover_speed;
-    float release_step;
 
     if (flat_fly != FLY_STATE_COOLDOWN)
     {
@@ -353,41 +322,12 @@ void a_run_fly_update_release_speed(float *speed)
 
     seesaw_centering_active = 1;
 
-    recover_speed = app.fly.recover_speed;
-    if (recover_speed < 1)
-    {
-        recover_speed = FLY_RECOVER_SEARCH_SPEED_DEFAULT;
-    }
-
-    release_step = app.fly.release_step;
-    if (release_step < 0.01f)
-    {
-        release_step = FLY_RELEASE_SPEED_STEP_DEFAULT;
-    }
-
     /*
      * 跷跷板落地回线后仍按斜坡释放速度。
      * 原因：负压、轮胎贴地和循迹误差都需要短暂恢复窗口，若完成事件后一拍
      * 回到巡线速度，后续无论接墙面、圆桶还是普通赛道都容易被惯性带偏。
      */
     target_speed = app.speed.speed_run;
-    if (target_speed < 0.0f)
-    {
-        target_speed = 0.0f;
-    }
-
-    if (target_speed <= (float)recover_speed)
-    {
-        *speed = target_speed;
-        a_run_fly_reset();
-        return;
-    }
-
-    if (fly_release_speed < (float)recover_speed)
-    {
-        fly_release_speed = (float)recover_speed;
-    }
-
     if (fly_release_speed >= target_speed)
     {
         *speed = target_speed;
@@ -396,7 +336,7 @@ void a_run_fly_update_release_speed(float *speed)
     }
 
     *speed = fly_release_speed;
-    fly_release_speed += release_step;
+    fly_release_speed += app.fly.release_step;
     if (fly_release_speed > target_speed)
     {
         fly_release_speed = target_speed;
@@ -421,19 +361,15 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
     int recover_speed;
 
     recover_speed = app.fly.recover_speed;
-    if (recover_speed < 1)
-    {
-        recover_speed = FLY_RECOVER_SEARCH_SPEED_DEFAULT;
-    }
 
     switch (flat_fly)
     {
     case FLY_STATE_IDLE:
         if (allow_entry != 0 &&
-            ad1 < FLY_AD_SIDE_LOST_TH &&
-            ad2 < FLY_AD_CENTER_LOST_TH &&
-            ad3 < FLY_AD_CENTER_LOST_TH &&
-            ad4 < FLY_AD_SIDE_LOST_TH)
+            ad1 <= FLY_AD_SIDE_LOST_TH &&
+            ad2 <= FLY_AD_CENTER_LOST_TH &&
+            ad3 <= FLY_AD_CENTER_LOST_TH &&
+            ad4 <= FLY_AD_SIDE_LOST_TH)
         {
             fly_detect_count++;
             if (fly_detect_count >= app.fly.count_fly_time_1)
@@ -532,10 +468,6 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
 
     case FLY_STATE_COOLDOWN:
         /* 释放阶段由独立后处理执行，保证切到任意后续元素后仍能继续阶梯增速。 */
-        break;
-
-    default:
-        a_run_fly_reset();
         break;
     }
 }
