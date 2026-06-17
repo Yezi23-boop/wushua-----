@@ -27,9 +27,9 @@ static uint16 adtemp = 0;                         /* 排序交换临时变量 */
 static uint32 ad_sum[NUM] = {0};                  /* 累加和 */
 static uint16 ad_ave[NUM] = {0};                  /* 平均值 */
 static uint16 AD_V[NUM] = {0};                    /* 当前周期的处理后值 */
-static uint8 adc_measure_enable = 1;              /* 默认开启最大值动态记录 */
+static uint8 adc_measure_enable = 1;              /* 默认记录原始采样极值，仅供调试显示和手动标定参考。 */
 
-/* 默认标定参数（若无 EEPROM 加载则使用此值） */
+/* 当前归一化固定使用该区间；MA/MI 只做显示参考，不参与实时映射。 */
 static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
 static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 static const int limit = 10;
@@ -111,7 +111,9 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 }
 
 /**
- * @brief 动态扫描电感的最大/最小值（用于自动标定）
+ * @brief 扫描电感原始采样的最大/最小值。
+ *
+ * MA/MI 只用于调试页观察和现场人工记录，不会改变 read_AD() 的固定归一化区间。
  */
 void scan_track_max_value(void)
 {
@@ -212,7 +214,7 @@ void read_AD(void)
 }
 
 /**
- * @brief 使能或禁止动态最大值记录
+ * @brief 使能或禁止原始采样极值记录。
  */
 void adc_measure_set_enable(uint8 enable)
 {
@@ -220,7 +222,7 @@ void adc_measure_set_enable(uint8 enable)
 }
 
 /**
- * @brief 重置标定记录
+ * @brief 重置原始采样极值记录。
  */
 void adc_measure_reset(void)
 {

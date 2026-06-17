@@ -86,19 +86,3 @@ int8 a_run_mode_get_start_state(void)
     return (int8)current_start_state;
 }
 
-/**
- * @brief 负压状态更新
- * @details 启动状态有效且配置允许时才更新负压，避免待机时误动作
- */
-void a_run_mode_update_fuya_state(void)
-{
-    if (current_start_state >= START_STATE_1 && app.start.start_flag == 1)
-    {
-        fuya_set_percent(app.start.fuya_xili);
-    }
-    else
-    {
-        fuya_stop();
-    }
-}
-

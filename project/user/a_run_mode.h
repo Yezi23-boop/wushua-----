@@ -16,10 +16,4 @@ void a_run_mode_update_start_state(void);
  */
 int8 a_run_mode_get_start_state(void);
 
-/**
- * @brief 负压状态更新
- * @details 仅在启动状态有效且配置允许时执行负压控制，避免待机时误动作
- */
-void a_run_mode_update_fuya_state(void);
-
 #endif

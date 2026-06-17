@@ -226,7 +226,7 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 0:
         return MENU_HOME_ROW_MAX;
     case 1:
-        return 6 * MENU_ROW_HEIGHT;
+        return 5 * MENU_ROW_HEIGHT;
     case 2:
         return 6 * MENU_ROW_HEIGHT;
     case 3:
@@ -337,7 +337,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
         break;
     case 11:
         Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
@@ -352,9 +352,6 @@ static void Menu_Render_Current_Page(void)
         Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
         break;
     case 15:
-        Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
-        break;
-    case 16:
         Menu_Draw_Element_Len(MENU_ROW_MIN);
         break;
     case 2:
@@ -642,16 +639,14 @@ static void Menu_Draw_Start(int edit_line)
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "Start_Flag");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "elem_en");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "ELEM");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "gyro_fbN");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "ELEM");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_enable, 3);
     ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
-    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.element_len, 3);
+    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
+    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.start.element_len, 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -1264,11 +1259,11 @@ static void Menu_Start_Process(void)
     {
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -1286,11 +1281,10 @@ static void Menu_Start_Process(void)
         break;
     case 14:
         Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.start.fuya_wall_percent, 1.0f);
+        Menu_Process_Float_Value(&app.angle.gyro_feedback_scale, 0.1f);
         break;
     case 15:
-        Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.gyro_feedback_scale, 0.1f);
+        Menu_Element_Len_Process();
         break;
     default:
         break;
@@ -1772,9 +1766,6 @@ void Keystroke_Menu(void)
     case 14:
     case 15:
         Menu_Start_Process();
-        break;
-    case 16:
-        Menu_Element_Len_Process();
         break;
     case 2:
     case 21:

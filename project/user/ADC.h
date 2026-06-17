@@ -26,12 +26,16 @@ extern volatile uint16 ad4;
 extern volatile float Err;
 
 /**
- * @brief 电感数据的最大值记录 (用于自动标定)
+ * @brief 电感原始采样最大值记录
+ *
+ * 仅用于调试页观察和现场手动标定参考，不参与当前归一化计算。
  */
 extern volatile uint16 MA[NUM];
 
 /**
- * @brief 电感数据的最小值记录 (用于自动标定)
+ * @brief 电感原始采样最小值记录
+ *
+ * 仅用于调试页观察和现场手动标定参考，不参与当前归一化计算。
  */
 extern volatile uint16 MI[NUM];
 
@@ -43,21 +47,21 @@ extern volatile uint16 RAW[NUM];
 /* --- 函数声明 --- */
 
 /**
- * @brief 设置 ADC 测量是否使能（通常在标定时使用）
+ * @brief 设置原始采样最大/最小值记录是否使能。
  */
 void adc_measure_set_enable(uint8 enable);
 
 /**
- * @brief 重置电感标定记录的最大最小值
+ * @brief 重置原始采样最大/最小值记录。
  */
 void adc_measure_reset(void);
 
 /**
- * @brief 自动扫描并更新电感数据的最大最小值
+ * @brief 扫描并更新电感原始采样的最大/最小值。
  *
  * @details 
  * 在开启标定使能的情况下，实时比对当前 RAW 采样值与历史最大/最小值，
- * 用于动态调整差比和算法的映射归一化区间，避免由于赛道反光率不同导致的识别失效。
+ * 只作为调试显示和现场手动记录参考；当前 read_AD() 仍使用固定 MIN_Err/MAX_Err 做归一化。
  *
  * @note 必须周期性调用(如在 10ms 状态环内)。
  */

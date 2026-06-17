@@ -36,7 +36,6 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.element_enable = 1;         /* 默认开启整体赛道元素识别 */
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 70*/
-    config->start.fuya_wall_percent = 70.00f; /* 默认墙面负压百分比 */
     config->start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
     config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_CYLINDER
     config->start.element_seq[1] = TRACK_ELEMENT_WALL;
@@ -145,7 +144,6 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.recover_speed = (int)read_int(38);
     config->fly.release_step = read_float(39);
     config->fly.seesaw_creep_cm = read_float(40);
-    config->start.fuya_wall_percent = read_float(27);
     config->start.track_mode = (int16)read_int(29);
     config->start.element_len = (int)read_int(30);
     config->start.element_seq[0] = (int)read_int(31);
@@ -210,7 +208,6 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.recover_speed, 38);
     save_float(config->fly.release_step, 39);
     save_float(config->fly.seesaw_creep_cm, 40);
-    save_float(config->start.fuya_wall_percent, 27);
     save_int(config->start.track_mode, 29);
     save_int(config->start.element_len, 30);
     save_int(config->start.element_seq[0], 31);

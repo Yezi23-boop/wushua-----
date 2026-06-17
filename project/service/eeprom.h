@@ -13,7 +13,6 @@ typedef struct
     int16 element_enable;    /**< 整体赛道元素识别开关：1-开启，0-关闭 */
     int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
-    float fuya_wall_percent; /**< 墙面负压百分比，范围 0~100 */
     int element_len;                            /**< 元素序列有效长度，运行期超出 1~6 时进入无元素状态。 */
     int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板；其他值运行期跳过。 */
 } AppStartConfig;
