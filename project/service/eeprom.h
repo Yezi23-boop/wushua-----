@@ -57,7 +57,8 @@ typedef struct
     float pre_ring_Gyroz;           /**< pre_ring阶段累计转角阈值，达到后进入in_ring */
     float in_ring_Gyroz;            /**< in_ring阶段累计转角阈值，达到后进入pre_out_ring */
     float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
-    float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入out_ring */
+    float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入drive_out_ring */
+    float drive_out_ring_encoder;   /**< drive_out_ring直走段编码器阈值（cm），达到后进入out_ring */
 } AppRingConfig;
 
 /**

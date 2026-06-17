@@ -18,7 +18,7 @@
 #define ADC_NORM_MAX 100 /* 归一化后的量程上限 */
 #define SORT_LENGTH 4    /* 滑动排序/均值滤波的样本长度 */
 #define ADC_SEESAW_CENTER_A_1 1.50f /* 跷跷板前挪/恢复期横向主差分权重，强调左右主电感居中。 */
-#define ADC_SEESAW_CENTER_B_1 0.30f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
+#define ADC_SEESAW_CENTER_B_1 0.50f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
 #define ADC_SEESAW_CENTER_C_L 1.00f /* 跷跷板前挪/恢复期弱信号分母补偿，抑制偏差突变。 */
 
 /* 内部中间变量 */

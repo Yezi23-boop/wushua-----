@@ -407,7 +407,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 41:
         Menu_Draw_Ring_Sub(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         break;
     case 411:
         Menu_Draw_Ring_Sub(1 * MENU_ROW_HEIGHT);
@@ -426,6 +426,9 @@ static void Menu_Render_Current_Page(void)
         break;
     case 416:
         Menu_Draw_Ring_Sub(6 * MENU_ROW_HEIGHT);
+        break;
+    case 417:
+        Menu_Draw_Ring_Sub(7 * MENU_ROW_HEIGHT);
         break;
     case 42:
         Menu_Draw_Cylinder_Sub(0);
@@ -879,6 +882,7 @@ static void Menu_Draw_Ring_Sub(int edit_line)
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "in_r_Gz");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "pre_o_T");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "pre_o_Gz");
+    ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "drv_o_E");
 
     ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
     ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
@@ -886,6 +890,7 @@ static void Menu_Draw_Ring_Sub(int edit_line)
     ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
     ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
     ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
+    ips114_show_float(112, 7 * MENU_ROW_HEIGHT, app.ring.drive_out_ring_encoder, 3, 2);
 
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
@@ -1611,11 +1616,11 @@ static void Menu_Yuanshu_Process(void)
         break;
     case 41:
         Menu_Draw_Ring_Sub(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(7 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -1642,6 +1647,10 @@ static void Menu_Yuanshu_Process(void)
     case 416:
         Menu_Draw_Ring_Sub(6 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 1.0f);
+        break;
+    case 417:
+        Menu_Draw_Ring_Sub(7 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.ring.drive_out_ring_encoder, 1.0f);
         break;
     case 42:
         Menu_Draw_Cylinder_Sub(0);

@@ -116,6 +116,37 @@ def test_ring_state_is_split_and_directional():
     assert "a_run_ring_update_5ms(-1)" in track_source
 
 
+def test_ring_entry_hits_accumulate_inside_timeout_window():
+    ring_source = _read(A_RUN_RING_C)
+    update_body = _function_body(
+        ring_source,
+        "uint8 a_run_ring_update_5ms(int8 ring_dir)",
+        "/**\n * @brief 更新环岛判定所需的里程与转角量。",
+    )
+    no_ring_body = update_body[
+        update_body.index("case no_ring:"):update_body.index("case ring:")
+    ]
+
+    assert (
+        "if (entry_signal != 0)\n"
+        "        {\n"
+        "            ring_entry_count++;\n"
+        "        }\n"
+        "\n"
+        "        if (ring_entry_count > 0)" in no_ring_body
+    )
+    assert (
+        "else\n"
+        "        {\n"
+        "            ring_entry_count = 0;\n"
+        "            timedestroy(&ring_data.time_l);\n"
+        "        }" not in no_ring_body
+    )
+    assert "else if (timeadd(&ring_data.time_l, 1000))" in no_ring_body
+    assert "ring_entry_count = 0;" in no_ring_body
+    assert "timedestroy(&ring_data.time_l);" in no_ring_body
+
+
 def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     cylinder_source = _read(A_RUN_CYLINDER_C)
     wall_source = _read(A_RUN_WALL_C)

@@ -5,7 +5,7 @@
 #include "zf_common_headfile.h"
 #include "a_run_ring.h"
 
-#define RING_ENTRY_CONFIRM_COUNT 20u /* 圆环入口连续确认次数，2ms 调用下约 16ms。 */
+#define RING_ENTRY_CONFIRM_COUNT 5u /* 圆环入口连续确认次数，2ms 调用下约 16ms。 */
 #define RING_YAW_DT_SCALE 0.40f     /* 主环迁移到 2ms 后，圆环 yaw 累计保持迁移前等效角度。 */
 
 /**
@@ -13,12 +13,13 @@
  */
 enum RingStep
 {
-    no_ring,      /**< 未进入环岛流程。 */
-    ring,         /**< 已识别到圆环入口。 */
-    pre_ring,     /**< 预入环阶段。 */
-    in_ring,      /**< 环内阶段。 */
-    pre_out_ring, /**< 预出环阶段。 */
-    out_ring      /**< 出环确认阶段。 */
+    no_ring,        /**< 未进入环岛流程。 */
+    ring,           /**< 已识别到圆环入口。 */
+    pre_ring,       /**< 预入环阶段。 */
+    in_ring,        /**< 环内阶段。 */
+    pre_out_ring,   /**< 预出环阶段。 */
+    drive_out_ring, /**< 出环前直走段，编码器累计到阈值后切入 out_ring。 */
+    out_ring        /**< 出环确认阶段。 */
 };
 
 static int8 ring_is_left_entry_signal(void);
@@ -79,15 +80,11 @@ void a_run_ring_reset(void)
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    if ((ad1 > 35 &&
-         ad2 > 5 &&
-         ad3 > 5 &&
-         ad4 > 35 &&
-         ad1 < 80 &&
-         ad2 < 60 &&
-         ad3 < 60 &&
-         ad4 < 80) ||
-        ad1 > 40 && ad2 > 5 && ad3 > 5 && ad4 > 20)
+    //|| ad1 > 40 && ad2 > 10 && ad3 > 10 && ad4 > 20
+    if (ad1 > 40 &&
+         ad2 > 10 &&
+         ad3 > 10 &&
+         ad4 > 40 &&ad2<30&&ad3<30&&((ad1+ad2)>(ad3+ad4)))
     {
         return 1;
     }
@@ -151,14 +148,10 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         {
             ring_entry_count++;
         }
-        else
-        {
-            ring_entry_count = 0;
-            timedestroy(&ring_data.time_l);
-        }
 
         if (ring_entry_count > 0)
         {
+            /* 首次命中后开启窗口，窗口内累计命中次数，避免单拍电感抖动打断进环确认。 */
             if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
             {
                 ring_entry_count = 0;
@@ -175,7 +168,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
                 }
                 current_state = ring;
             }
-            else if (timeadd(&ring_data.time_l, 500))
+            else if (timeadd(&ring_data.time_l, 300))
             {
                 ring_entry_count = 0;
                 timedestroy(&ring_data.time_l);
@@ -219,17 +212,28 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         if (ring_data.yaw_delta_sum >= app.ring.pre_out_ring_Gyroz)
         {
             ring_data.diff_set = 0;
+            ring_data.encoder = 0;
+            ring_data.distance = 1;
+            current_state = drive_out_ring;
+        }
+        break;
+
+    case drive_out_ring:
+        ring_data.diff_set = 10 * ring_dir;
+        if (ring_data.encoder >= app.ring.drive_out_ring_encoder)
+        {
+            ring_data.distance = 0;
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;
             timedestroy(&ring_data.out_ring_time);
             current_state = out_ring;
-										stop=1;
         }
         break;
 
     case out_ring:
-        if (timeadd(&ring_data.out_ring_time, 600))
+        if (timeadd(&ring_data.out_ring_time, 200))
         {
+            stop = 0;
             timedestroy(&ring_data.out_ring_time);
             ring_data.flast_l = 0;
             ring_data.flast_r = 0;
