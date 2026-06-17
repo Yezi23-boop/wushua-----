@@ -59,20 +59,20 @@ void run_time_1(void)
      * 原因：跷跷板和圆环都可能覆盖 PID.steer.output，必须压住普通循迹目标。
      */
     a_run_track_element_update_gate(&speed_active, &PID.steer.output);
-    if (seesaw_brake_pwm > 0)
+    if (seesaw_zero_brake_active != 0)
     {
         /*
-         * 跷跷板停止等待前短反拖刹车，直接绕开速度 PID。
-         * 只在运行态输出反向 PWM，避免待机/预启动误动作。
+         * 跷跷板停止等待前零速闭环刹车。
+         * 此阶段使用 signed 编码器速度，前滑给反向力矩，倒滑则自动收回到正向。
          */
         PID.angle.output = 0.0f;
         left_target = 0.0f;
         right_target = 0.0f;
-        pid_speed_reset(&PID.left_speed);
-        pid_speed_reset(&PID.right_speed);
+        pid_speed_update(&PID.left_speed, left_target, speed_l_signed);
+        pid_speed_update(&PID.right_speed, right_target, speed_r_signed);
         if (start_state == 2)
         {
-            motor_output(-seesaw_brake_pwm, -seesaw_brake_pwm);
+            motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
         }
         else
         {

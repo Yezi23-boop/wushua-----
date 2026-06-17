@@ -72,7 +72,7 @@ typedef struct
     int seesaw_wait_count; /**< 停止等待模式停车等待时间，单位为 2ms 主控制周期。 */
     int recover_speed;     /**< 跷跷板落地恢复找线速度。 */
     float release_step;    /**< COOLDOWN 阶段每 2ms 释放的速度步长，支持 0.01 级慢释放。 */
-    float seesaw_creep_cm; /**< 短反拖后继续循迹前挪距离，单位 cm；小于等于 0 时跳过。 */
+    float seesaw_creep_cm; /**< 零速刹车后继续循迹前挪距离，单位 cm；小于等于 0 时跳过。 */
 } AppFlyConfig;
 
 /**

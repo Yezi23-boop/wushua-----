@@ -78,7 +78,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.seesaw_wait_count = 500;  /* 停车等待时间 (500 * 2ms = 1000ms) */
     config->fly.recover_speed = 10;       /* 落地后固定找线速度 */
     config->fly.release_step = 0.3f;      /* COOLDOWN 每 2ms 提速步长 */
-    config->fly.seesaw_creep_cm = 12.00f; /* 短反拖后前挪距离，单位 cm */
+    config->fly.seesaw_creep_cm = 12.00f; /* 零速刹车后前挪距离，单位 cm */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */

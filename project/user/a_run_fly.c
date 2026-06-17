@@ -20,13 +20,13 @@ volatile int32 fly_pwm_output_limit = 0;  /* HOLD/RECOVER/COOLDOWN 期间限制�
 static SeesawState seesaw_state = SEESAW_IDLE; /**< 停止等待状态机阶段 */
 static int seesaw_detect_count = 0;            /**< 停止等待入口窗口内有效命中计数，单位为 2ms 周期。 */
 static int seesaw_entry_window_count = 0;      /**< 停止等待入口趋势确认窗口计数，单位为 2ms 周期。 */
-static int seesaw_brake_count = 0;             /**< 短反拖刹车计数，单位为 2ms 周期。 */
+static int seesaw_brake_count = 0;             /**< 零速闭环刹车计数，单位为 2ms 周期。 */
 static int seesaw_wait_count = 0;              /**< 等待倾斜计数，单位为 2ms 周期 */
-static float seesaw_creep_distance = 0.0f;     /**< 短反拖后前挪里程积分，单位沿用速度积分标尺 cm。 */
+static float seesaw_creep_distance = 0.0f;     /**< 零速刹车后前挪里程积分，单位沿用速度积分标尺 cm。 */
 static uint16 seesaw_last_ad1 = 0;             /**< 停止等待入口上一拍 ad1，用于确认横向电感持续递减。 */
 static uint16 seesaw_last_ad4 = 0;             /**< 停止等待入口上一拍 ad4，用于确认横向电感持续递减。 */
 static uint8 seesaw_last_ad_valid = 0;         /**< 上一拍 ad1/ad4 是否可用于递减比较。 */
-volatile int32 seesaw_brake_pwm = 0;           /**< 短反拖刹车 PWM，主控链路消费后直接反向输出。 */
+volatile uint8 seesaw_zero_brake_active = 0;   /**< 零速闭环刹车窗口，主控链路用 signed 速度反馈压到 0。 */
 volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临时居中权重开关。 */
 
 /* --- 入口/落地电感阈值 --- */
@@ -46,8 +46,7 @@ volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临
 #define FLY_PWM_LIMIT_RECOVER_EARLY 2000     /* 落地前 300ms 实际 PWM 上限，先保证负压和轮胎贴稳。 */
 #define FLY_PWM_LIMIT_RECOVER_LATE 4000      /* RECOVER 后段实际 PWM 上限，给循迹留出有限纠偏能力。 */
 #define FLY_HOLD_COUNT_DEFAULT 75            /* 旧飞坡 HOLD 默认 75 * 2ms = 150ms。 */
-#define SEESAW_BRAKE_PWM 2000                /* 停止等待前短反拖 PWM，-3000 实测为正确反拖方向。 */
-#define SEESAW_BRAKE_COUNT 10               /* 30 * 2ms = 60ms，用于先抵消上板惯性。 */
+#define SEESAW_BRAKE_COUNT 10                /* 10 * 2ms = 20ms，用零速闭环先抵消上板惯性。 */
 
 /**
  * @brief 取出并清除飞坡/跷跷板完成事件。
@@ -100,7 +99,7 @@ void a_run_seesaw_reset(void)
     seesaw_last_ad1 = 0;
     seesaw_last_ad4 = 0;
     seesaw_last_ad_valid = 0;
-    seesaw_brake_pwm = 0;
+    seesaw_zero_brake_active = 0;
     seesaw_centering_active = 0;
     fly_lost_line_blocked = 0;
     fly_finish_event = 0;
@@ -176,6 +175,12 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
                     seesaw_entry_window_count = 0;
                     seesaw_last_ad_valid = 0;
                     seesaw_brake_count = 0;
+                    pid_speed_reset(&PID.left_speed);
+                    pid_speed_reset(&PID.right_speed);
+                    *speed = 0.0f;
+                    fly_lost_line_blocked = 1;
+                    stop = 0;
+                    seesaw_zero_brake_active = 1;
                     seesaw_state = SEESAW_BRAKE;
                 }
             }
@@ -204,7 +209,12 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         /* 借用全局停车锁存，直接压住电机输出，恢复阶段再释放。 */
         *speed = 0.0f;
         fly_lost_line_blocked = 1;
-        seesaw_brake_pwm = 0;
+        if (seesaw_zero_brake_active != 0)
+        {
+            pid_speed_reset(&PID.left_speed);
+            pid_speed_reset(&PID.right_speed);
+            seesaw_zero_brake_active = 0;
+        }
         seesaw_centering_active = 0;
         stop = 1;
         seesaw_wait_count = 0;
@@ -213,19 +223,18 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
 
     case SEESAW_BRAKE:
         /*
-         * 上板后单靠 stop=1 会滑行，先短反拖抵消惯性。
-         * 这里临时放开 stop，使主控链路能直接输出反向 PWM。
+         * 上板后单靠 stop=1 会滑行，先用速度环把目标压到 0。
+         * 这里临时放开 stop，并要求主控链路使用 signed 编码器反馈，避免倒滑也被当成前进速度。
          */
         *speed = 0.0f;
         fly_lost_line_blocked = 1;
         fly_pwm_output_limit = 0;
         stop = 0;
-        seesaw_brake_pwm = SEESAW_BRAKE_PWM;
+        seesaw_zero_brake_active = 1;
         seesaw_brake_count++;
         if (seesaw_brake_count >= SEESAW_BRAKE_COUNT)
         {
             seesaw_brake_count = 0;
-            seesaw_brake_pwm = 0;
             seesaw_creep_distance = 0.0f;
             if (creep_target > 0.0f)
             {
@@ -242,12 +251,17 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
 
     case SEESAW_CREEP:
         /*
-         * 短反拖后低速向前循迹一小段，让车重更靠后压住跷跷板。
-         * 里程积分使用左右轮平均速度和现场标定系数，负向滑动不计入前挪距离。
+         * 零速刹车后低速向前循迹一小段，让车重更靠后压住跷跷板。
+         * 里程积分沿用普通 abs 速度反馈和现场标定系数，保持与原前挪距离调参一致。
          */
         *speed = (float)recover_speed;
         fly_lost_line_blocked = 1;
-        seesaw_brake_pwm = 0;
+        if (seesaw_zero_brake_active != 0)
+        {
+            pid_speed_reset(&PID.left_speed);
+            pid_speed_reset(&PID.right_speed);
+            seesaw_zero_brake_active = 0;
+        }
         stop = 0;
         creep_delta = (speed_l + speed_r) * 0.5f * 0.012f;
         if (creep_delta > 0.0f)

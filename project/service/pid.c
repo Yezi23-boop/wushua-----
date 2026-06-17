@@ -6,8 +6,10 @@
 LowPassFilter_t encoder_filter_left;
 LowPassFilter_t encoder_filter_right;
 /* 内部中间变量 */
-float speed_l = 0; /* 左轮当前速度反馈 */
-float speed_r = 0; /* 右轮当前速度反馈 */
+float speed_l = 0;        /* 左轮当前速度反馈，普通速度环使用绝对值。 */
+float speed_r = 0;        /* 右轮当前速度反馈，普通速度环使用绝对值。 */
+float speed_l_signed = 0; /* 左轮带方向速度反馈，跷跷板零速刹车和里程方向判断使用。 */
+float speed_r_signed = 0; /* 右轮带方向速度反馈，跷跷板零速刹车和里程方向判断使用。 */
 
 /* 实例化全局控制器聚合结构 */
 PID_Controllers PID;
@@ -81,8 +83,10 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     //                                                        &encoder_filter_left);
     //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
     //                                                         &encoder_filter_right);
-    speed_r = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
-    speed_l = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
+    speed_r_signed = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
+    speed_l_signed = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
+    speed_r = speed_r_signed;
+    speed_l = speed_l_signed;
     if (speed_l < 0)
     {
         speed_l = -speed_l;

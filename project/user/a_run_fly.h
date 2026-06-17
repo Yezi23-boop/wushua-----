@@ -23,7 +23,7 @@ typedef enum
 {
     SEESAW_IDLE = 0,      /**< 等待入口检测 */
     SEESAW_STOP = 1,      /**< 停车，目标速度为 0 */
-    SEESAW_BRAKE = 2,     /**< 短反拖刹车，抵消上板惯性 */
+    SEESAW_BRAKE = 2,     /**< 零速闭环刹车，抵消上板惯性 */
     SEESAW_CREEP = 3,     /**< 刹车后低速前挪，让车重更靠近跷跷板转轴后方 */
     SEESAW_WAIT = 4,      /**< 等待跷跷板倾斜 */
     SEESAW_CHECK = 5,     /**< 检查电感信号恢复 */
@@ -83,7 +83,7 @@ void a_run_seesaw_reset(void);
 
 extern volatile uint8 fly_lost_line_blocked; /**< 飞坡状态机写、丢线保护读；1 表示临时屏蔽丢线，0 表示恢复丢线保护。 */
 extern volatile int32 fly_pwm_output_limit; /**< 飞坡 HOLD/RECOVER/COOLDOWN 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
-extern volatile int32 seesaw_brake_pwm; /**< 停止等待模式短反拖刹车 PWM；大于 0 时主控直接输出反向 PWM。 */
+extern volatile uint8 seesaw_zero_brake_active; /**< 停止等待模式零速闭环刹车窗口；1 时速度环使用 signed 编码器反馈。 */
 extern volatile uint8 seesaw_centering_active; /**< 跷跷板前挪/恢复期临时居中权重开关，ADC 解算读。 */
 
 #endif /* __A_RUN_FLY_H__ */

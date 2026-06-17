@@ -106,6 +106,7 @@ void Pure_Pursuit_Control(float speed_ref, float norm_error, float *left_target,
 
 /* --- 全局变量外部声明 --- */
 extern float speed_l, speed_r;
+extern float speed_l_signed, speed_r_signed;
 extern PID_Controllers PID;
 
 #endif /* __PID_H__ */
