@@ -12,6 +12,7 @@ A_RUN_RING_C = ROOT / "project" / "user" / "a_run_ring.c"
 A_RUN_RING_H = ROOT / "project" / "user" / "a_run_ring.h"
 A_RUN_CYLINDER_C = ROOT / "project" / "user" / "a_run_cylinder.c"
 A_RUN_WALL_C = ROOT / "project" / "user" / "a_run_wall.c"
+A_RUN_WALL_H = ROOT / "project" / "user" / "a_run_wall.h"
 IMU_C = ROOT / "project" / "user" / "imu.c"
 ADC_C = ROOT / "project" / "user" / "ADC.c"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
@@ -179,6 +180,40 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     assert "#define FLY_RECOVER_PWM_LIMIT_EARLY_COUNT 150u" in fly_source
     assert "#define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 500u" in fly_source
     assert "fly_finish_event = 1;" in fly_source
+
+
+def test_wall_entry_uses_adc_sum_threshold():
+    wall_source = _read(A_RUN_WALL_C)
+    wall_header = _read(A_RUN_WALL_H)
+    update_body = _function_body(
+        wall_source,
+        "uint8 a_run_wall_update_5ms(float *speed)",
+        "    return 0;\n}",
+    )
+
+    assert "#define WALL_AD_SUM_THRESHOLD 100u" in wall_source
+    assert "uint16 ad_sum;" in update_body
+    assert "ad_sum = ad1 + ad2 + ad3 + ad4;" in update_body
+    assert "if (ad_sum > WALL_AD_SUM_THRESHOLD)" in update_body
+    assert "wall_state = WALL_TIMING;" in update_body
+    assert "side_valid" not in update_body
+    assert "high_valid" not in update_body
+    assert "WALL_PITCH" not in wall_source
+    assert "wall_pitch" not in wall_source
+    assert "imu_get_pitch" not in wall_source
+    assert "pitch" not in wall_header
+
+
+def test_imu_drops_wall_pitch_history_after_wall_uses_adc_only():
+    imu_source = _read(IMU_C)
+    imu_header = _read(ROOT / "project" / "user" / "imu.h")
+
+    assert "IMU_PITCH_WALL_WINDOW_MS" not in imu_header
+    assert "imu_get_pitch_current_x10" not in imu_header
+    assert "imu_get_pitch_wall_window_ago_x10" not in imu_header
+    assert "imu_pitch_history" not in imu_source
+    assert "imu_get_pitch_current_x10" not in imu_source
+    assert "imu_get_pitch_wall_window_ago_x10" not in imu_source
 
 
 def test_adc_uses_cylinder_abc_while_expected_element_is_cylinder():

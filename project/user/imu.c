@@ -4,7 +4,6 @@
  * @details
  * 本模块对 IMU660RC 输出进行轻量转换，向控制环提供：
  * - 基于 roll 角的姿态角差缓存；
- * - 基于 pitch 角的可调历史缓存，供墙面二级确认使用；
  * - 统一量纲后的 gyro_z 实时反馈；
  * - 若干数学辅助函数（快速平方根、反平方根、atan2 兼容实现）。
  *
@@ -26,43 +25,11 @@ LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，2ms IMU 更新链路写�
 #define IMU_ROLL_FLAT_DEG 180.0f         /* 当前安装姿态下平地 roll 约 180 度，输出角差前先扣除该基准。 */
 #define IMU_ROLL_DELTA_MIN_DEG (-180.0f) /* roll 角差输出下限，单位：度。 */
 #define IMU_ROLL_DELTA_MAX_DEG 180.0f    /* roll 角差输出上限，单位：度。 */
-#define IMU_PITCH_UPDATE_PERIOD_MS 2u      /* pitch 缓存跟随 2ms 主控制环写入。 */
-#define IMU_PITCH_HISTORY_MAX_MS 1000u     /* pitch 历史最大回看窗口，现场只需改到 0~1s 范围。 */
-#define IMU_PITCH_WALL_BEFORE_MS IMU_PITCH_WALL_WINDOW_MS /* 墙面识别读取该时长前的姿态。 */
-#define IMU_PITCH_HISTORY_COUNT 512u       /* 512 * 2ms = 1024ms，覆盖 1s 回看并留出环形余量。 */
-#define IMU_PITCH_WALL_BEFORE_COUNT (IMU_PITCH_WALL_BEFORE_MS / IMU_PITCH_UPDATE_PERIOD_MS)
 
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
 static volatile float imu_roll_delta_deg = 0.0f; /**< 2ms 主环写入、控制和调试链路读取的 roll 角差，单位：度。 */
-static int16 xdata imu_pitch_history_x10[IMU_PITCH_HISTORY_COUNT]; /**< 2ms 姿态历史，单位 0.1 度；墙面确认只读短时变化。 */
-static uint16 imu_pitch_history_index = 0;                         /**< 下一次写入的环形缓存下标，范围 0~511。 */
-static int16 imu_pitch_current_x10 = 0;                             /**< 最近一次 pitch 缓存值，单位 0.1 度。 */
 float acc_1 = 0.0;                               /**< acc_z 低通滤波输入/输出缓存，单位沿用 IMU660RC 原始 acc_z。 */
-
-static int16 imu_pitch_to_x10(float pitch_deg);
-
-/**
- * @brief 将 pitch 角转换为 0.1 度整数缓存值。
- * @param pitch_deg IMU660RC 输出的 pitch 角，单位为度。
- * @return int16 pitch * 10 后的整数值，四舍五入到 0.1 度。
- */
-static int16 imu_pitch_to_x10(float pitch_deg)
-{
-    float pitch_x10;
-
-    pitch_x10 = pitch_deg * 10.0f;
-    if (pitch_x10 >= 0.0f)
-    {
-        pitch_x10 += 0.5f;
-    }
-    else
-    {
-        pitch_x10 -= 0.5f;
-    }
-
-    return (int16)pitch_x10;
-}
 
 /**
  * @brief 上电标定 gyro_z 零偏
@@ -104,7 +71,6 @@ void imu_calibrate_gyro_z_zero_drift(void)
  * @details
  * 驱动层已把姿态解算结果更新到 `imu660rc_roll`。当前安装姿态下平地约 180 度，
  * 因此这里得到 `imu660rc_roll - 180` 的角差并折回 -180~180 度。
- * 同时缓存 pitch * 10 的短历史，供墙面识别比较可调窗口内的俯仰角变化。
  *
  * @note 由 2ms 主控制链路调用一次；其他模块读取缓存，避免重复处理姿态量。
  */
@@ -123,13 +89,6 @@ void imu_update_gravity_vz_from_roll(void)
     }
 
     imu_roll_delta_deg = roll_delta;
-    imu_pitch_current_x10 = imu_pitch_to_x10(imu660rc_pitch);
-    imu_pitch_history_x10[imu_pitch_history_index] = imu_pitch_current_x10;
-    imu_pitch_history_index++;
-    if (imu_pitch_history_index >= IMU_PITCH_HISTORY_COUNT)
-    {
-        imu_pitch_history_index = 0;
-    }
     acc_1 = imu660rc_acc_z;
     low_pass_filter_mt(&acc_z, &acc_1, 0.01f);
 }
@@ -141,37 +100,6 @@ void imu_update_gravity_vz_from_roll(void)
 float imu_get_gravity_vz(void)
 {
     return imu_roll_delta_deg;
-}
-
-/**
- * @brief 读取最近一次缓存的 pitch 角。
- * @return int16 pitch * 10，单位为 0.1 度。
- */
-int16 imu_get_pitch_current_x10(void)
-{
-    return imu_pitch_current_x10;
-}
-
-/**
- * @brief 读取墙面 pitch 判定窗口前的 pitch 角。
- * @return int16 pitch * 10，单位为 0.1 度。
- *
- * @note 依赖 2ms 主控制链路持续调用 imu_update_gravity_vz_from_roll()。
- */
-int16 imu_get_pitch_wall_window_ago_x10(void)
-{
-    uint16 read_index;
-
-    /*
-     * 写指针指向下一槽，所以回看 N 拍要先扣掉当前样本对应的 1 拍。
-     * 当前缓存覆盖 1024ms，WALL_BEFORE_MS 在 0~1000ms 内修改都不会越界。
-     */
-    read_index = imu_pitch_history_index + IMU_PITCH_HISTORY_COUNT - IMU_PITCH_WALL_BEFORE_COUNT - 1u;
-    if (read_index >= IMU_PITCH_HISTORY_COUNT)
-    {
-        read_index -= IMU_PITCH_HISTORY_COUNT;
-    }
-    return imu_pitch_history_x10[read_index];
 }
 
 /**

@@ -68,7 +68,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值150 */
     config->ring.pre_out_ring_Gyro_target = 25.00f; /* pre_out_ring固定目标角速度 15*/
     config->ring.pre_out_ring_Gyroz = 310.00f;      /* pre_out_ring->drive_out_ring累计转角阈值160 */
-    config->ring.drive_out_ring_encoder = 10.0f;    /* 出环前直走距离（cm） */
+    config->ring.drive_out_ring_encoder = 5.0f;    /* 出环前直走距离（cm） */
 
     /* 飞坡策略默认参数 */
     config->fly.count_fly_speed = 5;      /* 飞坡慢速值 */
