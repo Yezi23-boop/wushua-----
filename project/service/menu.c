@@ -467,7 +467,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 44:
         Menu_Draw_Fly_Sub(0);
-        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(app.fly.seesaw_mode == 0 ? 5 * MENU_ROW_HEIGHT : 6 * MENU_ROW_HEIGHT);
         break;
     case 441:
         Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
@@ -486,9 +486,6 @@ static void Menu_Render_Current_Page(void)
         break;
     case 446:
         Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
-        break;
-    case 447:
-        Menu_Draw_Fly_Sub(7 * MENU_ROW_HEIGHT);
         break;
     case 5:
         Menu_Draw_Sensor();
@@ -958,22 +955,42 @@ static void Menu_Draw_Wall_Sub(int edit_line)
  */
 static void Menu_Draw_Fly_Sub(int edit_line)
 {
-    ips114_show_string(8, 0, "<<FLY");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "creep_cm");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "hit_count");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "seesaw_mode");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "seesaw_wait");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "recover_spd");
-    ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "release_stp");
+    ips114_show_string(8, 0, "<<SEESAW");
+    ips114_show_string(160, 0, "M:");
+    ips114_show_int32(176, 0, app.fly.seesaw_mode, 1);
 
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.count_fly_speed, 4);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
-    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);
-    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
-    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.fly.recover_speed, 4);
-    ips114_show_float(112, 7 * MENU_ROW_HEIGHT, app.fly.release_step, 4, 2);
+    if (app.fly.seesaw_mode == 0)
+    {
+        /* 飞坡模式参数 */
+        ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
+        ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "detect_cnt");
+        ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "airborne");
+        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "recover_spd");
+        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "release_stp");
+
+        ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.fly_speed, 4);
+        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.fly_detect_count, 4);
+        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.fly_airborne_th, 4);
+        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.recover_speed, 4);
+        ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.fly.release_step, 4, 2);
+    }
+    else
+    {
+        /* 停止等待模式参数 */
+        ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "seesaw_spd");
+        ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "detect_cnt");
+        ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "wait_cnt");
+        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "creep_cm");
+        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "recover_spd");
+        ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "release_stp");
+
+        ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_speed, 4);
+        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_detect_count, 4);
+        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
+        ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
+        ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.recover_speed, 4);
+        ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.fly.release_step, 4, 2);
+    }
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -1708,40 +1725,51 @@ static void Menu_Yuanshu_Process(void)
         break;
     case 44:
         Menu_Draw_Fly_Sub(0);
-        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(app.fly.seesaw_mode == 0 ? 5 * MENU_ROW_HEIGHT : 6 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(7 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(app.fly.seesaw_mode == 0 ? 5 * MENU_ROW_HEIGHT : 6 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
     case 441:
         Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_speed, 1);
+        if (app.fly.seesaw_mode == 0)
+            Menu_Process_Int_Value(&app.fly.fly_speed, 1);
+        else
+            Menu_Process_Int_Value(&app.fly.seesaw_speed, 1);
         break;
     case 442:
         Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
+        if (app.fly.seesaw_mode == 0)
+            Menu_Process_Int_Value(&app.fly.fly_detect_count, 1);
+        else
+            Menu_Process_Int_Value(&app.fly.seesaw_detect_count, 1);
         break;
     case 443:
         Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_time_2, 1);
+        if (app.fly.seesaw_mode == 0)
+            Menu_Process_Int_Value(&app.fly.fly_airborne_th, 1);
+        else
+            Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
         break;
     case 444:
         Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Special_Value(&app.fly.seesaw_mode);
+        if (app.fly.seesaw_mode == 0)
+            Menu_Process_Int_Value(&app.fly.recover_speed, 1);
+        else
+            Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
         break;
     case 445:
         Menu_Draw_Fly_Sub(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
+        if (app.fly.seesaw_mode == 0)
+            Menu_Process_Float_Value(&app.fly.release_step, 0.01f);
+        else
+            Menu_Process_Int_Value(&app.fly.recover_speed, 1);
         break;
     case 446:
         Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.recover_speed, 1);
-        break;
-    case 447:
-        Menu_Draw_Fly_Sub(7 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.fly.release_step, 0.01f);
         break;
     default:

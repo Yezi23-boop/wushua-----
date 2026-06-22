@@ -61,18 +61,23 @@ typedef struct
 } AppRingConfig;
 
 /**
- * @brief 飞坡/特殊元素控制配置
+ * @brief 飞坡/跷跷板控制配置
  */
 typedef struct
 {
-    int count_fly_speed;   /**< 飞坡状态下的目标速度（通常为慢速以保安全） */
-    int count_fly_time_1;  /**< 飞坡检测确认时间（按主控制环周期累计的触发次数） */
-    int count_fly_time_2;  /**< 停止等待模式入口命中次数，旧飞坡 HOLD 时间使用固定宏。 */
-    int16 seesaw_mode;     /**< 跷跷板模式：0=飞坡，1=停止等待 */
-    int seesaw_wait_count; /**< 停止等待模式停车等待时间，单位为 2ms 主控制周期。 */
-    int recover_speed;     /**< 跷跷板落地恢复找线速度。 */
-    float release_step;    /**< COOLDOWN 阶段每 2ms 释放的速度步长，支持 0.01 级慢释放。 */
-    float seesaw_creep_cm; /**< 零速刹车后继续循迹前挪距离，单位 cm；小于等于 0 时跳过。 */
+    /* 飞坡模式专用 */
+    int fly_speed;           /**< LOW 阶段目标速度 */
+    int fly_detect_count;    /**< IDLE 入口弱磁确认次数 */
+    int fly_airborne_th;     /**< 离地检测阈值（四路全部 ≤ 该值） */
+    /* 停止等待模式专用 */
+    int seesaw_detect_count; /**< IDLE 入口命中次数 */
+    int seesaw_wait_count;   /**< 停车等待时间（×2ms） */
+    int seesaw_speed;        /**< CREEP 阶段目标速度 */
+    float seesaw_creep_cm;   /**< 前挪距离（cm） */
+    /* 共用 */
+    int16 seesaw_mode;       /**< 0=飞坡，1=停止等待 */
+    int recover_speed;       /**< COOLDOWN 恢复速度 */
+    float release_step;      /**< COOLDOWN 步长 */
 } AppFlyConfig;
 
 /**

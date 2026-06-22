@@ -9,10 +9,10 @@
  */
 typedef enum
 {
-    FLY_STATE_IDLE = 0,    /**< 普通巡线，允许在元素仲裁授权后检测跷跷板入口 */
-    FLY_STATE_HOLD = 1,    /**< 跷跷板保持低速通过，转向继续循迹 */
-    FLY_STATE_RECOVER = 2, /**< 落地恢复，弱磁未恢复前继续低速回线 */
-    FLY_STATE_COOLDOWN = 3 /**< 回线后速度斜坡释放，避免下地后一拍提速 */
+    FLY_STATE_IDLE = 0,     /**< 普通巡线，允许在元素仲裁授权后检测跷跷板入口 */
+    FLY_STATE_LOW = 1,      /**< 跷跷板上低速通过，无 PWM 限制，转向保留循迹 */
+    FLY_STATE_FLY = 2,      /**< 空中飞跃，速度=0 转向=0 */
+    FLY_STATE_COOLDOWN = 3  /**< 落地后居中权重阶梯增速 */
 } FlyState;
 
 /**
@@ -32,12 +32,12 @@ typedef enum
 } SeesawState;
 
 /**
- * @brief 更新飞坡/跷跷板本体速度覆盖状态机。
+ * @brief 更新飞坡模式速度覆盖状态机。
  *
- * 该接口只供 a_run_mode 统一调配层调用，入口检测由赛道元素仲裁授权，
- * 避免跷跷板之外的弱磁区域误触发飞坡状态机。
+ * 该接口只供元素仲裁调用，入口检测由赛道元素仲裁授权。
+ * 流程：IDLE → LOW（低速通过）→ FLY（空中飞跃，速度=0）→ COOLDOWN（阶梯增速）。
  *
- * @param speed 输出目标速度指针，保留小数速度设定；保持/恢复阶段会被状态机覆盖。
+ * @param speed 输出目标速度指针；LOW/FLY/COOLDOWN 阶段会被状态机覆盖。
  * @param allow_entry 1-当前轮到跷跷板元素，允许从空闲态检测入口；0-禁止新入口。
  */
 void a_run_fly_update_speed(float *speed, uint8 allow_entry);
@@ -82,7 +82,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry);
 void a_run_seesaw_reset(void);
 
 extern volatile uint8 fly_lost_line_blocked; /**< 飞坡状态机写、丢线保护读；1 表示临时屏蔽丢线，0 表示恢复丢线保护。 */
-extern volatile int32 fly_pwm_output_limit; /**< 飞坡 HOLD/RECOVER/COOLDOWN 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
+extern volatile int32 fly_pwm_output_limit; /**< COOLDOWN 写、电机输出读；大于 0 时限制实际 PWM 占空比。 */
 extern volatile uint8 seesaw_zero_brake_active; /**< 停止等待模式零速闭环刹车窗口；1 时速度环使用 signed 编码器反馈。 */
 extern volatile uint8 seesaw_centering_active; /**< 跷跷板前挪/恢复期临时居中权重开关，ADC 解算读。 */
 

@@ -71,14 +71,19 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.drive_out_ring_encoder = 5.0f;    /* 出环前直走距离（cm） */
 
     /* 飞坡策略默认参数 */
-    config->fly.count_fly_speed = 5;      /* 飞坡慢速值 */
-    config->fly.count_fly_time_1 = 1;     /* 触发检测次数 (8 * 2ms = 16ms) */
-    config->fly.count_fly_time_2 = 3;     /* 停止等待入口命中次数 */
-    config->fly.seesaw_mode = 1;          /* 默认停止等待模式 */
+    /* 飞坡模式专用 */
+    config->fly.fly_speed = 5;            /* LOW 阶段目标速度 */
+    config->fly.fly_detect_count = 1;     /* IDLE 入口弱磁确认次数 */
+    config->fly.fly_airborne_th = 5;      /* 离地检测阈值 */
+    /* 停止等待模式专用 */
+    config->fly.seesaw_detect_count = 3;  /* IDLE 入口命中次数 */
     config->fly.seesaw_wait_count = 500;  /* 停车等待时间 (500 * 2ms = 1000ms) */
-    config->fly.recover_speed = 10;       /* 落地后固定找线速度 */
+    config->fly.seesaw_speed = 10;        /* CREEP 阶段目标速度 */
+    config->fly.seesaw_creep_cm = 12.00f; /* 前挪距离，单位 cm */
+    /* 共用 */
+    config->fly.seesaw_mode = 1;          /* 默认停止等待模式 */
+    config->fly.recover_speed = 10;       /* COOLDOWN 恢复速度 */
     config->fly.release_step = 0.3f;      /* COOLDOWN 每 2ms 提速步长 */
-    config->fly.seesaw_creep_cm = 12.00f; /* 零速刹车后前挪距离，单位 cm */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */
@@ -132,10 +137,10 @@ static void eeprom_read_config(AppConfig *config)
     config->ring.pre_out_ring_Gyroz = read_float(21);
     config->ring.drive_out_ring_encoder = read_float(51);
 
-    config->fly.count_fly_speed = (int)read_int(22);
-    config->fly.count_fly_time_1 = (int)read_int(23);
-    config->fly.count_fly_time_2 = (int)read_int(24);
-    config->fly.seesaw_mode = (int16)read_int(25); /* 槽位 25：跷跷板模式 */
+    config->fly.fly_speed = (int)read_int(22);
+    config->fly.fly_detect_count = (int)read_int(23);
+    config->fly.seesaw_detect_count = (int)read_int(24);
+    config->fly.seesaw_mode = (int16)read_int(25);
     if (config->fly.seesaw_mode != 0)
     {
         config->fly.seesaw_mode = 1;
@@ -144,6 +149,8 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.recover_speed = (int)read_int(38);
     config->fly.release_step = read_float(39);
     config->fly.seesaw_creep_cm = read_float(40);
+    config->fly.fly_airborne_th = (int)read_int(52);
+    config->fly.seesaw_speed = (int)read_int(53);
     config->start.track_mode = (int16)read_int(29);
     config->start.element_len = (int)read_int(30);
     config->start.element_seq[0] = (int)read_int(31);
@@ -200,14 +207,16 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->ring.pre_out_ring_Gyroz, 21);
     save_float(config->ring.drive_out_ring_encoder, 51);
 
-    save_int(config->fly.count_fly_speed, 22);
-    save_int(config->fly.count_fly_time_1, 23);
-    save_int(config->fly.count_fly_time_2, 24);
-    save_int(config->fly.seesaw_mode, 25); /* 槽位 25：跷跷板模式 */
+    save_int(config->fly.fly_speed, 22);
+    save_int(config->fly.fly_detect_count, 23);
+    save_int(config->fly.seesaw_detect_count, 24);
+    save_int(config->fly.seesaw_mode, 25);
     save_int(config->fly.seesaw_wait_count, 37);
     save_int(config->fly.recover_speed, 38);
     save_float(config->fly.release_step, 39);
     save_float(config->fly.seesaw_creep_cm, 40);
+    save_int(config->fly.fly_airborne_th, 52);
+    save_int(config->fly.seesaw_speed, 53);
     save_int(config->start.track_mode, 29);
     save_int(config->start.element_len, 30);
     save_int(config->start.element_seq[0], 31);
