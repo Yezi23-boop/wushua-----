@@ -41,6 +41,7 @@ volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临
 #define SEESAW_LAND_SIDE_TH 20u     /* CHECK 阶段横向电感恢复阈值 */
 #define SEESAW_LAND_CENTER_TH 10u   /* CHECK 阶段竖向电感恢复阈值 */
 #define SEESAW_ENTRY_WINDOW_COUNT 10 /* 停止等待入口确认窗口，10 * 2ms = 20ms。 */
+#define SEESAW_RECOVER_SPEED 10      /* 停止等待 COOLDOWN 固定恢复速度，改为编译期常量。 */
 
 /* --- 速度与 PWM 限制 --- */
 #define FLY_PWM_LIMIT_RECOVER_LATE 4000 /* COOLDOWN 阶段 PWM 上限，给循迹留出纠偏能力。 */
@@ -116,14 +117,12 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
 {
     int seesaw_wait_limit;
     int seesaw_hit_limit;
-    int recover_speed;
     float creep_target;
     float creep_delta;
     uint8 weak_line;
     uint8 entry_hit;
 
     seesaw_wait_limit = app.fly.seesaw_wait_count;
-    recover_speed = app.fly.recover_speed;
     seesaw_hit_limit = app.fly.seesaw_detect_count;
     creep_target = app.fly.seesaw_creep_cm;
 
@@ -302,7 +301,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         pid_speed_reset(&PID.left_speed);
         pid_speed_reset(&PID.right_speed);
         stop = 0;
-        fly_release_speed = (float)recover_speed;
+        fly_release_speed = (float)SEESAW_RECOVER_SPEED;
         fly_finish_event = 1;
         flat_fly = FLY_STATE_COOLDOWN;
         seesaw_state = SEESAW_COOLDOWN;
@@ -347,7 +346,10 @@ void a_run_fly_update_release_speed(float *speed)
     }
 
     *speed = fly_release_speed;
-    fly_release_speed += app.fly.release_step;
+    if (app.fly.seesaw_mode == 0)
+        fly_release_speed += app.fly.fly_release_step;
+    else
+        fly_release_speed += app.fly.seesaw_release_step;
     if (fly_release_speed > target_speed)
     {
         fly_release_speed = target_speed;

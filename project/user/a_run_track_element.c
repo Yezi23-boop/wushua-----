@@ -9,6 +9,7 @@
 #include "a_run_ring.h"
 #include "a_run_cylinder.h"
 #include "a_run_wall.h"
+#include "a_run_cross.h"
 
 enum TrackElement
 {
@@ -17,7 +18,8 @@ enum TrackElement
     ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING, /**< 右圆环流程，复用圆环状态机并反向控制。 */
     ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,     /**< 圆桶流程，保持菜单显示值 3 不变。 */
     ELEMENT_WALL = TRACK_ELEMENT_WALL,             /**< 墙面流程，保持菜单显示值 4 不变。 */
-    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW          /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
+    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW,         /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
+    ELEMENT_CROSS = TRACK_ELEMENT_CROSS            /**< 双十字流程，电感和命中后编码器积分退出。 */
 };
 
 static int8 track_element_is_executable(int element);
@@ -49,7 +51,8 @@ static int8 track_element_is_executable(int element)
         element == ELEMENT_RIGHT_RING ||
         element == ELEMENT_CYLINDER ||
         element == ELEMENT_WALL ||
-        element == ELEMENT_SEESAW)
+        element == ELEMENT_SEESAW ||
+        element == ELEMENT_CROSS)
     {
         return 1;
     }
@@ -65,6 +68,7 @@ static void track_element_enter(enum TrackElement element)
     a_run_ring_reset();
     a_run_cylinder_reset();
     a_run_wall_reset();
+    a_run_cross_reset();
     /*
      * 跷跷板完成事件只推进元素序列，COOLDOWN 还要继续释放速度。
      * 切到任意后续元素时都不能清掉 fly_release_speed，否则会一拍回到巡线速度。
@@ -207,6 +211,13 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
 
     case ELEMENT_WALL:
         if (a_run_wall_update_5ms(speed) != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_CROSS:
+        if (a_run_cross_update_5ms() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }

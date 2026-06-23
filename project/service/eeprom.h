@@ -14,7 +14,7 @@ typedef struct
     int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     int element_len;                            /**< 元素序列有效长度，运行期超出 1~6 时进入无元素状态。 */
-    int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板；其他值运行期跳过。 */
+    int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板、6双十字；其他值运行期跳过。 */
 } AppStartConfig;
 
 /**
@@ -69,15 +69,16 @@ typedef struct
     int fly_speed;           /**< LOW 阶段目标速度 */
     int fly_detect_count;    /**< IDLE 入口弱磁确认次数 */
     int fly_airborne_th;     /**< 离地检测阈值（四路全部 ≤ 该值） */
+    int fly_recover_speed;   /**< 飞坡 COOLDOWN 恢复速度 */
+    float fly_release_step;  /**< 飞坡 COOLDOWN 步长 */
     /* 停止等待模式专用 */
     int seesaw_detect_count; /**< IDLE 入口命中次数 */
     int seesaw_wait_count;   /**< 停车等待时间（×2ms） */
     int seesaw_speed;        /**< CREEP 阶段目标速度 */
     float seesaw_creep_cm;   /**< 前挪距离（cm） */
+    float seesaw_release_step;/**< 停止等待 COOLDOWN 步长 */
     /* 共用 */
     int16 seesaw_mode;       /**< 0=飞坡，1=停止等待 */
-    int recover_speed;       /**< COOLDOWN 恢复速度 */
-    float release_step;      /**< COOLDOWN 步长 */
 } AppFlyConfig;
 
 /**
@@ -105,6 +106,14 @@ typedef struct
 } AppWallConfig;
 
 /**
+ * @brief 双十字元素控制配置
+ */
+typedef struct
+{
+    float encoder_target; /**< 双十字退出编码器积分阈值 */
+} AppCrossConfig;
+
+/**
  * @brief 应用程序全局配置聚合结构体
  * @details 包含所有子模块的配置参数，整个结构体会被保存到 EEPROM
  */
@@ -117,6 +126,7 @@ typedef struct
     AppFlyConfig fly;           /**< 飞坡处理策略配置 */
     AppCylinderConfig cylinder; /**< 圆桶处理策略配置 */
     AppWallConfig wall;         /**< 墙面处理策略配置 */
+    AppCrossConfig cross;       /**< 双十字处理策略配置 */
 } AppConfig;
 
 /* --- 全局变量声明 --- */

@@ -101,6 +101,7 @@
 #include "a_run_ring.h"
 #include "a_run_cylinder.h"
 #include "a_run_wall.h"
+#include "a_run_cross.h"
 #include "soft_timer.h"
 #include "../user/ADC.h"
 #include "debug_view.h"

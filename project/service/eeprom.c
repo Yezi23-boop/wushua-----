@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 2L
+#define EEPROM_CONFIG_VERSION 3L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -75,15 +75,16 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.fly_speed = 5;            /* LOW 阶段目标速度 */
     config->fly.fly_detect_count = 1;     /* IDLE 入口弱磁确认次数 */
     config->fly.fly_airborne_th = 5;      /* 离地检测阈值 */
+    config->fly.fly_recover_speed = 10;   /* 飞坡 COOLDOWN 恢复速度 */
+    config->fly.fly_release_step = 0.3f;  /* 飞坡 COOLDOWN 步长 */
     /* 停止等待模式专用 */
     config->fly.seesaw_detect_count = 3;  /* IDLE 入口命中次数 */
     config->fly.seesaw_wait_count = 500;  /* 停车等待时间 (500 * 2ms = 1000ms) */
     config->fly.seesaw_speed = 10;        /* CREEP 阶段目标速度 */
     config->fly.seesaw_creep_cm = 12.00f; /* 前挪距离，单位 cm */
+    config->fly.seesaw_release_step = 0.3f;/* 停止等待 COOLDOWN 步长 */
     /* 共用 */
     config->fly.seesaw_mode = 1;          /* 默认停止等待模式 */
-    config->fly.recover_speed = 10;       /* COOLDOWN 恢复速度 */
-    config->fly.release_step = 0.3f;      /* COOLDOWN 每 2ms 提速步长 */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */
@@ -98,6 +99,9 @@ static void eeprom_load_defaults(AppConfig *config)
     config->wall.slow_speed = 50;    /* 墙面降速目标值 */
     config->wall.slow_time = 150;    /* 墙面降速持续时间，2ms * 150 = 300ms */
     config->wall.timing_count = 500; /* 墙面下墙计时，2ms * 500 = 1000ms */
+
+    /* 双十字策略默认参数 */
+    config->cross.encoder_target = 20.0f; /* 双十字退出编码器积分阈值 */
 }
 
 /**
@@ -146,11 +150,18 @@ static void eeprom_read_config(AppConfig *config)
         config->fly.seesaw_mode = 1;
     }
     config->fly.seesaw_wait_count = (int)read_int(37);
-    config->fly.recover_speed = (int)read_int(38);
-    config->fly.release_step = read_float(39);
+    config->fly.fly_recover_speed = (int)read_int(38);
+    config->fly.fly_release_step = read_float(39);
     config->fly.seesaw_creep_cm = read_float(40);
     config->fly.fly_airborne_th = (int)read_int(52);
+    if (config->fly.fly_airborne_th < 1 || config->fly.fly_airborne_th > 50)
+        config->fly.fly_airborne_th = 5;
     config->fly.seesaw_speed = (int)read_int(53);
+    if (config->fly.seesaw_speed < 0 || config->fly.seesaw_speed > 200)
+        config->fly.seesaw_speed = 10;
+    config->fly.seesaw_release_step = read_float(55);
+    if (config->fly.seesaw_release_step < 0.0f || config->fly.seesaw_release_step > 10.0f)
+        config->fly.seesaw_release_step = 0.3f;
     config->start.track_mode = (int16)read_int(29);
     config->start.element_len = (int)read_int(30);
     config->start.element_seq[0] = (int)read_int(31);
@@ -171,6 +182,8 @@ static void eeprom_read_config(AppConfig *config)
     config->wall.slow_speed = (int)read_int(48);
     config->wall.slow_time = (int)read_int(49);
     config->wall.timing_count = (int)read_int(50);
+
+    config->cross.encoder_target = read_float(56);
 }
 
 /**
@@ -212,11 +225,12 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.seesaw_detect_count, 24);
     save_int(config->fly.seesaw_mode, 25);
     save_int(config->fly.seesaw_wait_count, 37);
-    save_int(config->fly.recover_speed, 38);
-    save_float(config->fly.release_step, 39);
+    save_int(config->fly.fly_recover_speed, 38);
+    save_float(config->fly.fly_release_step, 39);
     save_float(config->fly.seesaw_creep_cm, 40);
     save_int(config->fly.fly_airborne_th, 52);
     save_int(config->fly.seesaw_speed, 53);
+    save_float(config->fly.seesaw_release_step, 55);
     save_int(config->start.track_mode, 29);
     save_int(config->start.element_len, 30);
     save_int(config->start.element_seq[0], 31);
@@ -237,6 +251,9 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->wall.slow_speed, 48);
     save_int(config->wall.slow_time, 49);
     save_int(config->wall.timing_count, 50);
+
+    save_float(config->cross.encoder_target, 56);
+
     save_int(EEPROM_CONFIG_VERSION, EEPROM_CONFIG_VERSION_SLOT);
 }
 

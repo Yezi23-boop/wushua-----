@@ -279,3 +279,71 @@ def test_track_mode_config_and_menu_reflect_current_debug_state():
     assert "ring_data.encoder" in menu_source
     assert "ring_data.diff_set" in menu_source
     assert '"trk_mode"' not in menu_source
+
+
+def test_fly_menu_draw_puts_seesaw_mode_on_first_editable_row():
+    menu_source = _read(MENU_C)
+    start = menu_source.rindex("static void Menu_Draw_Fly_Sub(int edit_line)")
+    end = menu_source.index("static void Menu_Draw_Element_Len(int edit_line)", start)
+    fly_draw_body = menu_source[start:end]
+
+    assert 'ips114_show_string(8, 0, "<<SEESAW");' in fly_draw_body
+    assert 'ips114_show_string(16, 0, "mode:");' not in fly_draw_body
+    assert 'ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "seesaw_mode");' in fly_draw_body
+    assert 'ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);' in fly_draw_body
+    assert 'ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_speed");' in fly_draw_body
+    assert 'ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "seesaw_spd");' in fly_draw_body
+
+
+def test_seesaw_recover_speed_is_fixed_macro_not_menu_or_eeprom_config():
+    fly_source = _read(A_RUN_FLY_C)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    menu_source = _read(MENU_C)
+
+    assert "#define SEESAW_RECOVER_SPEED 10" in fly_source
+    assert "fly_release_speed = (float)SEESAW_RECOVER_SPEED;" in fly_source
+    assert "app.fly.seesaw_recover_speed" not in fly_source
+
+    assert "int seesaw_recover_speed;" not in eeprom_header
+    assert "config->fly.seesaw_recover_speed" not in eeprom_source
+    assert "app.fly.seesaw_recover_speed" not in menu_source
+    assert 'ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "recover_spd");' not in menu_source
+
+
+def test_cross_menu_entry_is_reachable_and_has_subpage():
+    menu_source = _read(MENU_C)
+
+    assert "case 4:\n        return 5 * MENU_ROW_HEIGHT;" in menu_source
+    assert "45, 451," in menu_source
+    assert 'ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "CROSS");' in menu_source
+    assert "case 45:" in menu_source
+    assert "case 451:" in menu_source
+    assert 'ips114_show_string(8, 0, "<<CROSS");' in menu_source
+    assert 'ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "enc_target");' in menu_source
+
+
+def test_cross_eeprom_layout_bumps_version_and_uses_slot_56():
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    track_header = _read(A_RUN_TRACK_ELEMENT_H)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
+    cross_source = _read(ROOT / "project" / "user" / "a_run_cross.c")
+
+    assert "#define EEPROM_CONFIG_VERSION 3L" in eeprom_source
+    assert "float encoder_target;" in eeprom_header
+    assert "AppCrossConfig cross;" in eeprom_header
+    assert "6双十字" in eeprom_header
+    assert "config->cross.encoder_target = 20.0f;" in eeprom_source
+    assert "config->cross.encoder_target = read_float(56);" in eeprom_source
+    assert "if (config->cross.encoder_target <= 0.0f)" not in eeprom_source
+    assert "save_float(config->cross.encoder_target, 56);" in eeprom_source
+
+    assert "#define TRACK_ELEMENT_CROSS 6" in track_header
+    assert "6-双十字" in track_header
+    assert "element == ELEMENT_CROSS" in track_source
+    assert "case ELEMENT_CROSS:" in track_source
+    assert "a_run_cross_update_5ms()" in track_source
+    assert "ad_sum > CROSS_AD_SUM_THRESHOLD" in cross_source
+    assert "cross_encoder_sum >= app.cross.encoder_target" in cross_source
+    assert "encoder_target = app.cross.encoder_target;" not in cross_source

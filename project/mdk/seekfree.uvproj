@@ -675,6 +675,16 @@
               <FilePath>..\user\a_run_wall.h</FilePath>
             </File>
             <File>
+              <FileName>a_run_cross.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_cross.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cross.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_cross.h</FilePath>
+            </File>
+            <File>
               <FileName>ADC.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\user\ADC.c</FilePath>

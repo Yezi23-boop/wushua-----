@@ -28,17 +28,6 @@
 #define MENU_STEP_INT_X (15 * 8)
 #define EEPROM_MODE 1
 #define MENU_SAVE_PROMPT_DELAY_MS 300
-#define MENU_SENSOR_GAIN_ENABLE 0
-
-#if MENU_SENSOR_GAIN_ENABLE
-#define MENU_SENSOR_GAIN_SAVE_INDEX TPL0102_CH_COUNT
-#define MENU_SENSOR_GAIN_STATUS_OFF 0
-#define MENU_SENSOR_GAIN_STATUS_ON 1
-#define MENU_SENSOR_GAIN_STATUS_SAVED 2
-#define MENU_SENSOR_GAIN_STATUS_ERROR 3
-#define MENU_SENSOR_GAIN_STEP 5
-#define MENU_SENSOR_GAIN_FAST_STEP 20
-#endif
 
 static uint8 menu_service_enabled = 0;
 static int cursor_row = MENU_ROW_MIN;
@@ -48,11 +37,6 @@ static int change_unit_multiplier = 1;
 static int keystroke_three_count = 0;
 static int menu_saved_row[MENU_PAGE_COUNT];
 static int menu_entry_row[MENU_PAGE_COUNT];
-#if MENU_SENSOR_GAIN_ENABLE
-static uint8 sensor_gain_edit_active = 0;
-static uint8 sensor_gain_selected = 0;
-static uint8 sensor_gain_status = MENU_SENSOR_GAIN_STATUS_OFF;
-#endif
 
 int display_codename = 0;
 
@@ -64,7 +48,8 @@ static const int menu_have_sub[] = {
     4, 41, 411, 412, 413, 414, 415, 416,
         42, 421, 422, 423, 424, 425, 426, 427,
         43, 431, 432, 433,
-        44, 441, 442, 443, 444, 445, 446, 447,
+        44, 441, 442, 443, 444, 445, 446,
+        45, 451,
     5,
     160, 1601, 1602, 1603, 1604, 1605, 1606};
 
@@ -90,22 +75,15 @@ static void Menu_Draw_Start(int edit_line);
 static void Menu_Draw_Speed(int edit_line);
 static void Menu_Draw_Model(int edit_line);
 static void Menu_Draw_Sensor(void);
-#if MENU_SENSOR_GAIN_ENABLE
-static void Menu_Draw_Sensor_Gain_Status(void);
-#endif
 static void Menu_Draw_Yuanshu(int edit_line);
 static void Menu_Draw_Ring_Sub(int edit_line);
 static void Menu_Draw_Cylinder_Sub(int edit_line);
 static void Menu_Draw_Wall_Sub(int edit_line);
+static void Menu_Draw_Cross_Sub(int edit_line);
 static void Menu_Draw_Fly_Sub(int edit_line);
 static void Menu_Draw_Element_Len(int edit_line);
 static void Menu_Draw_Element(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
-#if MENU_SENSOR_GAIN_ENABLE
-static void Menu_Sensor_Gain_End(void);
-static void Menu_Sensor_Gain_Adjust(int delta);
-static void Menu_Sensor_Gain_Save(void);
-#endif
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
 static void Keystroke_Menu_HOME(void);
@@ -132,9 +110,6 @@ void Menu_Set_Service_Enable(uint8 enabled)
     }
     else
     {
-#if MENU_SENSOR_GAIN_ENABLE
-        Menu_Sensor_Gain_End();
-#endif
         Menu_Reset_Page_Memory();
         display_codename = 0;
         menu_next_flag = 0;
@@ -232,7 +207,7 @@ static int Menu_Get_Page_Row_Max(int page_root)
     case 3:
         return 6 * MENU_ROW_HEIGHT;
     case 4:
-        return 4 * MENU_ROW_HEIGHT;
+        return 5 * MENU_ROW_HEIGHT;
     case 5:
         return MENU_ROW_MIN;
     case 7:
@@ -467,7 +442,7 @@ static void Menu_Render_Current_Page(void)
         break;
     case 44:
         Menu_Draw_Fly_Sub(0);
-        Menu_Draw_Navigation_Cursor(app.fly.seesaw_mode == 0 ? 5 * MENU_ROW_HEIGHT : 6 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         break;
     case 441:
         Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
@@ -486,6 +461,13 @@ static void Menu_Render_Current_Page(void)
         break;
     case 446:
         Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
+        break;
+    case 45:
+        Menu_Draw_Cross_Sub(0);
+        Menu_Draw_Navigation_Cursor(1 * MENU_ROW_HEIGHT);
+        break;
+    case 451:
+        Menu_Draw_Cross_Sub(1 * MENU_ROW_HEIGHT);
         break;
     case 5:
         Menu_Draw_Sensor();
@@ -696,9 +678,6 @@ static void Menu_Draw_Sensor(void)
     ips114_show_string(8, 0, "<<SENSOR");
     ips114_show_string(64, 0, "NORM");
     ips114_show_string(112, 0, "RAW");
-#if MENU_SENSOR_GAIN_ENABLE
-    ips114_show_string(184, 0, "GAIN");
-#endif
 
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "LH");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "LV");
@@ -715,123 +694,13 @@ static void Menu_Draw_Sensor(void)
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, RAW[2], 4);
     ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, RAW[3], 4);
 
-#if MENU_SENSOR_GAIN_ENABLE
-    Menu_Draw_Sensor_Gain_Status();
-#endif
-
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "Err");
     ips114_show_float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
     ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
     ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "rdeg");
     ips114_show_float(192, 5 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
-
-#if MENU_SENSOR_GAIN_ENABLE
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "TPL");
-#endif
 }
-
-#if MENU_SENSOR_GAIN_ENABLE
-/**
- * @brief 绘制 SENSOR 页右侧 TPL0102 增益调试状态。
- *
- * 该页面只在前台菜单路径执行，显示缓存值不会触发 I2C 访问；
- * 只有明确按键事件才会进入写入或保存流程，避免影响 2ms 控制链路。
- */
-static void Menu_Draw_Sensor_Gain_Status(void)
-{
-    uint8 i;
-    uint8 tap_code;
-    uint8 last_error;
-    char error_text[4];
-
-    ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "                  ");
-
-    for (i = 0; i < TPL0102_CH_COUNT; i++)
-    {
-        if (sensor_gain_edit_active && sensor_gain_selected == i)
-            ips114_show_string(176, (i + 1) * MENU_ROW_HEIGHT, "*");
-        else
-            ips114_show_string(176, (i + 1) * MENU_ROW_HEIGHT, " ");
-
-        tap_code = tpl0102_get_cached_code((TPL0102_Channel)i);
-        ips114_show_int32(192, (i + 1) * MENU_ROW_HEIGHT, tap_code, 3);
-    }
-
-    if (sensor_gain_edit_active && sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
-        ips114_show_string(176, 6 * MENU_ROW_HEIGHT, "*");
-    else
-        ips114_show_string(176, 6 * MENU_ROW_HEIGHT, " ");
-
-    ips114_show_string(192, 6 * MENU_ROW_HEIGHT, "SAVE");
-
-    switch (sensor_gain_status)
-    {
-    case MENU_SENSOR_GAIN_STATUS_ON:
-        ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "A");
-        ips114_show_int32(56, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_u3_acr(), 3);
-        ips114_show_string(88, 6 * MENU_ROW_HEIGHT, "/");
-        ips114_show_int32(96, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_u6_acr(), 3);
-        break;
-    case MENU_SENSOR_GAIN_STATUS_SAVED:
-        ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "SAV");
-        break;
-    case MENU_SENSOR_GAIN_STATUS_ERROR:
-        last_error = tpl0102_get_last_error();
-        if (last_error > 9)
-            last_error = 9;
-        if (last_error == TPL0102_ERROR_SET_MISMATCH)
-        {
-            ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "E7A");
-            ips114_show_int32(72, 6 * MENU_ROW_HEIGHT, tpl0102_get_last_acr(), 3);
-            ips114_show_string(104, 6 * MENU_ROW_HEIGHT, "T");
-            ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, tpl0102_get_last_target_code(), 3);
-        }
-        else if (last_error == TPL0102_ERROR_U3_ACR || last_error == TPL0102_ERROR_U6_ACR)
-        {
-            error_text[0] = 'E';
-            error_text[1] = (char)('0' + last_error);
-            error_text[2] = 'M';
-            error_text[3] = '\0';
-            ips114_show_string(48, 6 * MENU_ROW_HEIGHT, error_text);
-            ips114_show_int32(80, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_addr_mask(), 3);
-        }
-        else if (last_error == TPL0102_ERROR_SET_MODE)
-        {
-            if (tpl0102_get_debug_bus_idle() != 0x03u)
-            {
-                ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "E9B");
-                ips114_show_int32(80, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_bus_idle(), 1);
-                ips114_show_string(96, 6 * MENU_ROW_HEIGHT, "T");
-                ips114_show_int32(104, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_sda_test(), 1);
-            }
-            else
-            {
-                ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "E9M");
-                ips114_show_int32(72, 6 * MENU_ROW_HEIGHT, tpl0102_get_debug_addr_mask(), 3);
-                ips114_show_string(104, 6 * MENU_ROW_HEIGHT, "A");
-                ips114_show_char(112, 6 * MENU_ROW_HEIGHT, (char)('0' + tpl0102_get_debug_u3_acr()));
-                ips114_show_string(120, 6 * MENU_ROW_HEIGHT, "/");
-                ips114_show_char(128, 6 * MENU_ROW_HEIGHT, (char)('0' + tpl0102_get_debug_u6_acr()));
-                ips114_show_string(136, 6 * MENU_ROW_HEIGHT, "D");
-                ips114_show_char(144, 6 * MENU_ROW_HEIGHT, (char)('0' + tpl0102_get_debug_scan_ack_sample()));
-            }
-        }
-        else
-        {
-            error_text[0] = 'E';
-            error_text[1] = (char)('0' + last_error);
-            error_text[2] = ' ';
-            error_text[3] = '\0';
-            ips114_show_string(48, 6 * MENU_ROW_HEIGHT, error_text);
-        }
-        break;
-    default:
-        ips114_show_string(48, 6 * MENU_ROW_HEIGHT, "OFF");
-        break;
-    }
-}
-#endif
 
 /**
  * @brief 绘制元素参数导航页面（YUANSHU）。
@@ -847,6 +716,7 @@ static void Menu_Draw_Yuanshu(int edit_line)
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "CYLINDER");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "WALL");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "FLY");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "CROSS");
 
     ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "S");
     ips114_show_int32(120, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
@@ -856,6 +726,23 @@ static void Menu_Draw_Yuanshu(int edit_line)
     ips114_show_int32(120, 3 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
     ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "X");
     ips114_show_int32(120, 4 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
+    ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "R");
+    ips114_show_int32(120, 5 * MENU_ROW_HEIGHT, a_run_cross_get_state(), 1);
+
+    if (edit_line >= MENU_ROW_MIN)
+        ips114_show_string(0, edit_line, ">>");
+}
+
+/**
+ * @brief 绘制双十字参数子页面。
+ * @param edit_line 当前编辑行，0 表示根页导航模式。
+ */
+static void Menu_Draw_Cross_Sub(int edit_line)
+{
+    ips114_show_string(8, 0, "<<CROSS");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "enc_target");
+
+    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.cross.encoder_target, 4, 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -956,40 +843,38 @@ static void Menu_Draw_Wall_Sub(int edit_line)
 static void Menu_Draw_Fly_Sub(int edit_line)
 {
     ips114_show_string(8, 0, "<<SEESAW");
-    ips114_show_string(160, 0, "M:");
-    ips114_show_int32(176, 0, app.fly.seesaw_mode, 1);
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "seesaw_mode");
+    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);
 
     if (app.fly.seesaw_mode == 0)
     {
         /* 飞坡模式参数 */
-        ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
-        ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "detect_cnt");
-        ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "airborne");
-        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "recover_spd");
-        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "release_stp");
+        ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_speed");
+        ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "detect_cnt");
+        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "airborne");
+        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "recover_spd");
+        ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "release_stp");
 
-        ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.fly_speed, 4);
-        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.fly_detect_count, 4);
-        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.fly_airborne_th, 4);
-        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.recover_speed, 4);
-        ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.fly.release_step, 4, 2);
+        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.fly_speed, 4);
+        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.fly_detect_count, 4);
+        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_airborne_th, 4);
+        ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.fly_recover_speed, 4);
+        ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_release_step, 4, 2);
     }
     else
     {
         /* 停止等待模式参数 */
-        ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "seesaw_spd");
-        ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "detect_cnt");
-        ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "wait_cnt");
-        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "creep_cm");
-        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "recover_spd");
+        ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "seesaw_spd");
+        ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "detect_cnt");
+        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "wait_cnt");
+        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "creep_cm");
         ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "release_stp");
 
-        ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_speed, 4);
-        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_detect_count, 4);
-        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
-        ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
-        ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.recover_speed, 4);
-        ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.fly.release_step, 4, 2);
+        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_speed, 4);
+        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.seesaw_detect_count, 4);
+        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
+        ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
+        ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.fly.seesaw_release_step, 4, 2);
     }
 
     if (edit_line >= MENU_ROW_MIN)
@@ -1072,103 +957,6 @@ static void Menu_Process_Special_Value(int16 *parameter)
     if (changed)
         control_apply_config();
 }
-
-#if MENU_SENSOR_GAIN_ENABLE
-/**
- * @brief 结束 SENSOR 页 TPL0102 调试会话。
- *
- * 退出调试后只关闭软件状态，不改 TPL0102 已写入的 WR/IVR。
- * 这样正常运行期不会继续误触 P3.4/P3.5 I2C 总线。
- */
-static void Menu_Sensor_Gain_End(void)
-{
-    if (sensor_gain_edit_active)
-    {
-        tpl0102_debug_end();
-    }
-
-    sensor_gain_edit_active = 0;
-    sensor_gain_selected = 0;
-    sensor_gain_status = MENU_SENSOR_GAIN_STATUS_OFF;
-}
-
-/**
- * @brief 调整当前选中通道的 volatile 抽头码。
- *
- * @param[in] delta 抽头码变化量，短按/长按使用不同步长便于现场快速拉满测试。
- *
- * @note 该函数只由按键事件触发，禁止放到周期刷新路径中调用。
- */
-static void Menu_Sensor_Gain_Adjust(int delta)
-{
-    int tap_code;
-
-    if (!sensor_gain_edit_active || sensor_gain_selected >= TPL0102_CH_COUNT)
-    {
-        return;
-    }
-
-    tap_code = (int)tpl0102_get_cached_code((TPL0102_Channel)sensor_gain_selected);
-    tap_code += delta;
-    if (tap_code < 0)
-    {
-        tap_code = 0;
-    }
-    else if (tap_code > 255)
-    {
-        tap_code = 255;
-    }
-
-    if (tpl0102_set_channel((TPL0102_Channel)sensor_gain_selected, (uint8)tap_code))
-    {
-        if (tpl0102_get_last_error() == TPL0102_ERROR_NONE)
-        {
-            sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ON;
-        }
-        else
-        {
-            sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
-        }
-    }
-    else
-    {
-        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
-        sensor_gain_edit_active = 0;
-    }
-}
-
-/**
- * @brief 将四路当前缓存增益码保存到 TPL0102 内部 IVR。
- *
- * 保存会触发 TPL0102 内部 EEPROM 写周期，只能由用户选中 SAVE 后确认触发。
- * 失败时关闭调试会话，避免菜单继续对不确定状态的总线发起写操作。
- */
-static void Menu_Sensor_Gain_Save(void)
-{
-    uint8 gain_codes[TPL0102_CH_COUNT];
-    uint8 i;
-
-    if (!sensor_gain_edit_active)
-    {
-        return;
-    }
-
-    for (i = 0; i < TPL0102_CH_COUNT; i++)
-    {
-        gain_codes[i] = tpl0102_get_cached_code((TPL0102_Channel)i);
-    }
-
-    if (tpl0102_save_all(gain_codes))
-    {
-        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_SAVED;
-    }
-    else
-    {
-        sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
-        sensor_gain_edit_active = 0;
-    }
-}
-#endif
 
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min)
 {
@@ -1523,77 +1311,6 @@ static void Menu_Sensor_Process(void)
     if (event_code == 0)
         return;
 
-#if MENU_SENSOR_GAIN_ENABLE
-    if (!sensor_gain_edit_active)
-    {
-        switch (keystroke_label)
-        {
-        case KEYSTROKE_THREE:
-            if (tpl0102_debug_begin())
-            {
-                sensor_gain_edit_active = 1;
-                sensor_gain_selected = 0;
-                sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ON;
-            }
-            else
-            {
-                sensor_gain_status = MENU_SENSOR_GAIN_STATUS_ERROR;
-            }
-            break;
-        case KEYSTROKE_FOUR:
-        case KEYSTROKE_FOUR_LONG:
-            menu_next_flag = -1;
-            break;
-        default:
-            break;
-        }
-
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        return;
-    }
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
-            Menu_Sensor_Gain_Save();
-        else
-            Menu_Sensor_Gain_Adjust(-MENU_SENSOR_GAIN_STEP);
-        break;
-    case KEYSTROKE_ONE_LONG:
-        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
-            Menu_Sensor_Gain_Save();
-        else
-            Menu_Sensor_Gain_Adjust(-MENU_SENSOR_GAIN_FAST_STEP);
-        break;
-    case KEYSTROKE_TWO:
-        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
-            Menu_Sensor_Gain_Save();
-        else
-            Menu_Sensor_Gain_Adjust(MENU_SENSOR_GAIN_STEP);
-        break;
-    case KEYSTROKE_TWO_LONG:
-        if (sensor_gain_selected == MENU_SENSOR_GAIN_SAVE_INDEX)
-            Menu_Sensor_Gain_Save();
-        else
-            Menu_Sensor_Gain_Adjust(MENU_SENSOR_GAIN_FAST_STEP);
-        break;
-    case KEYSTROKE_THREE:
-        sensor_gain_selected++;
-        if (sensor_gain_selected > MENU_SENSOR_GAIN_SAVE_INDEX)
-        {
-            sensor_gain_selected = 0;
-        }
-        break;
-    case KEYSTROKE_FOUR:
-    case KEYSTROKE_FOUR_LONG:
-        Menu_Sensor_Gain_End();
-        break;
-    default:
-        break;
-    }
-#else
     switch (keystroke_label)
     {
     case KEYSTROKE_FOUR:
@@ -1606,7 +1323,6 @@ static void Menu_Sensor_Process(void)
 
     if (menu_next_flag != 0)
         Menu_Next_Back();
-#endif
 }
 
 static void Menu_Yuanshu_Process(void)
@@ -1617,11 +1333,11 @@ static void Menu_Yuanshu_Process(void)
     {
     case 4:
         Menu_Draw_Yuanshu(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(4 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
@@ -1725,52 +1441,66 @@ static void Menu_Yuanshu_Process(void)
         break;
     case 44:
         Menu_Draw_Fly_Sub(0);
-        Menu_Draw_Navigation_Cursor(app.fly.seesaw_mode == 0 ? 5 * MENU_ROW_HEIGHT : 6 * MENU_ROW_HEIGHT);
+        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
         event_code = Menu_Read_Key_Event();
         if (event_code == 0)
             return;
-        Menu_Cursor_Update(app.fly.seesaw_mode == 0 ? 5 * MENU_ROW_HEIGHT : 6 * MENU_ROW_HEIGHT);
+        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
         if (menu_next_flag != 0)
             Menu_Next_Back();
         break;
     case 441:
         Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
+        Menu_Process_Special_Value(&app.fly.seesaw_mode);
+        break;
+    case 442:
+        Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
         if (app.fly.seesaw_mode == 0)
             Menu_Process_Int_Value(&app.fly.fly_speed, 1);
         else
             Menu_Process_Int_Value(&app.fly.seesaw_speed, 1);
         break;
-    case 442:
-        Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
+    case 443:
+        Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
         if (app.fly.seesaw_mode == 0)
             Menu_Process_Int_Value(&app.fly.fly_detect_count, 1);
         else
             Menu_Process_Int_Value(&app.fly.seesaw_detect_count, 1);
         break;
-    case 443:
-        Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
+    case 444:
+        Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
         if (app.fly.seesaw_mode == 0)
             Menu_Process_Int_Value(&app.fly.fly_airborne_th, 1);
         else
             Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
         break;
-    case 444:
-        Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
-        if (app.fly.seesaw_mode == 0)
-            Menu_Process_Int_Value(&app.fly.recover_speed, 1);
-        else
-            Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
-        break;
     case 445:
         Menu_Draw_Fly_Sub(5 * MENU_ROW_HEIGHT);
         if (app.fly.seesaw_mode == 0)
-            Menu_Process_Float_Value(&app.fly.release_step, 0.01f);
+            Menu_Process_Int_Value(&app.fly.fly_recover_speed, 1);
         else
-            Menu_Process_Int_Value(&app.fly.recover_speed, 1);
+            Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
         break;
     case 446:
         Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.fly.release_step, 0.01f);
+        if (app.fly.seesaw_mode == 0)
+            Menu_Process_Float_Value(&app.fly.fly_release_step, 0.01f);
+        else
+            Menu_Process_Float_Value(&app.fly.seesaw_release_step, 0.01f);
+        break;
+    case 45:
+        Menu_Draw_Cross_Sub(0);
+        Menu_Draw_Navigation_Cursor(1 * MENU_ROW_HEIGHT);
+        event_code = Menu_Read_Key_Event();
+        if (event_code == 0)
+            return;
+        Menu_Cursor_Update(1 * MENU_ROW_HEIGHT);
+        if (menu_next_flag != 0)
+            Menu_Next_Back();
+        break;
+    case 451:
+        Menu_Draw_Cross_Sub(1 * MENU_ROW_HEIGHT);
+        Menu_Process_Float_Value(&app.cross.encoder_target, 1.0f);
         break;
     default:
         break;
@@ -1840,7 +1570,8 @@ void Keystroke_Menu(void)
     case 444:
     case 445:
     case 446:
-    case 447:
+    case 45:
+    case 451:
         Menu_Yuanshu_Process();
         break;
     case 5:
