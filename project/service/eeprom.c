@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 3L
+#define EEPROM_CONFIG_VERSION 4L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -37,16 +37,16 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 70*/
     config->start.element_len = TRACK_ELEMENT_DEFAULT_LEN;
-    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_CYLINDER
+    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER;//TRACK_ELEMENT_CYLINDER
     config->start.element_seq[1] = TRACK_ELEMENT_WALL;
     config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
-    config->start.element_seq[3] = TRACK_ELEMENT_LEFT_RING;
-    config->start.element_seq[4] = TRACK_ELEMENT_NONE;
+    config->start.element_seq[3] = TRACK_ELEMENT_CROSS;
+    config->start.element_seq[4] = TRACK_ELEMENT_LEFT_RING;
     config->start.element_seq[5] = TRACK_ELEMENT_NONE;
 
     /* 速度环 PID 默认参数 */
-    config->speed.kp_Err = 5.50f;  // 3.50
-    config->speed.kd_Err = 8.00f; // 2ms 主环第一版保守微分
+    config->speed.kp_Err = 5.00f;  // 3.50
+    config->speed.kd_Err = 12.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 60.00f;     /* 默认基础速度 50 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
@@ -62,7 +62,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 5.0;          /* ring->pre_ring编码器积分阈值 */
+    config->ring.ring_entry_encoder = 10.0;          /* ring->pre_ring编码器积分阈值 */
     config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
     config->ring.pre_ring_Gyroz = 40.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值150 */
@@ -72,10 +72,10 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 飞坡策略默认参数 */
     /* 飞坡模式专用 */
-    config->fly.fly_speed = 5;            /* LOW 阶段目标速度 */
-    config->fly.fly_detect_count = 1;     /* IDLE 入口弱磁确认次数 */
-    config->fly.fly_airborne_th = 5;      /* 离地检测阈值 */
+    config->fly.fly_speed = 30;            /* LOW 阶段目标速度 */
+    config->fly.fly_detect_count = 5;     /* IDLE 入口弱磁确认次数 */
     config->fly.fly_recover_speed = 10;   /* 飞坡 COOLDOWN 恢复速度 */
+    config->fly.fly_land_confirm_count = 10; /* 落地回升连续确认次数 */
     config->fly.fly_release_step = 0.3f;  /* 飞坡 COOLDOWN 步长 */
     /* 停止等待模式专用 */
     config->fly.seesaw_detect_count = 3;  /* IDLE 入口命中次数 */
@@ -84,7 +84,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.seesaw_creep_cm = 12.00f; /* 前挪距离，单位 cm */
     config->fly.seesaw_release_step = 0.3f;/* 停止等待 COOLDOWN 步长 */
     /* 共用 */
-    config->fly.seesaw_mode = 1;          /* 默认停止等待模式 */
+    config->fly.seesaw_mode = 0;          /* 默认停止等待模式 */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */
@@ -99,9 +99,10 @@ static void eeprom_load_defaults(AppConfig *config)
     config->wall.slow_speed = 50;    /* 墙面降速目标值 */
     config->wall.slow_time = 150;    /* 墙面降速持续时间，2ms * 150 = 300ms */
     config->wall.timing_count = 500; /* 墙面下墙计时，2ms * 500 = 1000ms */
+    config->wall.encoder_target = 250.0f; /* 墙面退出编码器积分阈值 */
 
     /* 双十字策略默认参数 */
-    config->cross.encoder_target = 20.0f; /* 双十字退出编码器积分阈值 */
+    config->cross.encoder_target = 300.0f; /* 双十字退出编码器积分阈值 */
 }
 
 /**
@@ -145,23 +146,13 @@ static void eeprom_read_config(AppConfig *config)
     config->fly.fly_detect_count = (int)read_int(23);
     config->fly.seesaw_detect_count = (int)read_int(24);
     config->fly.seesaw_mode = (int16)read_int(25);
-    if (config->fly.seesaw_mode != 0)
-    {
-        config->fly.seesaw_mode = 1;
-    }
     config->fly.seesaw_wait_count = (int)read_int(37);
     config->fly.fly_recover_speed = (int)read_int(38);
     config->fly.fly_release_step = read_float(39);
     config->fly.seesaw_creep_cm = read_float(40);
-    config->fly.fly_airborne_th = (int)read_int(52);
-    if (config->fly.fly_airborne_th < 1 || config->fly.fly_airborne_th > 50)
-        config->fly.fly_airborne_th = 5;
     config->fly.seesaw_speed = (int)read_int(53);
-    if (config->fly.seesaw_speed < 0 || config->fly.seesaw_speed > 200)
-        config->fly.seesaw_speed = 10;
+    config->fly.fly_land_confirm_count = (int)read_int(54);
     config->fly.seesaw_release_step = read_float(55);
-    if (config->fly.seesaw_release_step < 0.0f || config->fly.seesaw_release_step > 10.0f)
-        config->fly.seesaw_release_step = 0.3f;
     config->start.track_mode = (int16)read_int(29);
     config->start.element_len = (int)read_int(30);
     config->start.element_seq[0] = (int)read_int(31);
@@ -182,6 +173,7 @@ static void eeprom_read_config(AppConfig *config)
     config->wall.slow_speed = (int)read_int(48);
     config->wall.slow_time = (int)read_int(49);
     config->wall.timing_count = (int)read_int(50);
+    config->wall.encoder_target = read_float(52);
 
     config->cross.encoder_target = read_float(56);
 }
@@ -228,8 +220,8 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->fly.fly_recover_speed, 38);
     save_float(config->fly.fly_release_step, 39);
     save_float(config->fly.seesaw_creep_cm, 40);
-    save_int(config->fly.fly_airborne_th, 52);
     save_int(config->fly.seesaw_speed, 53);
+    save_int(config->fly.fly_land_confirm_count, 54);
     save_float(config->fly.seesaw_release_step, 55);
     save_int(config->start.track_mode, 29);
     save_int(config->start.element_len, 30);
@@ -251,6 +243,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_int(config->wall.slow_speed, 48);
     save_int(config->wall.slow_time, 49);
     save_int(config->wall.timing_count, 50);
+    save_float(config->wall.encoder_target, 52);
 
     save_float(config->cross.encoder_target, 56);
 

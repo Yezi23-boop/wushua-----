@@ -69,14 +69,16 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
 def test_track_element_sequence_supports_current_executable_elements():
     source = _read(A_RUN_TRACK_ELEMENT_C)
     header = _read(A_RUN_TRACK_ELEMENT_H)
+    eeprom_source = _read(EEPROM_C)
 
     assert "#define TRACK_ELEMENT_LEFT_RING 1" in header
     assert "#define TRACK_ELEMENT_RIGHT_RING 2" in header
     assert "#define TRACK_ELEMENT_CYLINDER 3" in header
     assert "#define TRACK_ELEMENT_WALL 4" in header
     assert "#define TRACK_ELEMENT_SEESAW 5" in header
+    assert "#define TRACK_ELEMENT_CROSS 6" in header
     assert "#define TRACK_ELEMENT_SEQUENCE_MAX 6" in header
-    assert "#define TRACK_ELEMENT_DEFAULT_LEN 4" in header
+    assert "#define TRACK_ELEMENT_DEFAULT_LEN 5" in header
 
     assert "app.start.element_enable != 1" in source
     assert "track_element_enter_from_index(0);" in source
@@ -88,14 +90,20 @@ def test_track_element_sequence_supports_current_executable_elements():
     assert "element == ELEMENT_CYLINDER" in source
     assert "element == ELEMENT_WALL" in source
     assert "element == ELEMENT_SEESAW" in source
+    assert "element == ELEMENT_CROSS" in source
 
     assert "a_run_ring_update_5ms(1)" in source
     assert "a_run_ring_update_5ms(-1)" in source
     assert "a_run_cylinder_update_5ms()" in source
     assert "a_run_fly_update_speed(speed, 1)" in source
-    assert "a_run_wall_update_5ms()" in source
+    assert "a_run_wall_update_5ms(speed)" in source
+    assert "a_run_cross_update_5ms()" in source
     assert "a_run_fly_update_release_speed(speed);" in source
     assert "a_run_ring_update_angle_target(angle_target);" in source
+
+    assert "config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;" in eeprom_source
+    assert "config->start.element_seq[3] = TRACK_ELEMENT_CROSS;" in eeprom_source
+    assert "config->start.element_seq[4] = TRACK_ELEMENT_LEFT_RING;" in eeprom_source
 
 
 def test_ring_state_is_split_and_directional():
@@ -185,6 +193,9 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
 def test_wall_entry_uses_adc_sum_threshold():
     wall_source = _read(A_RUN_WALL_C)
     wall_header = _read(A_RUN_WALL_H)
+    eeprom_source = _read(EEPROM_C)
+    eeprom_header = _read(EEPROM_H)
+    menu_source = _read(MENU_C)
     update_body = _function_body(
         wall_source,
         "uint8 a_run_wall_update_5ms(float *speed)",
@@ -202,6 +213,16 @@ def test_wall_entry_uses_adc_sum_threshold():
     assert "wall_pitch" not in wall_source
     assert "imu_get_pitch" not in wall_source
     assert "pitch" not in wall_header
+    assert "static float wall_encoder_sum = 0.0f;" in wall_source
+    assert "wall_encoder_sum = 0.0f;" in wall_source
+    assert "wall_encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;" in update_body
+    assert "if (wall_timer_count >= (uint16)timing_count ||" in update_body
+    assert "wall_encoder_sum >= app.wall.encoder_target)" in update_body
+    assert "float encoder_target; /**< 墙面退出编码器积分阈值。 */" in eeprom_header
+    assert "config->wall.encoder_target =" in eeprom_source
+    assert 'ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "wall_enc");' in menu_source
+    assert "ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.wall.encoder_target, 4, 1);" in menu_source
+    assert "Menu_Process_Float_Value(&app.wall.encoder_target, 1.0f);" in menu_source
 
 
 def test_imu_drops_wall_pitch_history_after_wall_uses_adc_only():
@@ -295,6 +316,14 @@ def test_fly_menu_draw_puts_seesaw_mode_on_first_editable_row():
     assert 'ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "seesaw_spd");' in fly_draw_body
 
 
+def test_fly_menu_exposes_land_confirm_count_in_fly_mode():
+    menu_source = _read(MENU_C)
+
+    assert 'ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "land_cnt");' in menu_source
+    assert 'ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_land_confirm_count, 4);' in menu_source
+    assert "Menu_Process_Int_Value(&app.fly.fly_land_confirm_count, 1);" in menu_source
+
+
 def test_seesaw_recover_speed_is_fixed_macro_not_menu_or_eeprom_config():
     fly_source = _read(A_RUN_FLY_C)
     eeprom_header = _read(EEPROM_H)
@@ -347,3 +376,115 @@ def test_cross_eeprom_layout_bumps_version_and_uses_slot_56():
     assert "ad_sum > CROSS_AD_SUM_THRESHOLD" in cross_source
     assert "cross_encoder_sum >= app.cross.encoder_target" in cross_source
     assert "encoder_target = app.cross.encoder_target;" not in cross_source
+
+
+def test_fly_mode_cooldown_starts_from_forward_recover_speed():
+    fly_source = _read(A_RUN_FLY_C)
+    fly_low_body = fly_source[
+        fly_source.index("case FLY_STATE_LOW:"):fly_source.index("case FLY_STATE_COOLDOWN:")
+    ]
+
+    assert "config->fly.fly_recover_speed = 10;" in _read(EEPROM_C)
+    assert "fly_release_speed = 0.0f;" not in fly_low_body
+    assert "fly_release_speed = (float)app.fly.fly_recover_speed;" in fly_low_body
+
+
+def test_fly_mode_removes_airborne_state_and_checks_landing_inside_low():
+    fly_source = _read(A_RUN_FLY_C)
+    fly_header = _read(A_RUN_FLY_H)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    menu_source = _read(MENU_C)
+    fly_low_body = fly_source[
+        fly_source.index("case FLY_STATE_LOW:"):fly_source.index("case FLY_STATE_COOLDOWN:")
+    ]
+
+    assert "FLY_STATE_FLY" not in fly_header
+    assert "fly_airborne_th" not in eeprom_header
+    assert "config->fly.fly_airborne_th" not in eeprom_source
+    assert "app.fly.fly_airborne_th" not in fly_source
+    assert '"airborne"' not in menu_source
+    assert "fly_land_confirm_count++;" in fly_low_body
+    assert "if (fly_land_confirm_count >= app.fly.fly_land_confirm_count)" in fly_low_body
+    assert "stop = 1;" not in fly_low_body
+
+
+def test_fly_cooldown_runs_in_background_during_wall_timing():
+    fly_source = _read(A_RUN_FLY_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
+
+    assert "void a_run_fly_update_release_speed(float *speed);" in _read(A_RUN_FLY_H)
+    assert "void a_run_fly_update_release_speed(float *speed)" in fly_source
+    assert "apply_speed" not in fly_source
+    assert "expected_element == ELEMENT_WALL && a_run_wall_get_state() == 2" not in track_source
+    assert "a_run_fly_update_release_speed(speed);" in track_source
+    assert "a_run_fly_update_release_speed(speed, 0);" not in track_source
+    assert "a_run_fly_update_release_speed(speed, 1);" not in track_source
+
+
+def test_fly_mode_entry_requires_decreasing_weak_signal_window():
+    fly_source = _read(A_RUN_FLY_C)
+    fly_idle_body = fly_source[
+        fly_source.index("case FLY_STATE_IDLE:"):fly_source.index("case FLY_STATE_LOW:")
+    ]
+    helper_body = _function_body(
+        fly_source,
+        "static uint8 a_run_fly_update_entry_gate(",
+        "uint8 a_run_fly_take_finish_event(void)",
+    )
+
+    assert "#define FLY_DETECT_SIDE_TH 25u" in fly_source
+    assert "#define FLY_DETECT_CENTER_TH 10u" in fly_source
+    assert "#define FLY_ENTRY_WINDOW_COUNT 10" in fly_source
+    assert "a_run_fly_update_entry_gate(" in fly_idle_body
+    assert "ad1 < *last_ad1" in helper_body
+    assert "ad4 < *last_ad4" in helper_body
+    assert "*window_count >= window_limit" in helper_body
+    assert "*last_ad_valid = 0;" in helper_body
+
+
+def test_fly_and_seesaw_share_the_same_entry_gate_helper():
+    fly_source = _read(A_RUN_FLY_C)
+    seesaw_body = _function_body(
+        fly_source,
+        "void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)",
+        "void a_run_fly_update_release_speed(float *speed)",
+    )
+    fly_body = fly_source[fly_source.index("void a_run_fly_update_speed(float *speed, uint8 allow_entry)"):]
+
+    assert "static uint8 a_run_fly_update_entry_gate(" in fly_source
+    assert "a_run_fly_update_entry_gate(" in seesaw_body
+    assert "a_run_fly_update_entry_gate(" in fly_body
+    assert "app.fly.fly_detect_count" in fly_body
+    assert "app.fly.seesaw_detect_count" in seesaw_body
+
+
+def test_fly_mode_landing_requires_multi_frame_recovery_confirm():
+    fly_source = _read(A_RUN_FLY_C)
+    fly_low_body = fly_source[
+        fly_source.index("case FLY_STATE_LOW:"):fly_source.index("case FLY_STATE_COOLDOWN:")
+    ]
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+
+    assert "int fly_land_confirm_count;" in eeprom_header
+    assert "config->fly.fly_land_confirm_count = 2;" in eeprom_source
+    assert "config->fly.fly_land_confirm_count = (int)read_int(54);" in eeprom_source
+    assert "config->fly.fly_land_confirm_count < 1" not in eeprom_source
+    assert "save_int(config->fly.fly_land_confirm_count, 54);" in eeprom_source
+    assert "static uint8 fly_land_confirm_count = 0;" in fly_source
+    assert "if (ad1 > FLY_LAND_SIDE_TH &&" in fly_low_body
+    assert "ad4 > FLY_LAND_SIDE_TH)" in fly_low_body
+    assert "ad2 > FLY_LAND_CENTER_TH" not in fly_low_body
+    assert "ad3 > FLY_LAND_CENTER_TH" not in fly_low_body
+    assert "fly_land_confirm_count++;" in fly_low_body
+    assert "if (fly_land_confirm_count >= app.fly.fly_land_confirm_count)" in fly_low_body
+    assert "fly_land_confirm_count = 0;" in fly_low_body
+
+
+def test_eeprom_fly_config_no_longer_uses_readback_guards():
+    eeprom_source = _read(EEPROM_C)
+
+    assert "if (config->fly.seesaw_mode != 0)" not in eeprom_source
+    assert "if (config->fly.seesaw_speed < 0 || config->fly.seesaw_speed > 200)" not in eeprom_source
+    assert "if (config->fly.seesaw_release_step < 0.0f || config->fly.seesaw_release_step > 10.0f)" not in eeprom_source

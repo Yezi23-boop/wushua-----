@@ -68,8 +68,8 @@ typedef struct
     /* 飞坡模式专用 */
     int fly_speed;           /**< LOW 阶段目标速度 */
     int fly_detect_count;    /**< IDLE 入口弱磁确认次数 */
-    int fly_airborne_th;     /**< 离地检测阈值（四路全部 ≤ 该值） */
     int fly_recover_speed;   /**< 飞坡 COOLDOWN 恢复速度 */
+    int fly_land_confirm_count; /**< 落地回升连续确认次数 */
     float fly_release_step;  /**< 飞坡 COOLDOWN 步长 */
     /* 停止等待模式专用 */
     int seesaw_detect_count; /**< IDLE 入口命中次数 */
@@ -103,6 +103,7 @@ typedef struct
     int slow_speed;   /**< 墙面阶段降速目标值。 */
     int slow_time;    /**< 墙面阶段降速持续时间，单位为 2ms 主控制周期。 */
     int timing_count; /**< 墙面阶段下墙计时，单位为 2ms 主控制周期。 */
+    float encoder_target; /**< 墙面退出编码器积分阈值。 */
 } AppWallConfig;
 
 /**

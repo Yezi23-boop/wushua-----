@@ -11,8 +11,7 @@ typedef enum
 {
     FLY_STATE_IDLE = 0,     /**< 普通巡线，允许在元素仲裁授权后检测跷跷板入口 */
     FLY_STATE_LOW = 1,      /**< 跷跷板上低速通过，无 PWM 限制，转向保留循迹 */
-    FLY_STATE_FLY = 2,      /**< 空中飞跃，速度=0 转向=0 */
-    FLY_STATE_COOLDOWN = 3  /**< 落地后居中权重阶梯增速 */
+    FLY_STATE_COOLDOWN = 2  /**< 落地后居中权重阶梯增速 */
 } FlyState;
 
 /**
@@ -35,7 +34,7 @@ typedef enum
  * @brief 更新飞坡模式速度覆盖状态机。
  *
  * 该接口只供元素仲裁调用，入口检测由赛道元素仲裁授权。
- * 流程：IDLE → LOW（低速通过）→ FLY（空中飞跃，速度=0）→ COOLDOWN（阶梯增速）。
+ * 流程：IDLE → LOW（低速通过并等待落地回升）→ COOLDOWN（阶梯增速）。
  *
  * @param speed 输出目标速度指针；LOW/FLY/COOLDOWN 阶段会被状态机覆盖。
  * @param allow_entry 1-当前轮到跷跷板元素，允许从空闲态检测入口；0-禁止新入口。

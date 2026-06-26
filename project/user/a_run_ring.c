@@ -81,10 +81,10 @@ void a_run_ring_reset(void)
 static int8 ring_is_left_entry_signal(void)
 {
     //|| ad1 > 40 && ad2 > 10 && ad3 > 10 && ad4 > 20
-    if (ad1 > 40 &&
+    if (ad1 > 35 &&
          ad2 > 5 &&
          ad3 > 5 &&
-         ad4 > 40 &&ad2<30&&ad3<30&&((ad1+ad2)>(ad3+ad4)))
+         ad4 > 35 &&ad2<40&&ad3<40)
     {
         return 1;
     }
@@ -233,7 +233,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
     case out_ring:
         if (timeadd(&ring_data.out_ring_time, 200))
         {
-            stop = 0;
+//            stop = 1;
             timedestroy(&ring_data.out_ring_time);
             ring_data.flast_l = 0;
             ring_data.flast_r = 0;

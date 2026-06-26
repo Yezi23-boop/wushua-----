@@ -64,6 +64,7 @@ static int Menu_Normalize_Row(int page_id, int row);
 static void Menu_Save_Page_Position(int page_id, int row);
 static int Menu_Load_Page_Position(int page_id);
 static int Menu_Have_Sub_Menu(int menu_id);
+static void Menu_Refresh_Cursor_Display(int row_max);
 static void Menu_Draw_Navigation_Cursor(int row_max);
 static void Menu_Cursor_Update(int row_max);
 static void Menu_Render_Current_Page(void);
@@ -86,6 +87,7 @@ static void Menu_Draw_Element(int edit_line);
 static void Menu_Process_Special_Value(int16 *parameter);
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
+static void Menu_Process_Root_Navigation(int row_max);
 static void Keystroke_Menu_HOME(void);
 static void Menu_Start_Process(void);
 static void Menu_Speed_Process(void);
@@ -99,24 +101,12 @@ void Menu_Set_Service_Enable(uint8 enabled)
 {
     menu_service_enabled = enabled ? 1 : 0;
 
-    if (menu_service_enabled)
-    {
-        Menu_Reset_Page_Memory();
-        display_codename = 0;
-        menu_next_flag = 0;
-        change_unit_multiplier = 1;
-        keystroke_three_count = 0;
-        Menu_Reset_Cursor();
-    }
-    else
-    {
-        Menu_Reset_Page_Memory();
-        display_codename = 0;
-        menu_next_flag = 0;
-        change_unit_multiplier = 1;
-        keystroke_three_count = 0;
-        Menu_Reset_Cursor();
-    }
+    Menu_Reset_Page_Memory();
+    display_codename = 0;
+    menu_next_flag = 0;
+    change_unit_multiplier = 1;
+    keystroke_three_count = 0;
+    Menu_Reset_Cursor();
 
     Menu_Clear_Pending_Key_Events();
 }
@@ -260,15 +250,20 @@ static int Menu_Have_Sub_Menu(int menu_id)
     return 0;
 }
 
+static void Menu_Refresh_Cursor_Display(int row_max)
+{
+    ips114_show_string(0, cursor_row, ">");
+    if (previous_cursor_row != cursor_row && previous_cursor_row >= MENU_ROW_MIN && previous_cursor_row <= row_max)
+        ips114_show_string(0, previous_cursor_row, " ");
+    previous_cursor_row = cursor_row;
+}
+
 static void Menu_Draw_Navigation_Cursor(int row_max)
 {
     if (cursor_row < MENU_ROW_MIN || cursor_row > row_max)
         cursor_row = MENU_ROW_MIN;
 
-    ips114_show_string(0, cursor_row, ">");
-    if (previous_cursor_row != cursor_row && previous_cursor_row >= MENU_ROW_MIN && previous_cursor_row <= row_max)
-        ips114_show_string(0, previous_cursor_row, " ");
-    previous_cursor_row = cursor_row;
+    Menu_Refresh_Cursor_Display(row_max);
 }
 
 static void Menu_Cursor_Update(int row_max)
@@ -296,83 +291,78 @@ static void Menu_Cursor_Update(int row_max)
         break;
     }
 
-    ips114_show_string(0, cursor_row, ">");
-    if (previous_cursor_row != cursor_row && previous_cursor_row >= MENU_ROW_MIN && previous_cursor_row <= row_max)
-        ips114_show_string(0, previous_cursor_row, " ");
-    previous_cursor_row = cursor_row;
+    Menu_Refresh_Cursor_Display(row_max);
 }
 
 static void Menu_Render_Current_Page(void)
 {
-    switch (display_codename)
+    int page_id;
+    int edit_line;
+
+    page_id = display_codename;
+    edit_line = 0;
+
+    if (page_id == 0)
     {
-    case 0:
         Menu_Draw_Home();
         Menu_Draw_Navigation_Cursor(MENU_HOME_ROW_MAX);
-        break;
-    case 1:
-        Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
-        break;
-    case 11:
-        Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
-        break;
-    case 12:
-        Menu_Draw_Start(2 * MENU_ROW_HEIGHT);
-        break;
-    case 13:
-        Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
-        break;
-    case 14:
-        Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
-        break;
-    case 15:
+        return;
+    }
+
+    if (page_id == 5)
+    {
+        Menu_Draw_Sensor();
+        return;
+    }
+
+    if (page_id == 15)
+    {
         Menu_Draw_Element_Len(MENU_ROW_MIN);
-        break;
-    case 2:
-        Menu_Draw_Speed(0);
+        return;
+    }
+
+    if (page_id == 160)
+    {
+        Menu_Draw_Element(0);
         Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 21:
-        Menu_Draw_Speed(1 * MENU_ROW_HEIGHT);
-        break;
-    case 22:
-        Menu_Draw_Speed(2 * MENU_ROW_HEIGHT);
-        break;
-    case 23:
-        Menu_Draw_Speed(3 * MENU_ROW_HEIGHT);
-        break;
-    case 24:
-        Menu_Draw_Speed(4 * MENU_ROW_HEIGHT);
-        break;
-    case 25:
-        Menu_Draw_Speed(5 * MENU_ROW_HEIGHT);
-        break;
-    case 26:
-        Menu_Draw_Speed(6 * MENU_ROW_HEIGHT);
-        break;
-    case 3:
-        Menu_Draw_Model(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 31:
-        Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
-        break;
-    case 32:
-        Menu_Draw_Model(2 * MENU_ROW_HEIGHT);
-        break;
-    case 33:
-        Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
-        break;
-    case 34:
-        Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
-        break;
-    case 35:
-        Menu_Draw_Model(5 * MENU_ROW_HEIGHT);
-        break;
-    case 36:
-        Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
-        break;
+        return;
+    }
+
+    if (page_id >= 1601 && page_id <= 1606)
+    {
+        Menu_Draw_Element((page_id - 1600) * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id == 1 || (page_id >= 11 && page_id <= 14))
+    {
+        edit_line = (page_id == 1) ? 0 : ((page_id - 10) * MENU_ROW_HEIGHT);
+        Menu_Draw_Start(edit_line);
+        if (page_id == 1)
+            Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id == 2 || (page_id >= 21 && page_id <= 26))
+    {
+        edit_line = (page_id == 2) ? 0 : ((page_id - 20) * MENU_ROW_HEIGHT);
+        Menu_Draw_Speed(edit_line);
+        if (page_id == 2)
+            Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id == 3 || (page_id >= 31 && page_id <= 36))
+    {
+        edit_line = (page_id == 3) ? 0 : ((page_id - 30) * MENU_ROW_HEIGHT);
+        Menu_Draw_Model(edit_line);
+        if (page_id == 3)
+            Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    switch (page_id)
+    {
     case 4:
         Menu_Draw_Yuanshu(0);
         Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
@@ -381,122 +371,49 @@ static void Menu_Render_Current_Page(void)
         Menu_Draw_Ring_Sub(0);
         Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
         break;
-    case 411:
-        Menu_Draw_Ring_Sub(1 * MENU_ROW_HEIGHT);
-        break;
-    case 412:
-        Menu_Draw_Ring_Sub(2 * MENU_ROW_HEIGHT);
-        break;
-    case 413:
-        Menu_Draw_Ring_Sub(3 * MENU_ROW_HEIGHT);
-        break;
-    case 414:
-        Menu_Draw_Ring_Sub(4 * MENU_ROW_HEIGHT);
-        break;
-    case 415:
-        Menu_Draw_Ring_Sub(5 * MENU_ROW_HEIGHT);
-        break;
-    case 416:
-        Menu_Draw_Ring_Sub(6 * MENU_ROW_HEIGHT);
-        break;
-    case 417:
-        Menu_Draw_Ring_Sub(7 * MENU_ROW_HEIGHT);
-        break;
     case 42:
         Menu_Draw_Cylinder_Sub(0);
         Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
-        break;
-    case 421:
-        Menu_Draw_Cylinder_Sub(1 * MENU_ROW_HEIGHT);
-        break;
-    case 422:
-        Menu_Draw_Cylinder_Sub(2 * MENU_ROW_HEIGHT);
-        break;
-    case 423:
-        Menu_Draw_Cylinder_Sub(3 * MENU_ROW_HEIGHT);
-        break;
-    case 424:
-        Menu_Draw_Cylinder_Sub(4 * MENU_ROW_HEIGHT);
-        break;
-    case 425:
-        Menu_Draw_Cylinder_Sub(5 * MENU_ROW_HEIGHT);
-        break;
-    case 426:
-        Menu_Draw_Cylinder_Sub(6 * MENU_ROW_HEIGHT);
-        break;
-    case 427:
-        Menu_Draw_Cylinder_Sub(7 * MENU_ROW_HEIGHT);
         break;
     case 43:
         Menu_Draw_Wall_Sub(0);
         Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
         break;
-    case 431:
-        Menu_Draw_Wall_Sub(1 * MENU_ROW_HEIGHT);
-        break;
-    case 432:
-        Menu_Draw_Wall_Sub(2 * MENU_ROW_HEIGHT);
-        break;
-    case 433:
-        Menu_Draw_Wall_Sub(3 * MENU_ROW_HEIGHT);
-        break;
     case 44:
         Menu_Draw_Fly_Sub(0);
         Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 441:
-        Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
-        break;
-    case 442:
-        Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
-        break;
-    case 443:
-        Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
-        break;
-    case 444:
-        Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
-        break;
-    case 445:
-        Menu_Draw_Fly_Sub(5 * MENU_ROW_HEIGHT);
-        break;
-    case 446:
-        Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
         break;
     case 45:
         Menu_Draw_Cross_Sub(0);
         Menu_Draw_Navigation_Cursor(1 * MENU_ROW_HEIGHT);
         break;
-    case 451:
-        Menu_Draw_Cross_Sub(1 * MENU_ROW_HEIGHT);
-        break;
-    case 5:
-        Menu_Draw_Sensor();
-        break;
-    case 160:
-        Menu_Draw_Element(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 1601:
-        Menu_Draw_Element(1 * MENU_ROW_HEIGHT);
-        break;
-    case 1602:
-        Menu_Draw_Element(2 * MENU_ROW_HEIGHT);
-        break;
-    case 1603:
-        Menu_Draw_Element(3 * MENU_ROW_HEIGHT);
-        break;
-    case 1604:
-        Menu_Draw_Element(4 * MENU_ROW_HEIGHT);
-        break;
-    case 1605:
-        Menu_Draw_Element(5 * MENU_ROW_HEIGHT);
-        break;
-    case 1606:
-        Menu_Draw_Element(6 * MENU_ROW_HEIGHT);
-        break;
     default:
+        if (page_id >= 411 && page_id <= 417)
+            Menu_Draw_Ring_Sub((page_id - 410) * MENU_ROW_HEIGHT);
+        else if (page_id >= 421 && page_id <= 427)
+            Menu_Draw_Cylinder_Sub((page_id - 420) * MENU_ROW_HEIGHT);
+        else if (page_id >= 431 && page_id <= 433)
+            Menu_Draw_Wall_Sub((page_id - 430) * MENU_ROW_HEIGHT);
+        else if (page_id >= 441 && page_id <= 446)
+            Menu_Draw_Fly_Sub((page_id - 440) * MENU_ROW_HEIGHT);
+        else if (page_id == 451)
+            Menu_Draw_Cross_Sub(MENU_ROW_HEIGHT);
         break;
     }
+}
+
+static void Menu_Process_Root_Navigation(int row_max)
+{
+    uint8 event_code;
+
+    Menu_Draw_Navigation_Cursor(row_max);
+    event_code = Menu_Read_Key_Event();
+    if (event_code == 0)
+        return;
+
+    Menu_Cursor_Update(row_max);
+    if (menu_next_flag != 0)
+        Menu_Next_Back();
 }
 
 static void Menu_Next_Back(void)
@@ -824,10 +741,12 @@ static void Menu_Draw_Wall_Sub(int edit_line)
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "wall_spd");
     ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "wall_slow_t");
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "wall_timing");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "wall_enc");
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.wall.slow_speed, 3);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.wall.slow_time, 3);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.wall.timing_count, 3);
+    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.wall.encoder_target, 4, 1);
 
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "W");
     ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
@@ -851,15 +770,15 @@ static void Menu_Draw_Fly_Sub(int edit_line)
         /* 飞坡模式参数 */
         ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_speed");
         ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "detect_cnt");
-        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "airborne");
-        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "recover_spd");
-        ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "release_stp");
+        ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "recover_spd");
+        ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "release_stp");
+        ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "land_cnt");
 
         ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.fly_speed, 4);
         ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.fly_detect_count, 4);
-        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_airborne_th, 4);
-        ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.fly.fly_recover_speed, 4);
-        ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_release_step, 4, 2);
+        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_recover_speed, 4);
+        ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.fly.fly_release_step, 4, 2);
+        ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_land_confirm_count, 4);
     }
     else
     {
@@ -1058,19 +977,11 @@ static void Keystroke_Menu_HOME(void)
 
 static void Menu_Start_Process(void)
 {
-    uint8 event_code;
-
     switch (display_codename)
     {
     case 1:
         Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
+        Menu_Process_Root_Navigation(5 * MENU_ROW_HEIGHT);
         break;
     case 11:
         Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
@@ -1169,136 +1080,108 @@ static void Menu_Element_Len_Process(void)
  */
 static void Menu_Element_Process(void)
 {
-    uint8 event_code;
+    int page_id;
+    int item_index;
 
-    switch (display_codename)
+    page_id = display_codename;
+    if (page_id == 160)
     {
-    case 160:
         Menu_Draw_Element(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 1601:
-        Menu_Draw_Element(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.start.element_seq[0], 1);
-        break;
-    case 1602:
-        Menu_Draw_Element(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.start.element_seq[1], 1);
-        break;
-    case 1603:
-        Menu_Draw_Element(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.start.element_seq[2], 1);
-        break;
-    case 1604:
-        Menu_Draw_Element(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.start.element_seq[3], 1);
-        break;
-    case 1605:
-        Menu_Draw_Element(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.start.element_seq[4], 1);
-        break;
-    case 1606:
-        Menu_Draw_Element(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.start.element_seq[5], 1);
-        break;
-    default:
-        break;
+        Menu_Process_Root_Navigation(6 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 1601 && page_id <= 1606)
+    {
+        item_index = page_id - 1601;
+        Menu_Draw_Element((item_index + 1) * MENU_ROW_HEIGHT);
+        Menu_Process_Int_Value(&app.start.element_seq[item_index], 1);
     }
 }
 
 static void Menu_Speed_Process(void)
 {
-    uint8 event_code;
+    int page_id;
+    int item_index;
 
-    switch (display_codename)
+    page_id = display_codename;
+    if (page_id == 2)
     {
-    case 2:
         Menu_Draw_Speed(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 21:
-        Menu_Draw_Speed(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kp_Err, 0.01f);
-        break;
-    case 22:
-        Menu_Draw_Speed(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kd_Err, 0.01f);
-        break;
-    case 23:
-        Menu_Draw_Speed(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.gyro_damp_Err, 0.001f);
-        break;
-    case 24:
-        Menu_Draw_Speed(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.speed_run, 1.0f);
-        break;
-    case 25:
-        Menu_Draw_Speed(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.limiting_Err, 1.0f);
-        break;
-    case 26:
-        Menu_Draw_Speed(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kp2_Err, 0.001f);
-        break;
-    default:
-        break;
+        Menu_Process_Root_Navigation(6 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 21 && page_id <= 26)
+    {
+        item_index = page_id - 20;
+        Menu_Draw_Speed(item_index * MENU_ROW_HEIGHT);
+        switch (item_index)
+        {
+        case 1:
+            Menu_Process_Float_Value(&app.speed.kp_Err, 0.01f);
+            break;
+        case 2:
+            Menu_Process_Float_Value(&app.speed.kd_Err, 0.01f);
+            break;
+        case 3:
+            Menu_Process_Float_Value(&app.speed.gyro_damp_Err, 0.001f);
+            break;
+        case 4:
+            Menu_Process_Float_Value(&app.speed.speed_run, 1.0f);
+            break;
+        case 5:
+            Menu_Process_Float_Value(&app.speed.limiting_Err, 1.0f);
+            break;
+        case 6:
+            Menu_Process_Float_Value(&app.speed.kp2_Err, 0.001f);
+            break;
+        default:
+            break;
+        }
     }
 }
 
 static void Menu_Model_Process(void)
 {
-    uint8 event_code;
+    int page_id;
+    int item_index;
 
-    switch (display_codename)
+    page_id = display_codename;
+    if (page_id == 3)
     {
-    case 3:
         Menu_Draw_Model(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 31:
-        Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.kp_Angle, 0.01f);
-        break;
-    case 32:
-        Menu_Draw_Model(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.kd_Angle, 0.01f);
-        break;
-    case 33:
-        Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.limiting_Angle, 1.0f);
-        break;
-    case 34:
-        Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.A_1, 0.01f);
-        break;
-    case 35:
-        Menu_Draw_Model(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.B_1, 0.01f);
-        break;
-    case 36:
-        Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.C_l, 0.01f);
-        break;
-    default:
-        break;
+        Menu_Process_Root_Navigation(6 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 31 && page_id <= 36)
+    {
+        item_index = page_id - 30;
+        Menu_Draw_Model(item_index * MENU_ROW_HEIGHT);
+        switch (item_index)
+        {
+        case 1:
+            Menu_Process_Float_Value(&app.angle.kp_Angle, 0.01f);
+            break;
+        case 2:
+            Menu_Process_Float_Value(&app.angle.kd_Angle, 0.01f);
+            break;
+        case 3:
+            Menu_Process_Float_Value(&app.angle.limiting_Angle, 1.0f);
+            break;
+        case 4:
+            Menu_Process_Float_Value(&app.angle.A_1, 0.01f);
+            break;
+        case 5:
+            Menu_Process_Float_Value(&app.angle.B_1, 0.01f);
+            break;
+        case 6:
+            Menu_Process_Float_Value(&app.angle.C_l, 0.01f);
+            break;
+        default:
+            break;
+        }
     }
 }
 
@@ -1327,268 +1210,236 @@ static void Menu_Sensor_Process(void)
 
 static void Menu_Yuanshu_Process(void)
 {
-    uint8 event_code;
+    int page_id;
+    int item_index;
 
-    switch (display_codename)
+    page_id = display_codename;
+    if (page_id == 4)
     {
-    case 4:
         Menu_Draw_Yuanshu(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(5 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 41:
+        Menu_Process_Root_Navigation(5 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id == 41)
+    {
         Menu_Draw_Ring_Sub(0);
-        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(7 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 411:
-        Menu_Draw_Ring_Sub(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.ring_entry_encoder, 1.0f);
-        break;
-    case 412:
-        Menu_Draw_Ring_Sub(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 1.0f);
-        break;
-    case 413:
-        Menu_Draw_Ring_Sub(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyroz, 1.0f);
-        break;
-    case 414:
-        Menu_Draw_Ring_Sub(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.in_ring_Gyroz, 1.0f);
-        break;
-    case 415:
-        Menu_Draw_Ring_Sub(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 1.0f);
-        break;
-    case 416:
-        Menu_Draw_Ring_Sub(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 1.0f);
-        break;
-    case 417:
-        Menu_Draw_Ring_Sub(7 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.drive_out_ring_encoder, 1.0f);
-        break;
-    case 42:
+        Menu_Process_Root_Navigation(7 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 411 && page_id <= 417)
+    {
+        item_index = page_id - 410;
+        Menu_Draw_Ring_Sub(item_index * MENU_ROW_HEIGHT);
+        switch (item_index)
+        {
+        case 1:
+            Menu_Process_Float_Value(&app.ring.ring_entry_encoder, 1.0f);
+            break;
+        case 2:
+            Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 1.0f);
+            break;
+        case 3:
+            Menu_Process_Float_Value(&app.ring.pre_ring_Gyroz, 1.0f);
+            break;
+        case 4:
+            Menu_Process_Float_Value(&app.ring.in_ring_Gyroz, 1.0f);
+            break;
+        case 5:
+            Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 1.0f);
+            break;
+        case 6:
+            Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 1.0f);
+            break;
+        case 7:
+            Menu_Process_Float_Value(&app.ring.drive_out_ring_encoder, 1.0f);
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    if (page_id == 42)
+    {
         Menu_Draw_Cylinder_Sub(0);
-        Menu_Draw_Navigation_Cursor(7 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(7 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 421:
-        Menu_Draw_Cylinder_Sub(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.cylinder.encoder_target, 10.0f);
-        break;
-    case 422:
-        Menu_Draw_Cylinder_Sub(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.cylinder.ad_both_high_threshold, 5);
-        break;
-    case 423:
-        Menu_Draw_Cylinder_Sub(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.cylinder.adc_a_1, 0.1f);
-        break;
-    case 424:
-        Menu_Draw_Cylinder_Sub(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.cylinder.adc_b_1, 0.1f);
-        break;
-    case 425:
-        Menu_Draw_Cylinder_Sub(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.cylinder.adc_c_l, 0.1f);
-        break;
-    case 426:
-        Menu_Draw_Cylinder_Sub(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.cylinder.kp_Err, 0.1f);
-        break;
-    case 427:
-        Menu_Draw_Cylinder_Sub(7 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.cylinder.kd_Err, 0.1f);
-        break;
-    case 43:
+        Menu_Process_Root_Navigation(7 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 421 && page_id <= 427)
+    {
+        item_index = page_id - 420;
+        Menu_Draw_Cylinder_Sub(item_index * MENU_ROW_HEIGHT);
+        switch (item_index)
+        {
+        case 1:
+            Menu_Process_Float_Value(&app.cylinder.encoder_target, 10.0f);
+            break;
+        case 2:
+            Menu_Process_Int_Value(&app.cylinder.ad_both_high_threshold, 5);
+            break;
+        case 3:
+            Menu_Process_Float_Value(&app.cylinder.adc_a_1, 0.1f);
+            break;
+        case 4:
+            Menu_Process_Float_Value(&app.cylinder.adc_b_1, 0.1f);
+            break;
+        case 5:
+            Menu_Process_Float_Value(&app.cylinder.adc_c_l, 0.1f);
+            break;
+        case 6:
+            Menu_Process_Float_Value(&app.cylinder.kp_Err, 0.1f);
+            break;
+        case 7:
+            Menu_Process_Float_Value(&app.cylinder.kd_Err, 0.1f);
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    if (page_id == 43)
+    {
         Menu_Draw_Wall_Sub(0);
-        Menu_Draw_Navigation_Cursor(3 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(3 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 431:
-        Menu_Draw_Wall_Sub(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.wall.slow_speed, 5);
-        break;
-    case 432:
-        Menu_Draw_Wall_Sub(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.wall.slow_time, 10);
-        break;
-    case 433:
-        Menu_Draw_Wall_Sub(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.wall.timing_count, 10);
-        break;
-    case 44:
+        Menu_Process_Root_Navigation(4 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 431 && page_id <= 434)
+    {
+        item_index = page_id - 430;
+        Menu_Draw_Wall_Sub(item_index * MENU_ROW_HEIGHT);
+        switch (item_index)
+        {
+        case 1:
+            Menu_Process_Int_Value(&app.wall.slow_speed, 5);
+            break;
+        case 2:
+            Menu_Process_Int_Value(&app.wall.slow_time, 10);
+            break;
+        case 3:
+            Menu_Process_Int_Value(&app.wall.timing_count, 10);
+            break;
+        case 4:
+            Menu_Process_Float_Value(&app.wall.encoder_target, 1.0f);
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    if (page_id == 44)
+    {
         Menu_Draw_Fly_Sub(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 441:
-        Menu_Draw_Fly_Sub(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Special_Value(&app.fly.seesaw_mode);
-        break;
-    case 442:
-        Menu_Draw_Fly_Sub(2 * MENU_ROW_HEIGHT);
-        if (app.fly.seesaw_mode == 0)
-            Menu_Process_Int_Value(&app.fly.fly_speed, 1);
-        else
-            Menu_Process_Int_Value(&app.fly.seesaw_speed, 1);
-        break;
-    case 443:
-        Menu_Draw_Fly_Sub(3 * MENU_ROW_HEIGHT);
-        if (app.fly.seesaw_mode == 0)
-            Menu_Process_Int_Value(&app.fly.fly_detect_count, 1);
-        else
-            Menu_Process_Int_Value(&app.fly.seesaw_detect_count, 1);
-        break;
-    case 444:
-        Menu_Draw_Fly_Sub(4 * MENU_ROW_HEIGHT);
-        if (app.fly.seesaw_mode == 0)
-            Menu_Process_Int_Value(&app.fly.fly_airborne_th, 1);
-        else
-            Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
-        break;
-    case 445:
-        Menu_Draw_Fly_Sub(5 * MENU_ROW_HEIGHT);
-        if (app.fly.seesaw_mode == 0)
-            Menu_Process_Int_Value(&app.fly.fly_recover_speed, 1);
-        else
-            Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
-        break;
-    case 446:
-        Menu_Draw_Fly_Sub(6 * MENU_ROW_HEIGHT);
-        if (app.fly.seesaw_mode == 0)
-            Menu_Process_Float_Value(&app.fly.fly_release_step, 0.01f);
-        else
-            Menu_Process_Float_Value(&app.fly.seesaw_release_step, 0.01f);
-        break;
-    case 45:
+        Menu_Process_Root_Navigation(6 * MENU_ROW_HEIGHT);
+        return;
+    }
+
+    if (page_id >= 441 && page_id <= 446)
+    {
+        item_index = page_id - 440;
+        Menu_Draw_Fly_Sub(item_index * MENU_ROW_HEIGHT);
+        switch (item_index)
+        {
+        case 1:
+            Menu_Process_Special_Value(&app.fly.seesaw_mode);
+            break;
+        case 2:
+            if (app.fly.seesaw_mode == 0)
+                Menu_Process_Int_Value(&app.fly.fly_speed, 1);
+            else
+                Menu_Process_Int_Value(&app.fly.seesaw_speed, 1);
+            break;
+        case 3:
+            if (app.fly.seesaw_mode == 0)
+                Menu_Process_Int_Value(&app.fly.fly_detect_count, 1);
+            else
+                Menu_Process_Int_Value(&app.fly.seesaw_detect_count, 1);
+            break;
+        case 4:
+            if (app.fly.seesaw_mode == 0)
+                Menu_Process_Int_Value(&app.fly.fly_recover_speed, 1);
+            else
+                Menu_Process_Int_Value(&app.fly.seesaw_wait_count, 10);
+            break;
+        case 5:
+            if (app.fly.seesaw_mode == 0)
+                Menu_Process_Float_Value(&app.fly.fly_release_step, 0.01f);
+            else
+                Menu_Process_Float_Value(&app.fly.seesaw_creep_cm, 0.1f);
+            break;
+        case 6:
+            if (app.fly.seesaw_mode == 0)
+                Menu_Process_Int_Value(&app.fly.fly_land_confirm_count, 1);
+            else
+                Menu_Process_Float_Value(&app.fly.seesaw_release_step, 0.01f);
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+
+    if (page_id == 45)
+    {
         Menu_Draw_Cross_Sub(0);
-        Menu_Draw_Navigation_Cursor(1 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(1 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 451:
+        Menu_Process_Root_Navigation(1 * MENU_ROW_HEIGHT);
+    }
+    else if (page_id == 451)
+    {
         Menu_Draw_Cross_Sub(1 * MENU_ROW_HEIGHT);
         Menu_Process_Float_Value(&app.cross.encoder_target, 1.0f);
-        break;
-    default:
-        break;
     }
 }
 
 void Keystroke_Menu(void)
 {
+    int page_id;
+
     if (!menu_service_enabled)
         return;
 
-    switch (display_codename)
+    page_id = display_codename;
+    if (page_id == 0)
     {
-    case 0:
         Keystroke_Menu_HOME();
-        break;
-    case 1:
-    case 11:
-    case 12:
-    case 13:
-    case 14:
-    case 15:
+    }
+    else if (page_id == 1 || (page_id >= 11 && page_id <= 15))
+    {
         Menu_Start_Process();
-        break;
-    case 2:
-    case 21:
-    case 22:
-    case 23:
-    case 24:
-    case 25:
-    case 26:
+    }
+    else if (page_id == 2 || (page_id >= 21 && page_id <= 26))
+    {
         Menu_Speed_Process();
-        break;
-    case 3:
-    case 31:
-    case 32:
-    case 33:
-    case 34:
-    case 35:
-    case 36:
+    }
+    else if (page_id == 3 || (page_id >= 31 && page_id <= 36))
+    {
         Menu_Model_Process();
-        break;
-    case 4:
-    case 41:
-    case 411:
-    case 412:
-    case 413:
-    case 414:
-    case 415:
-    case 416:
-    case 42:
-    case 421:
-    case 422:
-    case 423:
-    case 424:
-    case 425:
-    case 426:
-    case 427:
-    case 43:
-    case 431:
-    case 432:
-    case 433:
-    case 44:
-    case 441:
-    case 442:
-    case 443:
-    case 444:
-    case 445:
-    case 446:
-    case 45:
-    case 451:
+    }
+    else if (page_id == 4 || (page_id >= 41 && page_id <= 45) ||
+             (page_id >= 411 && page_id <= 417) ||
+             (page_id >= 421 && page_id <= 427) ||
+             (page_id >= 431 && page_id <= 433) ||
+             (page_id >= 441 && page_id <= 446) ||
+             page_id == 451)
+    {
         Menu_Yuanshu_Process();
-        break;
-    case 5:
+    }
+    else if (page_id == 5)
+    {
         Menu_Sensor_Process();
-        break;
-    case 160:
-    case 1601:
-    case 1602:
-    case 1603:
-    case 1604:
-    case 1605:
-    case 1606:
+    }
+    else if (page_id == 160 || (page_id >= 1601 && page_id <= 1606))
+    {
         Menu_Element_Process();
-        break;
-    default:
+    }
+    else
+    {
         display_codename = 0;
         Menu_Reset_Cursor();
-        break;
     }
 }

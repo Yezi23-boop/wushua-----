@@ -85,7 +85,7 @@ uint8 a_run_cross_update_5ms(void)
         creep_delta = (speed_l + speed_r) * 0.5f * 0.012f;
         cross_encoder_sum += creep_delta;
         if (cross_encoder_sum >= app.cross.encoder_target)
-        {
+        {	
             a_run_cross_reset();
             return 1;
         }
