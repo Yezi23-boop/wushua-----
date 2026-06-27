@@ -17,7 +17,8 @@ volatile int32 fly_pwm_output_limit = 0;  /* COOLDOWN 期间限制最终 PWM 占
 static uint8 fly_land_confirm_count = 0;  /* 飞坡落地回升连续确认计数，单位为 2ms 周期。 */
 static uint16 fly_last_ad1 = 0;           /* 飞坡入口上一拍 ad1，用于确认横向电感持续递减。 */
 static uint16 fly_last_ad4 = 0;           /* 飞坡入口上一拍 ad4，用于确认横向电感持续递减。 */
-static uint8 fly_last_ad_valid = 0;       /* 上一拍 ad1/ad4 是否可用于递减比较。 */
+static uint16 fly_last_ad5 = 0;           /* 飞坡入口上一拍 ad5，用于确认中横电感持续递减。 */
+static uint8 fly_last_ad_valid = 0;       /* 上一拍 ad1/ad4/ad5 是否可用于递减比较。 */
 
 /* --- 跷跷板停止等待状态内部变量 --- */
 static SeesawState seesaw_state = SEESAW_IDLE; /**< 停止等待状态机阶段 */
@@ -28,15 +29,16 @@ static int seesaw_wait_count = 0;              /**< 等待倾斜计数，单位�
 static float seesaw_creep_distance = 0.0f;     /**< 零速刹车后前挪里程积分，单位沿用速度积分标尺 cm。 */
 static uint16 seesaw_last_ad1 = 0;             /**< 停止等待入口上一拍 ad1，用于确认横向电感持续递减。 */
 static uint16 seesaw_last_ad4 = 0;             /**< 停止等待入口上一拍 ad4，用于确认横向电感持续递减。 */
-static uint8 seesaw_last_ad_valid = 0;         /**< 上一拍 ad1/ad4 是否可用于递减比较。 */
+static uint16 seesaw_last_ad5 = 0;             /**< 停止等待入口上一拍 ad5，用于确认中横电感持续递减。 */
+static uint8 seesaw_last_ad_valid = 0;         /**< 上一拍 ad1/ad4/ad5 是否可用于递减比较。 */
 volatile uint8 seesaw_zero_brake_active = 0;   /**< 零速闭环刹车窗口，主控链路用 signed 速度反馈压到 0。 */
 volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临时居中权重开关。 */
 
 /* --- 飞坡模式专用阈值 --- */
-#define FLY_DETECT_SIDE_TH 25u    /* 飞坡入口横向电感阈值 */
-#define FLY_DETECT_CENTER_TH 5u  /* 飞坡入口竖向电感阈值 */
+#define FLY_DETECT_SIDE_TH 20u    /* 飞坡入口横向电感阈值 */
+#define FLY_DETECT_CENTER_TH 3u  /* 飞坡入口竖向电感阈值 */
 #define FLY_LAND_SIDE_TH 20u      /* 飞坡落地横向电感回升阈值 */
-#define FLY_LAND_CENTER_TH 10u    /* 飞坡落地竖向电感回升阈值 */
+#define FLY_LAND_CENTER_TH 10u    /* 飞坡落地竖向电感回升阈值 */ 
 #define FLY_ENTRY_WINDOW_COUNT 10 /* 飞坡入口确认窗口，10 * 2ms = 20ms。 */
 
 /* --- 停止等待模式专用阈值 --- */
@@ -78,6 +80,7 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
                                          int *window_count,
                                          uint16 *last_ad1,
                                          uint16 *last_ad4,
+                                         uint16 *last_ad5,
                                          uint8 *last_ad_valid)
 {
     uint8 weak_line;
@@ -87,20 +90,40 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
                         ad1 <= side_th &&
                         ad2 <= center_th &&
                         ad3 <= center_th &&
-                        ad4 <= side_th);
+                        ad4 <= side_th &&
+                        ad5 < 10u);
     entry_hit = 0;
     if (weak_line != 0)
     {
+        /*
+         * 只在首次进入弱磁窗口时检查速度门槛，窗口期间不再检查。
+         * 原因：上板后速度自然下降，连续检查会导致窗口断裂。
+         */
+        if (*window_count == 0 && *detect_count == 0)
+        {
+            if (!(speed_l > app.speed.speed_run * 0.9f &&
+                  speed_r > app.speed.speed_run * 0.9f))
+            {
+                return 0;
+            }
+        }
         if (*last_ad_valid != 0 &&
-            ad1 < *last_ad1 &&
-            ad4 < *last_ad4)
+            ad1 <= *last_ad1 &&
+            ad4 <= *last_ad4 &&
+            ad5 <= *last_ad5)
         {
             entry_hit = 1;
+            *last_ad1 = ad1;
+            *last_ad4 = ad4;
+            *last_ad5 = ad5;
         }
-
-        *last_ad1 = ad1;
-        *last_ad4 = ad4;
-        *last_ad_valid = 1;
+        else if (*last_ad_valid == 0)
+        {
+            *last_ad1 = ad1;
+            *last_ad4 = ad4;
+            *last_ad5 = ad5;
+            *last_ad_valid = 1;
+        }
 
         if (entry_hit != 0)
         {
@@ -171,6 +194,7 @@ void a_run_fly_reset(void)
     seesaw_centering_active = 0;
     fly_last_ad1 = 0;
     fly_last_ad4 = 0;
+    fly_last_ad5 = 0;
     fly_last_ad_valid = 0;
     flat_fly = FLY_STATE_IDLE;
 }
@@ -190,6 +214,7 @@ void a_run_seesaw_reset(void)
     seesaw_creep_distance = 0.0f;
     seesaw_last_ad1 = 0;
     seesaw_last_ad4 = 0;
+    seesaw_last_ad5 = 0;
     seesaw_last_ad_valid = 0;
     seesaw_zero_brake_active = 0;
     seesaw_centering_active = 0;
@@ -234,6 +259,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
                                         &seesaw_entry_window_count,
                                         &seesaw_last_ad1,
                                         &seesaw_last_ad4,
+                                        &seesaw_last_ad5,
                                         &seesaw_last_ad_valid) != 0)
         {
             seesaw_brake_count = 0;
@@ -433,6 +459,7 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
                                         &fly_state_count,
                                         &fly_last_ad1,
                                         &fly_last_ad4,
+                                        &fly_last_ad5,
                                         &fly_last_ad_valid) != 0)
         {
             fly_lost_line_blocked = 1;
@@ -480,6 +507,7 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
         break;
 
     case FLY_STATE_COOLDOWN:
+			stop=1;
         /* 释放阶段由 a_run_fly_update_release_speed() 执行 */
         break;
     }

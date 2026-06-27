@@ -596,27 +596,30 @@ static void Menu_Draw_Sensor(void)
     ips114_show_string(64, 0, "NORM");
     ips114_show_string(112, 0, "RAW");
 
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "LH");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "LV");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "RH");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "RV");
+    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "ad1");
+    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ad2");
+    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "ad3");
+    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "ad4");
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "ad5");
 
     ips114_show_int32(64, 1 * MENU_ROW_HEIGHT, ad1, 3);
     ips114_show_int32(64, 2 * MENU_ROW_HEIGHT, ad2, 3);
     ips114_show_int32(64, 3 * MENU_ROW_HEIGHT, ad3, 3);
     ips114_show_int32(64, 4 * MENU_ROW_HEIGHT, ad4, 3);
+    ips114_show_int32(64, 5 * MENU_ROW_HEIGHT, ad5, 3);
 
     ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, RAW[0], 4);
     ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, RAW[1], 4);
     ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, RAW[2], 4);
     ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, RAW[3], 4);
+    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, RAW[4], 4);
 
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "Err");
-    ips114_show_float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
-    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
-    ips114_show_int32(144, 5 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
-    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "rdeg");
-    ips114_show_float(192, 5 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "Err");
+    ips114_show_float(48, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
+    ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "cyl");
+    ips114_show_int32(144, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+    ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "rdeg");
+    ips114_show_float(192, 6 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
 }
 
 /**

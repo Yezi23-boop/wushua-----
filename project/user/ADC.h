@@ -7,7 +7,7 @@
  * @brief 传感器数量
  * @details 对应四路电感传感器
  */
-#define NUM 4
+#define NUM 5  /**< 五路电感传感器：左横/左竖/右竖/右横/中横 */
 
 /* --- 全局变量声明 --- */
 
@@ -19,6 +19,7 @@ extern volatile uint16 ad1;
 extern volatile uint16 ad2;
 extern volatile uint16 ad3;
 extern volatile uint16 ad4;
+extern volatile uint16 ad5; /**< 第五路横向中间电感，归一化值 0~100 */
 
 /**
  * @brief 计算出的赛道位置偏差值

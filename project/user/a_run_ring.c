@@ -81,10 +81,11 @@ void a_run_ring_reset(void)
 static int8 ring_is_left_entry_signal(void)
 {
     //|| ad1 > 40 && ad2 > 10 && ad3 > 10 && ad4 > 20
-    if (ad1 > 35 &&
+    if (ad1 > 30 &&
          ad2 > 5 &&
          ad3 > 5 &&
-         ad4 > 35 &&ad2<40&&ad3<40)
+         ad4 > 30 &&
+         ad5 > 20)
     {
         return 1;
     }
@@ -98,15 +99,12 @@ static int8 ring_is_left_entry_signal(void)
  */
 static int8 ring_is_right_entry_signal(void)
 {
-    if ((ad4 > 35 &&
-         ad3 > 10 &&
-         ad2 > 10 &&
-         ad1 > 35 &&
-         ad4 < 80 &&
-         ad3 < 60 &&
-         ad2 < 60 &&
-         ad1 < 80) ||
-        ad4 > 50 && ad3 > 20 && ad2 > 10 && ad1 > 20)
+    /* 右环入口复用左环对称条件，方向由 ring_dir=-1 控制 */
+    if (ad1 > 30 &&
+        ad2 > 5 &&
+        ad3 > 5 &&
+        ad4 > 30 &&
+        ad5 > 20)
     {
         return 1;
     }
@@ -233,7 +231,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
     case out_ring:
         if (timeadd(&ring_data.out_ring_time, 200))
         {
-//            stop = 1;
+            stop = 1;
             timedestroy(&ring_data.out_ring_time);
             ring_data.flast_l = 0;
             ring_data.flast_r = 0;

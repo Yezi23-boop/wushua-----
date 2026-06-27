@@ -56,6 +56,7 @@ static void hardware_init(void)
     adc_init(ADC_CH1_P11, ADC_12BIT); /* 电感 2 */
     adc_init(ADC_CH8_P00, ADC_12BIT); /* 电感 3 */
     adc_init(ADC_CH9_P01, ADC_12BIT); /* 电感 4 */
+    adc_init(ADC_CH2_P12, ADC_12BIT); /* 电感 5 中横 P1.2 */
 
     /* 应用层模块 */
     motor_Init();         /* 电机驱动 PWM 输出 */

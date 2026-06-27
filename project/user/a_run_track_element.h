@@ -13,8 +13,6 @@
 #define TRACK_ELEMENT_CROSS 6      /**< 双十字流程显示值。 */
 
 #define TRACK_ELEMENT_SEQUENCE_MAX 6 /**< 菜单和 EEPROM 固定保存的最大元素槽位数。 */
-#define TRACK_ELEMENT_DEFAULT_LEN 5  /**< 默认有效长度：圆桶、墙面、跷跷板、双十字、左环。 */
-
 /**
  * @brief 更新赛道元素仲裁状态机。
  *

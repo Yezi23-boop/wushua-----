@@ -25,53 +25,6 @@ void debug_vofa_service(void)
 #endif
 }
 
-/**
- * @brief 实时运行数据显示
- * @details 在 IPS 屏幕上显示电感偏差、四路原始值、PID 输出及电池电压
- */
-void printf_date(void)
-{
-    /* 第一列：显示偏差与四路电感归一化值 */
-    ips114_show_int32(1 * 24, 18 * 0, Err, 3);
-    ips114_show_int32(1 * 24, 18 * 1, ad1, 3);
-    ips114_show_int32(1 * 24, 18 * 2, ad2, 3);
-    ips114_show_int32(1 * 24, 18 * 3, ad3, 3);
-    ips114_show_int32(1 * 24, 18 * 4, ad4, 3);
-
-    /* 第三列：显示 PID 转向输出及左右目标速度 */
-    ips114_show_float(3 * 24, 18 * 0, PID.steer.output, 3, 1);
-    ips114_show_float(3 * 24, 18 * 1, app.speed.speed_run + PID.steer.output, 3, 1);
-    ips114_show_float(3 * 24, 18 * 2, app.speed.speed_run - PID.steer.output, 3, 1);
-
-    /* 第六列：显示实时电池电压 */
-    ips114_show_int32(6 * 24, 18 * 1, (int32)dianya, 5);
-}
-
-/**
- * @brief 电感原始数据与均值显示
- */
-void printf_adc(void)
-{
-    /* 显示归一化后的电感值 */
-    ips114_show_int32(1 * 24, 18 * 0, ad1, 3);
-    ips114_show_int32(1 * 24, 18 * 1, ad2, 3);
-    ips114_show_int32(1 * 24, 18 * 2, ad3, 3);
-    ips114_show_int32(1 * 24, 18 * 3, ad4, 3);
-
-    ips114_show_int32(1 * 24, 18 * 6, Err, 4);
-
-    /* 显示原始采样值 RAW */
-    ips114_show_int32(3 * 24, 18 * 0, RAW[0], 4);
-    ips114_show_int32(3 * 24, 18 * 1, RAW[1], 4);
-    ips114_show_int32(3 * 24, 18 * 2, RAW[2], 4);
-    ips114_show_int32(3 * 24, 18 * 3, RAW[3], 4);
-
-    /* 显示滑动平均滤波后的值 MA */
-    ips114_show_int32(7 * 24, 18 * 0, MA[0], 4);
-    ips114_show_int32(7 * 24, 18 * 1, MA[1], 4);
-    ips114_show_int32(7 * 24, 18 * 2, MA[2], 4);
-    ips114_show_int32(7 * 24, 18 * 3, MA[3], 4);
-}
 
 /**
  * @brief IMU 姿态传感器数据显示

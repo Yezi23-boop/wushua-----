@@ -1,0 +1,2 @@
+[permissions]
+allow = ["Bash(cd \"C:\\Users\\ye\\Desktop\\wushua - 双串\" && git diff HEAD -- project/user/ADC.h project/user/ADC.c project/user/int_user.c project/service/menu.c project/service/debug_view.c)", "Edit"]
