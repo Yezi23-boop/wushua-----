@@ -37,7 +37,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 70*/
     config->start.element_len = 4;
-    config->start.element_seq[0] = TRACK_ELEMENT_SEESAW;//TRACK_ELEMENT_CYLINDER
+    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER;//TRACK_ELEMENT_CYLINDER
     config->start.element_seq[1] = TRACK_ELEMENT_WALL;//TRACK_ELEMENT_WALL
     config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
     config->start.element_seq[3] = TRACK_ELEMENT_LEFT_RING;

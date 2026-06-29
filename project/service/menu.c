@@ -84,6 +84,8 @@ static void Menu_Draw_Cross_Sub(int edit_line);
 static void Menu_Draw_Fly_Sub(int edit_line);
 static void Menu_Draw_Element_Len(int edit_line);
 static void Menu_Draw_Element(int edit_line);
+static void Menu_Show_Int32(uint16 x, uint16 y, int32 dat, uint8 num);
+static void Menu_Show_Float(uint16 x, uint16 y, float dat, uint8 num, uint8 pointnum);
 static void Menu_Process_Special_Value(int16 *parameter);
 static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
 static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
@@ -504,6 +506,140 @@ static void Menu_Show_Save_Prompt(void)
     Menu_Clear_Pending_Key_Events();
 }
 
+/**
+ * @brief 菜单专用整数显示，避开通用 zf_sprintf 以降低固件 code 体积。
+ * @param x 显示起始横坐标。
+ * @param y 显示起始纵坐标。
+ * @param dat 待显示整数。
+ * @param num 期望显示的数字宽度，最大 4 位；正负号额外占 1 位。
+ * @return 无。
+ *
+ * 显示格式对齐 IPS114 通用整数显示：正数前置空格，负数前置负号，
+ * 位数不足时在尾部补空格，便于覆盖上一帧残留字符。
+ */
+static void Menu_Show_Int32(uint16 x, uint16 y, int32 dat, uint8 num)
+{
+    char buff[7];
+    uint8 pos;
+    uint8 length;
+    uint16 value;
+    uint16 div;
+
+    if (num > 4)
+        num = 4;
+
+    pos = 0;
+    length = num + 1;
+    if (dat < 0)
+    {
+        buff[pos++] = '-';
+        value = (uint16)(-dat);
+    }
+    else
+    {
+        buff[pos++] = ' ';
+        value = (uint16)dat;
+    }
+
+    div = 1;
+    while (div < 1000U && div <= value / 10)
+        div *= 10;
+    while (div > 0)
+    {
+        buff[pos++] = (char)('0' + (value / div));
+        value %= div;
+        div /= 10;
+    }
+
+    while (pos < length)
+        buff[pos++] = ' ';
+    buff[length] = '\0';
+    ips114_show_string(x, y, buff);
+}
+
+/**
+ * @brief 菜单专用浮点显示，保留固定小数位并减少通用显示函数依赖。
+ * @param x 显示起始横坐标。
+ * @param y 显示起始纵坐标。
+ * @param dat 待显示浮点数。
+ * @param num 整数显示宽度，最大 4 位。
+ * @param pointnum 小数位数，最大 3 位。
+ * @return 无。
+ *
+ * 菜单参数最大只需要 3 位小数；超出该范围时按 3 位截断显示，
+ * 以换取更小的 code 体积和更短的 UI 绘制路径。
+ */
+static void Menu_Show_Float(uint16 x, uint16 y, float dat, uint8 num, uint8 pointnum)
+{
+    char buff[13];
+    uint8 pos;
+    uint8 i;
+    uint8 length;
+    uint16 div;
+    uint16 scale;
+    uint16 integer_part;
+    uint16 fraction_part;
+    float value;
+
+    if (num > 4)
+        num = 4;
+    if (pointnum > 3)
+        pointnum = 3;
+
+    scale = (pointnum == 3) ? 1000U : ((pointnum == 2) ? 100U : ((pointnum == 1) ? 10U : 1U));
+
+    pos = 0;
+    if (dat < 0.0f)
+    {
+        buff[pos++] = '-';
+        value = -dat;
+    }
+    else
+    {
+        buff[pos++] = ' ';
+        value = dat;
+    }
+
+    integer_part = (uint16)value;
+    fraction_part = (uint16)((value - (float)integer_part) * (float)scale + 0.5f);
+    if (fraction_part >= scale)
+    {
+        integer_part++;
+        fraction_part = 0;
+    }
+
+    div = 1;
+    while (div < 1000U && div <= integer_part / 10)
+        div *= 10;
+
+    while (div > 0)
+    {
+        buff[pos++] = (char)('0' + (integer_part / div));
+        integer_part %= div;
+        div /= 10;
+    }
+
+    if (pointnum != 0)
+    {
+        buff[pos++] = '.';
+        div = scale / 10;
+        for (i = 0; i < pointnum; i++)
+        {
+            buff[pos++] = (char)('0' + (fraction_part / div));
+            fraction_part %= div;
+            div /= 10;
+        }
+    }
+
+    length = num + pointnum + 1;
+    if (pointnum != 0)
+        length++;
+    while (pos < length)
+        buff[pos++] = ' ';
+    buff[pos] = '\0';
+    ips114_show_string(x, y, buff);
+}
+
 static void Menu_Draw_Home(void)
 {
     ips114_show_string(MENU_CENTER_X, 0, "MENU");
@@ -521,12 +657,12 @@ static void Menu_Draw_Home(void)
     ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "L_pwm");
     ips114_show_string(105, 6 * MENU_ROW_HEIGHT, "R_pwm");
 
-    ips114_show_float(184, 1 * MENU_ROW_HEIGHT, Err, 3, 2);
-    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, PID.steer.output, 3, 1);
-    ips114_show_float(184, 3 * MENU_ROW_HEIGHT, gyro_z, 3, 2);
-    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, dianya, 4, 2);
-    ips114_show_float(184, 5 * MENU_ROW_HEIGHT, left_target, 4, 1);
-    ips114_show_float(184, 6 * MENU_ROW_HEIGHT, right_target, 4, 1);
+    Menu_Show_Float(184, 1 * MENU_ROW_HEIGHT, Err, 3, 2);
+    Menu_Show_Float(184, 2 * MENU_ROW_HEIGHT, PID.steer.output, 3, 1);
+    Menu_Show_Float(184, 3 * MENU_ROW_HEIGHT, gyro_z, 3, 2);
+    Menu_Show_Float(184, 4 * MENU_ROW_HEIGHT, dianya, 4, 2);
+    Menu_Show_Float(184, 5 * MENU_ROW_HEIGHT, left_target, 4, 1);
+    Menu_Show_Float(184, 6 * MENU_ROW_HEIGHT, right_target, 4, 1);
 }
 
 static void Menu_Draw_Start(int edit_line)
@@ -538,11 +674,11 @@ static void Menu_Draw_Start(int edit_line)
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "gyro_fbN");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "ELEM");
 
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_enable, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
-    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.start.element_len, 3);
+    Menu_Show_Int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
+    Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_enable, 3);
+    Menu_Show_Float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
+    Menu_Show_Float(112, 4 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
+    Menu_Show_Int32(112, 5 * MENU_ROW_HEIGHT, app.start.element_len, 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -558,12 +694,12 @@ static void Menu_Draw_Speed(int edit_line)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "limit_Err");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "kp2_Err");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.speed.kp_Err, 3, 3);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.speed.kd_Err, 3, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.speed.gyro_damp_Err, 3, 3);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.speed.speed_run, 4, 1);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.speed.limiting_Err, 3, 3);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.speed.kp2_Err, 3, 3);
+    Menu_Show_Float(112, 1 * MENU_ROW_HEIGHT, app.speed.kp_Err, 3, 3);
+    Menu_Show_Float(112, 2 * MENU_ROW_HEIGHT, app.speed.kd_Err, 3, 3);
+    Menu_Show_Float(112, 3 * MENU_ROW_HEIGHT, app.speed.gyro_damp_Err, 3, 3);
+    Menu_Show_Float(112, 4 * MENU_ROW_HEIGHT, app.speed.speed_run, 4, 1);
+    Menu_Show_Float(112, 5 * MENU_ROW_HEIGHT, app.speed.limiting_Err, 3, 3);
+    Menu_Show_Float(112, 6 * MENU_ROW_HEIGHT, app.speed.kp2_Err, 3, 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -579,12 +715,12 @@ static void Menu_Draw_Model(int edit_line)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "B_1");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "C_l");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.angle.kp_Angle, 3, 3);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.angle.kd_Angle, 3, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.angle.limiting_Angle, 3, 2);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.angle.A_1, 3, 2);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.B_1, 3, 2);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.angle.C_l, 3, 2);
+    Menu_Show_Float(112, 1 * MENU_ROW_HEIGHT, app.angle.kp_Angle, 3, 3);
+    Menu_Show_Float(112, 2 * MENU_ROW_HEIGHT, app.angle.kd_Angle, 3, 3);
+    Menu_Show_Float(112, 3 * MENU_ROW_HEIGHT, app.angle.limiting_Angle, 3, 2);
+    Menu_Show_Float(112, 4 * MENU_ROW_HEIGHT, app.angle.A_1, 3, 2);
+    Menu_Show_Float(112, 5 * MENU_ROW_HEIGHT, app.angle.B_1, 3, 2);
+    Menu_Show_Float(112, 6 * MENU_ROW_HEIGHT, app.angle.C_l, 3, 2);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -602,24 +738,24 @@ static void Menu_Draw_Sensor(void)
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "ad4");
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "ad5");
 
-    ips114_show_int32(64, 1 * MENU_ROW_HEIGHT, ad1, 3);
-    ips114_show_int32(64, 2 * MENU_ROW_HEIGHT, ad2, 3);
-    ips114_show_int32(64, 3 * MENU_ROW_HEIGHT, ad3, 3);
-    ips114_show_int32(64, 4 * MENU_ROW_HEIGHT, ad4, 3);
-    ips114_show_int32(64, 5 * MENU_ROW_HEIGHT, ad5, 3);
+    Menu_Show_Int32(64, 1 * MENU_ROW_HEIGHT, ad1, 3);
+    Menu_Show_Int32(64, 2 * MENU_ROW_HEIGHT, ad2, 3);
+    Menu_Show_Int32(64, 3 * MENU_ROW_HEIGHT, ad3, 3);
+    Menu_Show_Int32(64, 4 * MENU_ROW_HEIGHT, ad4, 3);
+    Menu_Show_Int32(64, 5 * MENU_ROW_HEIGHT, ad5, 3);
 
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, RAW[0], 4);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, RAW[1], 4);
-    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, RAW[2], 4);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, RAW[3], 4);
-    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, RAW[4], 4);
+    Menu_Show_Int32(112, 1 * MENU_ROW_HEIGHT, RAW[0], 4);
+    Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, RAW[1], 4);
+    Menu_Show_Int32(112, 3 * MENU_ROW_HEIGHT, RAW[2], 4);
+    Menu_Show_Int32(112, 4 * MENU_ROW_HEIGHT, RAW[3], 4);
+    Menu_Show_Int32(112, 5 * MENU_ROW_HEIGHT, RAW[4], 4);
 
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "Err");
-    ips114_show_float(48, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
+    Menu_Show_Float(48, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
     ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "cyl");
-    ips114_show_int32(144, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+    Menu_Show_Int32(144, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "rdeg");
-    ips114_show_float(192, 6 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
+    Menu_Show_Float(192, 6 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
 }
 
 /**
@@ -639,15 +775,15 @@ static void Menu_Draw_Yuanshu(int edit_line)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "CROSS");
 
     ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "S");
-    ips114_show_int32(120, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
+    Menu_Show_Int32(120, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
     ips114_show_string(105, 2 * MENU_ROW_HEIGHT, "C");
-    ips114_show_int32(120, 2 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+    Menu_Show_Int32(120, 2 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
     ips114_show_string(105, 3 * MENU_ROW_HEIGHT, "W");
-    ips114_show_int32(120, 3 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
+    Menu_Show_Int32(120, 3 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
     ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "X");
-    ips114_show_int32(120, 4 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
+    Menu_Show_Int32(120, 4 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
     ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "R");
-    ips114_show_int32(120, 5 * MENU_ROW_HEIGHT, a_run_cross_get_state(), 1);
+    Menu_Show_Int32(120, 5 * MENU_ROW_HEIGHT, a_run_cross_get_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -662,7 +798,7 @@ static void Menu_Draw_Cross_Sub(int edit_line)
     ips114_show_string(8, 0, "<<CROSS");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "enc_target");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.cross.encoder_target, 4, 1);
+    Menu_Show_Float(112, 1 * MENU_ROW_HEIGHT, app.cross.encoder_target, 4, 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -683,21 +819,21 @@ static void Menu_Draw_Ring_Sub(int edit_line)
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "pre_o_Gz");
     ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "drv_o_E");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyroz, 3, 2);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
-    ips114_show_float(112, 7 * MENU_ROW_HEIGHT, app.ring.drive_out_ring_encoder, 3, 2);
+    Menu_Show_Float(112, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
+    Menu_Show_Float(112, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
+    Menu_Show_Float(112, 3 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyroz, 3, 2);
+    Menu_Show_Float(112, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
+    Menu_Show_Float(112, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
+    Menu_Show_Float(112, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
+    Menu_Show_Float(112, 7 * MENU_ROW_HEIGHT, app.ring.drive_out_ring_encoder, 3, 2);
 
     /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
-    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
+    Menu_Show_Int32(184, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
     ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "Yd");
-    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
+    Menu_Show_Float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
     ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
-    ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
+    Menu_Show_Float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
 }
@@ -718,16 +854,16 @@ static void Menu_Draw_Cylinder_Sub(int edit_line)
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "cyl_kp");
     ips114_show_string(16, 7 * MENU_ROW_HEIGHT, "cyl_kd");
 
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.cylinder.encoder_target, 3, 2);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.cylinder.ad_both_high_threshold, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.cylinder.adc_a_1, 3, 2);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.cylinder.adc_b_1, 3, 2);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.cylinder.adc_c_l, 3, 2);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.cylinder.kp_Err, 3, 2);
-    ips114_show_float(112, 7 * MENU_ROW_HEIGHT, app.cylinder.kd_Err, 3, 2);
+    Menu_Show_Float(112, 1 * MENU_ROW_HEIGHT, app.cylinder.encoder_target, 3, 2);
+    Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, app.cylinder.ad_both_high_threshold, 3);
+    Menu_Show_Float(112, 3 * MENU_ROW_HEIGHT, app.cylinder.adc_a_1, 3, 2);
+    Menu_Show_Float(112, 4 * MENU_ROW_HEIGHT, app.cylinder.adc_b_1, 3, 2);
+    Menu_Show_Float(112, 5 * MENU_ROW_HEIGHT, app.cylinder.adc_c_l, 3, 2);
+    Menu_Show_Float(112, 6 * MENU_ROW_HEIGHT, app.cylinder.kp_Err, 3, 2);
+    Menu_Show_Float(112, 7 * MENU_ROW_HEIGHT, app.cylinder.kd_Err, 3, 2);
 
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "C");
-    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+    Menu_Show_Int32(184, 1 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -746,13 +882,13 @@ static void Menu_Draw_Wall_Sub(int edit_line)
     ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "wall_timing");
     ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "wall_enc");
 
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.wall.slow_speed, 3);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.wall.slow_time, 3);
-    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.wall.timing_count, 3);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.wall.encoder_target, 4, 1);
+    Menu_Show_Int32(112, 1 * MENU_ROW_HEIGHT, app.wall.slow_speed, 3);
+    Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, app.wall.slow_time, 3);
+    Menu_Show_Int32(112, 3 * MENU_ROW_HEIGHT, app.wall.timing_count, 3);
+    Menu_Show_Float(112, 4 * MENU_ROW_HEIGHT, app.wall.encoder_target, 4, 1);
 
     ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "W");
-    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
+    Menu_Show_Int32(184, 1 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -766,7 +902,7 @@ static void Menu_Draw_Fly_Sub(int edit_line)
 {
     ips114_show_string(8, 0, "<<SEESAW");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "seesaw_mode");
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);
+    Menu_Show_Int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);
 
     if (app.fly.seesaw_mode == 0)
     {
@@ -777,11 +913,11 @@ static void Menu_Draw_Fly_Sub(int edit_line)
         ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "release_stp");
         ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "land_cnt");
 
-        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.fly_speed, 4);
-        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.fly_detect_count, 4);
-        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_recover_speed, 4);
-        ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.fly.fly_release_step, 4, 2);
-        ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_land_confirm_count, 4);
+        Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, app.fly.fly_speed, 4);
+        Menu_Show_Int32(112, 3 * MENU_ROW_HEIGHT, app.fly.fly_detect_count, 4);
+        Menu_Show_Int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_recover_speed, 4);
+        Menu_Show_Float(112, 5 * MENU_ROW_HEIGHT, app.fly.fly_release_step, 4, 2);
+        Menu_Show_Int32(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_land_confirm_count, 4);
     }
     else
     {
@@ -792,11 +928,11 @@ static void Menu_Draw_Fly_Sub(int edit_line)
         ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "creep_cm");
         ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "release_stp");
 
-        ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_speed, 4);
-        ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.seesaw_detect_count, 4);
-        ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
-        ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
-        ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.fly.seesaw_release_step, 4, 2);
+        Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, app.fly.seesaw_speed, 4);
+        Menu_Show_Int32(112, 3 * MENU_ROW_HEIGHT, app.fly.seesaw_detect_count, 4);
+        Menu_Show_Int32(112, 4 * MENU_ROW_HEIGHT, app.fly.seesaw_wait_count, 4);
+        Menu_Show_Float(112, 5 * MENU_ROW_HEIGHT, app.fly.seesaw_creep_cm, 4, 2);
+        Menu_Show_Float(112, 6 * MENU_ROW_HEIGHT, app.fly.seesaw_release_step, 4, 2);
     }
 
     if (edit_line >= MENU_ROW_MIN)
@@ -813,7 +949,7 @@ static void Menu_Draw_Element_Len(int edit_line)
 {
     ips114_show_string(8, 0, "<<ELEM");
     ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "LEN");
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.element_len, 3);
+    Menu_Show_Int32(112, 1 * MENU_ROW_HEIGHT, app.start.element_len, 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -835,12 +971,12 @@ static void Menu_Draw_Element(int edit_line)
     ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "E5");
     ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "E6");
 
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.element_seq[0], 3);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_seq[1], 3);
-    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.start.element_seq[2], 3);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.start.element_seq[3], 3);
-    ips114_show_int32(112, 5 * MENU_ROW_HEIGHT, app.start.element_seq[4], 3);
-    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.element_seq[5], 3);
+    Menu_Show_Int32(112, 1 * MENU_ROW_HEIGHT, app.start.element_seq[0], 3);
+    Menu_Show_Int32(112, 2 * MENU_ROW_HEIGHT, app.start.element_seq[1], 3);
+    Menu_Show_Int32(112, 3 * MENU_ROW_HEIGHT, app.start.element_seq[2], 3);
+    Menu_Show_Int32(112, 4 * MENU_ROW_HEIGHT, app.start.element_seq[3], 3);
+    Menu_Show_Int32(112, 5 * MENU_ROW_HEIGHT, app.start.element_seq[4], 3);
+    Menu_Show_Int32(112, 6 * MENU_ROW_HEIGHT, app.start.element_seq[5], 3);
 
     if (edit_line >= MENU_ROW_MIN)
         ips114_show_string(0, edit_line, ">>");
@@ -889,7 +1025,7 @@ static void Menu_Process_Int_Value(int *parameter, int change_unit_min)
     unit = change_unit_min * change_unit_multiplier;
     changed = 0;
 
-    ips114_show_int32(MENU_STEP_INT_X, 0, unit, 4);
+    Menu_Show_Int32(MENU_STEP_INT_X, 0, unit, 4);
 
     event_code = Menu_Read_Key_Event();
     if (event_code == 0)
@@ -926,7 +1062,7 @@ static void Menu_Process_Float_Value(float *parameter, float change_unit_min)
     unit = change_unit_min * (float)change_unit_multiplier;
     changed = 0;
 
-    ips114_show_float(MENU_STEP_X, 0, unit, 4, 3);
+    Menu_Show_Float(MENU_STEP_X, 0, unit, 4, 3);
 
     event_code = Menu_Read_Key_Event();
     if (event_code == 0)
