@@ -109,6 +109,7 @@ uint8 a_run_wall_update_5ms(float *speed)
 
     case WALL_TIMING:
         wall_timer_count++;
+        /* 0.012f：里程积分系数，由采样周期(2ms)和轮径/编码器标定共同决定，将速度值转为每周期行驶距离(cm)。 */
         wall_encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
         if (wall_slow_count < (uint16)slow_time)
         {

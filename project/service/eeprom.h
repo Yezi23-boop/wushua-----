@@ -18,8 +18,8 @@ typedef struct
 } AppStartConfig;
 
 /**
- * @brief 速度环 PID 相关配置结构体
- * @details 主要用于电感差比和转向控制
+ * @brief 转向差速环 PID 相关配置结构体
+ * @details 基于电感偏差的转向差速控制，包含基础运行速度设定
  */
 typedef struct
 {

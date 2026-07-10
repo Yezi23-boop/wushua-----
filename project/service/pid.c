@@ -1,8 +1,5 @@
 #include "pid.h"
 
-///* 左右轮编码器组合滤波状态：符号纠错 + 3 点中值 + EMA(1/2) */
-// static EncoderMedian3EmaFilterState encoder_filter_left;
-// static EncoderMedian3EmaFilterState encoder_filter_right;
 LowPassFilter_t encoder_filter_left;
 LowPassFilter_t encoder_filter_right;
 /* 内部中间变量 */
@@ -37,6 +34,15 @@ void pid_speed_init(PID_Speed *pid, float kp, float ki, float kd, float max_out,
     pid->min_output = min_out;
 }
 
+/**
+ * @brief 清零速度环运行时状态（增量式 PID 历史误差和输出）
+ *
+ * 在元素切换（跷跷板刹车/恢复、圆环进出等）或状态机复位时调用，
+ * 避免上一段控制残差（error/prev_error/prev2_error/output）影响新阶段响应。
+ * 不清除 Kp/Ki/Kd 和限幅参数，仅复位运行时累积量。
+ *
+ * @param pid 速度环 PID 结构指针，指向 PID.left_speed 或 PID.right_speed。
+ */
 void pid_speed_reset(PID_Speed *pid)
 {
     pid->error = 0.0f;
@@ -70,19 +76,14 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
 
 /**
  * @brief 读取并处理编码器数据
- * @details 读取硬件编码器计数值，执行组合滤波后再转换为速度
+ * @details 读取硬件编码器计数值，执行低通滤波后再转换为速度
  * @param left 左轮 PID 结构指针
  * @param right 右轮 PID 结构指针
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-    //    int32 fixed_left_count;
-    //    int32 fixed_right_count;
-
-    //    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
-    //                                                        &encoder_filter_left);
-    //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
-    //                                                         &encoder_filter_right);
+    /* 编码器脉冲→速度转换系数 0.175f：轮周长(cm) / 编码器线数 / 减速比 / 采样周期(s)，
+     * 需根据实际硬件标定。右轮取反是因为编码器安装方向与左轮相反。 */
     speed_r_signed = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
     speed_l_signed = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
     speed_r = speed_r_signed;
@@ -95,10 +96,10 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     {
         speed_r = -speed_r;
     }
+    /* 低通滤波 alpha=0.25f：一阶 IIR 滤波器系数，y[n]=alpha*x[n]+(1-alpha)*y[n-1]。
+     * 0.25 约对应 2ms 周期下 ~8ms 的阶跃响应时间常数，平衡响应速度与平滑度。 */
     low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);
     low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);
-    //    speed_l = (float)fixed_left_count * 0.2f;
-    //    speed_r = (float)fixed_right_count * 0.2f;
 
     left->speed = speed_l;
     right->speed = speed_r;
@@ -125,8 +126,6 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
     delta_output = pid->Kp * (pid->error - pid->prev_error) + pid->Ki * pid->error + pid->Kd * (pid->error - 2.0f * pid->prev_error + pid->prev2_error);
     pid->output += delta_output;
 
-    // 更新输出并限幅
-    //   pid->output += delta_output;
     if (pid->output > pid->max_output)
     {
         pid->output = pid->max_output;
@@ -136,7 +135,6 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
         pid->output = -pid->max_output;
     }
 
-    // 更新误差历史
     pid->prev2_error = pid->prev_error;
     pid->prev_error = pid->error;
 }
@@ -223,18 +221,19 @@ void Pid_Differential(float speed_run, float *left_target, float *right_target, 
 
     k = delta / Scope;
 
-    /* 教程版差速限幅：将 k 限制在 -0.65 ~ 0.65，避免转向过猛 */
+    /* 教程版差速限幅：k 限制在 ±0.65，即单轮最多减速 65%，保留 35% 基础速度。
+     * 超过 0.65 时差速过猛会导致内侧轮接近停转甚至反转，车身姿态失控。 */
     if (k > 0.65f)
         k = 0.65f;
     else if (k < -0.65f)
         k = -0.65f;
 
-    if (k >= 0.0f) /* 左转：左轮减速更多，右轮只做小幅补偿 */
+    if (k >= 0.0f) /* 左转：左轮减速更多，右轮做小幅补偿（系数 0.2f 限制非主导轮减速幅度） */
     {
         *left_target = speed_run * (1.0f - k);
         *right_target = speed_run * (1.0f + k * 0.2f);
     }
-    else /* 右转：右轮减速更多，左轮只做小幅补偿 */
+    else /* 右转：右轮减速更多，左轮做小幅补偿（系数 0.2f 限制非主导轮减速幅度） */
     {
         k = -k;
 

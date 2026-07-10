@@ -6,7 +6,8 @@
 #include "a_run_ring.h"
 
 #define RING_ENTRY_CONFIRM_COUNT 5u /* 圆环入口连续确认次数，2ms 调用下约 16ms。 */
-#define RING_YAW_DT_SCALE 0.40f     /* 主环迁移到 2ms 后，圆环 yaw 累计保持迁移前等效角度。 */
+#define RING_YAW_DT_SCALE 0.40f     /* yaw 积分缩放系数 0.40f：圆环状态机以 5ms 周期运行， \
+                                     * gyro_z 每周期增量需乘 0.40（≈2ms/5ms）以保持与迁移前 2ms 周期等效的累计角度。 */
 
 /**
  * @brief 环岛阶段枚举。
@@ -80,12 +81,11 @@ void a_run_ring_reset(void)
  */
 static int8 ring_is_left_entry_signal(void)
 {
-    //|| ad1 > 40 && ad2 > 10 && ad3 > 10 && ad4 > 20
     if (ad1 > 30 &&
-         ad2 > 5 &&
-         ad3 > 5 &&
-         ad4 > 30 &&
-         ad5 > 20)
+        ad2 > 5 &&
+        ad3 > 5 &&
+        ad4 > 30 &&
+        ad5 > 20)
     {
         return 1;
     }
@@ -231,7 +231,6 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
     case out_ring:
         if (timeadd(&ring_data.out_ring_time, 200))
         {
-            stop = 1;
             timedestroy(&ring_data.out_ring_time);
             ring_data.flast_l = 0;
             ring_data.flast_r = 0;
@@ -276,6 +275,7 @@ void a_run_ring_update_integrals(void)
 
     if (ring_data.distance == 1)
     {
+        /* 0.012f：里程积分系数，由采样周期(2ms)和轮径/编码器标定共同决定，将速度值转为每周期行驶距离(cm)。 */
         ring_data.encoder += (speed_l + speed_r) * 0.5f * 0.012f;
     }
 }

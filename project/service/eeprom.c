@@ -35,7 +35,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.start_flag = 1;             /* 默认启动 */
     config->start.element_enable = 1;         /* 默认开启整体赛道元素识别 */
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
-    config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 70*/
+    config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 90 */
     config->start.element_len = 4;
     config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER;//TRACK_ELEMENT_CYLINDER
     config->start.element_seq[1] = TRACK_ELEMENT_WALL;//TRACK_ELEMENT_WALL
@@ -44,16 +44,16 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.element_seq[4] = TRACK_ELEMENT_NONE;
     config->start.element_seq[5] = TRACK_ELEMENT_NONE;
 
-    /* 速度环 PID 默认参数 */
+    /* 转向差速环 PID 默认参数 */
     config->speed.kp_Err = 5.00f;  // 3.50
     config->speed.kd_Err = 12.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 60.00f;     /* 默认基础速度 50 */
+    config->speed.speed_run = 60.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.01f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.kp_Angle = 0.85f; // 0.85
+    config->angle.kp_Angle = 0.85f;
     config->angle.kd_Angle = 0.70f; // 2ms 主环第一版保守微分
     config->angle.gyro_feedback_scale = 1.00f;
     config->angle.limiting_Angle = 55.00f; // 48
@@ -65,9 +65,9 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.ring_entry_encoder = 10.0;          /* ring->pre_ring编码器积分阈值 */
     config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
     config->ring.pre_ring_Gyroz = 40.00f;           /* pre_ring->in_ring累计转角阈值 */
-    config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值150 */
-    config->ring.pre_out_ring_Gyro_target = 25.00f; /* pre_out_ring固定目标角速度 15*/
-    config->ring.pre_out_ring_Gyroz = 310.00f;      /* pre_out_ring->drive_out_ring累计转角阈值160 */
+    config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值 220 */
+    config->ring.pre_out_ring_Gyro_target = 25.00f; /* pre_out_ring固定目标角速度 25 */
+    config->ring.pre_out_ring_Gyroz = 310.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
     config->ring.drive_out_ring_encoder = 5.0f;    /* 出环前直走距离（cm） */
 
     /* 飞坡策略默认参数 */
@@ -84,7 +84,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.seesaw_creep_cm = 12.00f; /* 前挪距离，单位 cm */
     config->fly.seesaw_release_step = 0.3f;/* 停止等待 COOLDOWN 步长 */
     /* 共用 */
-    config->fly.seesaw_mode = 0;          /* 默认停止等待模式 */
+    config->fly.seesaw_mode = 0;          /* 默认飞坡模式（0=飞坡，1=停止等待） */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */

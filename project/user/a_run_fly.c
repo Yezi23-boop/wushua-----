@@ -36,9 +36,9 @@ volatile uint8 seesaw_centering_active = 0;    /**< 跷跷板前挪/恢复期临
 
 /* --- 飞坡模式专用阈值 --- */
 #define FLY_DETECT_SIDE_TH 20u    /* 飞坡入口横向电感阈值 */
-#define FLY_DETECT_CENTER_TH 3u  /* 飞坡入口竖向电感阈值 */
+#define FLY_DETECT_CENTER_TH 3u   /* 飞坡入口竖向电感阈值 */
 #define FLY_LAND_SIDE_TH 20u      /* 飞坡落地横向电感回升阈值 */
-#define FLY_LAND_CENTER_TH 10u    /* 飞坡落地竖向电感回升阈值 */ 
+#define FLY_LAND_CENTER_TH 10u    /* 飞坡落地竖向电感回升阈值 */
 #define FLY_ENTRY_WINDOW_COUNT 10 /* 飞坡入口确认窗口，10 * 2ms = 20ms。 */
 
 /* --- 停止等待模式专用阈值 --- */
@@ -101,6 +101,10 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
          */
         if (*window_count == 0 && *detect_count == 0)
         {
+            /*
+             * 0.9f 速度门槛：要求当前速度不低于目标速度的 90%，避免起步/低速段
+             * 因电感信号天然偏弱而误判为飞坡入口。低速时弱磁是常态，不是飞坡。
+             */
             if (!(speed_l > app.speed.speed_run * 0.9f &&
                   speed_r > app.speed.speed_run * 0.9f))
             {
@@ -330,6 +334,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
             seesaw_zero_brake_active = 0;
         }
         stop = 0;
+        /* 0.012f：里程积分系数，由采样周期(2ms)和轮径/编码器标定共同决定，将速度值转为每周期行驶距离(cm)。 */
         creep_delta = (speed_l + speed_r) * 0.5f * 0.012f;
         if (creep_delta > 0.0f)
         {
@@ -487,7 +492,7 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
             {
                 fly_land_confirm_count = 0;
                 pid_speed_reset(&PID.left_speed);
-                pid_speed_reset(&PID.right_speed); 
+                pid_speed_reset(&PID.right_speed);
                 seesaw_centering_active = 1;
                 /*
                  * 飞坡落地仍有前向滑行速度，若 COOLDOWN 从 0 起步，
@@ -507,8 +512,6 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
         break;
 
     case FLY_STATE_COOLDOWN:
-			stop=1;
-        /* 释放阶段由 a_run_fly_update_release_speed() 执行 */
         break;
     }
 }

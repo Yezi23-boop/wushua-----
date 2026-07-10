@@ -17,7 +17,7 @@ LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，2ms IMU 更新链路写�
 #define M_PI 3.14159265358979f
 #endif
 
-/**< Z 轴陀螺仪向外输出前缩放乘数：由底盘转向几何、硬件灵敏度及控制目标共同决定的经验值 */
+/**< Z 轴陀螺仪输出缩放系数 0.005f：将 IMU660RC 原始角速度(dps)转为控制环使用的统一量纲。\n     * 数值 = 硬件灵敏度系数 × 底盘转向几何修正，由实测标定确定；\n     * 过大会导致转向环震荡，过小则 yaw 反馈不足、弯道响应迟钝。 */
 #define IMU_GYRO_Z_SCALE (0.005f)
 #define IMU_GYRO_Z_SIGN (1.0f) /* 驱动 gyro_z 顺时针为负；控制差速约定左转为正，需在桥接层翻转。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)

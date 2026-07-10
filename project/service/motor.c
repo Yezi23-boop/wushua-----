@@ -180,7 +180,7 @@ void motor_output(int32 lpwm, int32 rpwm)
         motor_last_lpwm_limited = lpwm_limited;
         motor_last_rpwm_limited = rpwm_limited;
 
-        /* --- 右电机控制逻辑 (硬件映射可能交叉) --- */
+        /* --- 左电机控制逻辑（lpwm_limited → P13/P14） --- */
         if (lpwm_limited > 0)
         {
             P14 = 1;                                  /* 设置方向：正转 */
@@ -196,7 +196,7 @@ void motor_output(int32 lpwm, int32 rpwm)
             pwm_set_duty(PWMB_CH2_P13, 0); /* 停止输出 */
         }
 
-        /* --- 左电机控制逻辑 --- */
+        /* --- 右电机控制逻辑（rpwm_limited → P52/P53） --- */
         if (rpwm_limited > 0)
         {
             P53 = 0; /* 设置方向：正转 */
@@ -259,7 +259,6 @@ void lost_lines(void)
  */
 void dianya_jiance(void)
 {
-    static int32 dianya_count = 0; /* 欠压持续计数 */
     uint16 adc_raw;
 
     /* 执行 ADC 转换 */
@@ -267,19 +266,5 @@ void dianya_jiance(void)
     /* 转换公式：ADC值 * 转换系数（0.0092 需要根据分压电路电阻比例计算） */
     dianya = (float)adc_raw * 0.0092f;
 
-    /* 锂电池欠压判定：低于 11.3V（假设为 3S 锂电） */
-//    if (dianya < 11.2f)
-//    {
-//        dianya_count++;
-//    }
-//    else
-//    {
-//        dianya_count = 0;
-//    }
-
-////    /* 持续欠压 3000 次（软件滤波，防止启动大电流导致电压跌落误判） */
-////    if (dianya_count > 3000)
-////    {
-////        stop = 1; /* 锁定停车，保护电池 */
-////    }
+    /* 锂电池欠压判定已移除，当前仅保留电压采样供调试显示。 */
 }

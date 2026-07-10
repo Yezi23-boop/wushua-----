@@ -110,6 +110,7 @@ uint8 a_run_cylinder_update_5ms(void)
         break;
 
     case CYL_WAIT_GROUND:
+        /* 0.012f：里程积分系数，由采样周期(2ms)和轮径/编码器标定共同决定，将速度值转为每周期行驶距离(cm)。 */
         cylinder_encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
         if (cylinder_encoder_sum >= encoder_target)
         {

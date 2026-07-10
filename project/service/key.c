@@ -7,10 +7,10 @@
  */
 #include "zf_common_headfile.h"
 /* 硬件引脚定义 */
-#define KEY1_PIN P37 /* 上/增加 P26*/
-#define KEY2_PIN P40 /* 下/减少 P41*/
-#define KEY3_PIN P41 /* 确定/切换 P40*/
-#define KEY4_PIN P26 /* 返回/取消 P37*/
+#define KEY1_PIN P37 /* 上/增加 */
+#define KEY2_PIN P40 /* 下/减少 */
+#define KEY3_PIN P41 /* 确定/切换 */
+#define KEY4_PIN P26 /* 返回/取消 */
 
 #define KEY_NUM 4
 
