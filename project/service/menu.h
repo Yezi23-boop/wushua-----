@@ -4,12 +4,6 @@
 #include "zf_common_typedef.h"
 
 /**
- * @brief 当前菜单页面编码
- * @details 0 表示首页；其余页面沿用阻塞式菜单的层级编码。
- */
-extern int display_codename;
-
-/**
  * @brief 设置菜单服务使能状态
  */
 void Menu_Set_Service_Enable(uint8 enabled);

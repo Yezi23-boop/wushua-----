@@ -93,6 +93,8 @@ typedef struct
     float adc_c_l;              /**< 圆桶专用分母补偿权重。 */
     float kp_Err;               /**< 圆桶专用方向环比例系数，后续运行期切换 PID 时使用。 */
     float kd_Err;               /**< 圆桶专用方向环微分系数，后续运行期切换 PID 时使用。 */
+    int exit_slow_speed;        /**< 出圆桶前减速阶段目标速度。 */
+    float exit_slow_distance;   /**< 距离退出积分阈值多少时开始减速。 */
 } AppCylinderConfig;
 
 /**
@@ -112,6 +114,9 @@ typedef struct
 typedef struct
 {
     float encoder_target; /**< 双十字退出编码器积分阈值 */
+    float adc_a_1;              /**< 双十字专用横向主差分权重。 */
+    float adc_b_1;              /**< 双十字专用竖向差分权重。 */
+    float adc_c_l;              /**< 双十字专用分母补偿权重。 */
 } AppCrossConfig;
 
 /**

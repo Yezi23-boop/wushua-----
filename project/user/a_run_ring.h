@@ -4,6 +4,20 @@
 #include "a_run_track_element.h"
 
 /**
+ * @brief 圆环状态机阶段。
+ */
+typedef enum
+{
+    RING_STATE_IDLE = 0,           /**< 未进入圆环流程。 */
+    RING_STATE_ENTRY = 1,          /**< 已识别圆环入口，按里程推进。 */
+    RING_STATE_PRE_RING = 2,       /**< 预入环阶段。 */
+    RING_STATE_IN_RING = 3,        /**< 环内阶段。 */
+    RING_STATE_PRE_OUT_RING = 4,   /**< 预出环阶段。 */
+    RING_STATE_DRIVE_OUT_RING = 5, /**< 出环前直走阶段。 */
+    RING_STATE_OUT_RING = 6        /**< 出环确认阶段。 */
+} RingState;
+
+/**
  * @brief 环岛状态数据。
  * @details 保存环岛识别过程中用到的里程累计值、相对偏航角、阶段标志和计时器。
  */
@@ -51,8 +65,8 @@ void a_run_ring_update_integrals(void);
 
 /**
  * @brief 读取圆环状态。
- * @return int8 状态编号。
+ * @return RingState 当前圆环状态。
  */
-int8 a_run_ring_get_state(void);
+RingState a_run_ring_get_state(void);
 
 #endif /* __A_RUN_RING_H__ */

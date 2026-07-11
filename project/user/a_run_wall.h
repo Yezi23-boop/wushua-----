@@ -4,6 +4,16 @@
 #include "a_run_track_element.h"
 
 /**
+ * @brief 墙面状态机阶段。
+ */
+typedef enum
+{
+    WALL_STATE_IDLE = 0,        /**< 空闲状态。 */
+    WALL_STATE_WAIT_SIGNAL = 1, /**< 等待墙面强电感信号。 */
+    WALL_STATE_TIMING = 2       /**< 墙面计时与编码器积分阶段。 */
+} WallState;
+
+/**
  * @brief 复位墙面状态机。
  */
 void a_run_wall_reset(void);
@@ -21,8 +31,8 @@ uint8 a_run_wall_update_5ms(float *speed);
 
 /**
  * @brief 读取墙面状态。
- * @return int8 0-空闲，1-等电感强信号，2-下墙计时。
+ * @return WallState 当前墙面状态。
  */
-int8 a_run_wall_get_state(void);
+WallState a_run_wall_get_state(void);
 
 #endif /* __A_RUN_WALL_H__ */

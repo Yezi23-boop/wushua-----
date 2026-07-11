@@ -37,37 +37,36 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.track_mode = 0;             /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f;         /* 默认平地负压百分比 90 */
     config->start.element_len = 4;
-    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER;//TRACK_ELEMENT_CYLINDER
-    config->start.element_seq[1] = TRACK_ELEMENT_WALL;//TRACK_ELEMENT_WALL
-    config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
-    config->start.element_seq[3] = TRACK_ELEMENT_LEFT_RING;
+    config->start.element_seq[0] = TRACK_ELEMENT_RIGHT_RING;//TRACK_ELEMENT_CYLINDER
+    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;//TRACK_ELEMENT_WALL
+    config->start.element_seq[2] = TRACK_ELEMENT_WALL;
+    config->start.element_seq[3] = TRACK_ELEMENT_SEESAW;
     config->start.element_seq[4] = TRACK_ELEMENT_NONE;
     config->start.element_seq[5] = TRACK_ELEMENT_NONE;
-
     /* 转向差速环 PID 默认参数 */
-    config->speed.kp_Err = 5.00f;  // 3.50
-    config->speed.kd_Err = 12.00f; // 2ms 主环第一版保守微分
+    config->speed.kp_Err = 9.30f;  // 3.50
+    config->speed.kd_Err = 12.80f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 60.00f;     /* 默认基础速度 60 */
+    config->speed.speed_run = 70.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.01f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.kp_Angle = 0.85f;
+    config->angle.kp_Angle = 0.82f;
     config->angle.kd_Angle = 0.70f; // 2ms 主环第一版保守微分
     config->angle.gyro_feedback_scale = 1.00f;
-    config->angle.limiting_Angle = 55.00f; // 48
+    config->angle.limiting_Angle = 65.00f; // 48
     config->angle.A_1 = 1.00f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 10.0;          /* ring->pre_ring编码器积分阈值 */
+    config->ring.ring_entry_encoder = 7.0;          /* ring->pre_ring编码器积分阈值 */
     config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
     config->ring.pre_ring_Gyroz = 40.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值 220 */
-    config->ring.pre_out_ring_Gyro_target = 25.00f; /* pre_out_ring固定目标角速度 25 */
-    config->ring.pre_out_ring_Gyroz = 310.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
+    config->ring.pre_out_ring_Gyro_target = 30.00f; /* pre_out_ring固定目标角速度 25 */
+    config->ring.pre_out_ring_Gyroz = 355.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
     config->ring.drive_out_ring_encoder = 5.0f;    /* 出环前直走距离（cm） */
 
     /* 飞坡策略默认参数 */
@@ -79,21 +78,23 @@ static void eeprom_load_defaults(AppConfig *config)
     config->fly.fly_release_step = 0.3f;  /* 飞坡 COOLDOWN 步长 */
     /* 停止等待模式专用 */
     config->fly.seesaw_detect_count = 3;  /* IDLE 入口命中次数 */
-    config->fly.seesaw_wait_count = 500;  /* 停车等待时间 (500 * 2ms = 1000ms) */
-    config->fly.seesaw_speed = 10;        /* CREEP 阶段目标速度 */
+    config->fly.seesaw_wait_count = 10;  /* 停车等待时间 (500 * 2ms = 1000ms) */
+    config->fly.seesaw_speed = 15;        /* CREEP 阶段目标速度 */
     config->fly.seesaw_creep_cm = 12.00f; /* 前挪距离，单位 cm */
     config->fly.seesaw_release_step = 0.3f;/* 停止等待 COOLDOWN 步长 */
     /* 共用 */
-    config->fly.seesaw_mode = 0;          /* 默认飞坡模式（0=飞坡，1=停止等待） */
+    config->fly.seesaw_mode = 1;          /* 默认飞坡模式（0=飞坡，1=停止等待） */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
-    config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */
+    config->cylinder.encoder_target = 200.0f;     /* 后续圆桶里程退出阈值 */
     config->cylinder.ad_both_high_threshold = 50; /* 圆桶双路强信号阈值 */
     config->cylinder.adc_a_1 = 1.00f;             /* 圆桶专用横向主差分权重 */
     config->cylinder.adc_b_1 = 1.00f;             /* 圆桶专用竖向差分权重 */
     config->cylinder.adc_c_l = 0.80f;             /* 保持当前圆桶硬编码 C_l 默认值 */
     config->cylinder.kp_Err = 1.00f;              /* 圆桶专用方向环比例系数 */
     config->cylinder.kd_Err = 1.00f;              /* 圆桶专用方向环微分系数 */
+    config->cylinder.exit_slow_speed = 40;        /* 出圆桶前减速目标速度 */
+    config->cylinder.exit_slow_distance = 100.0f;  /* 距离退出阈值 50 开始减速 */
 
     /* 墙面策略默认参数，保持当前固定宏行为不变。 */
     config->wall.slow_speed = 50;    /* 墙面降速目标值 */
@@ -103,6 +104,9 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 双十字策略默认参数 */
     config->cross.encoder_target = 300.0f; /* 双十字退出编码器积分阈值 */
+    config->cross.adc_a_1 = 1.00f;         /* 双十字横向主差分默认权重 */
+    config->cross.adc_b_1 = 1.00f;         /* 双十字竖向差分默认权重 */
+    config->cross.adc_c_l = 1.00f;         /* 双十字分母补偿默认权重 */
 }
 
 /**
@@ -169,6 +173,8 @@ static void eeprom_read_config(AppConfig *config)
     config->cylinder.adc_c_l = read_float(45);
     config->cylinder.kp_Err = read_float(46);
     config->cylinder.kd_Err = read_float(47);
+    config->cylinder.exit_slow_speed = (int)read_int(26);
+    config->cylinder.exit_slow_distance = read_float(27);
 
     config->wall.slow_speed = (int)read_int(48);
     config->wall.slow_time = (int)read_int(49);
@@ -176,6 +182,9 @@ static void eeprom_read_config(AppConfig *config)
     config->wall.encoder_target = read_float(52);
 
     config->cross.encoder_target = read_float(56);
+    config->cross.adc_a_1 = read_float(57);
+    config->cross.adc_b_1 = read_float(58);
+    config->cross.adc_c_l = read_float(59);
 }
 
 /**
@@ -239,6 +248,8 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->cylinder.adc_c_l, 45);
     save_float(config->cylinder.kp_Err, 46);
     save_float(config->cylinder.kd_Err, 47);
+    save_int(config->cylinder.exit_slow_speed, 26);
+    save_float(config->cylinder.exit_slow_distance, 27);
 
     save_int(config->wall.slow_speed, 48);
     save_int(config->wall.slow_time, 49);
@@ -246,6 +257,9 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->wall.encoder_target, 52);
 
     save_float(config->cross.encoder_target, 56);
+    save_float(config->cross.adc_a_1, 57);
+    save_float(config->cross.adc_b_1, 58);
+    save_float(config->cross.adc_c_l, 59);
 
     save_int(EEPROM_CONFIG_VERSION, EEPROM_CONFIG_VERSION_SLOT);
 }

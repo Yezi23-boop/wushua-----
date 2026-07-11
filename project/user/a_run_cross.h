@@ -4,6 +4,16 @@
 #include "a_run_track_element.h"
 
 /**
+ * @brief 双十字状态机阶段。
+ */
+typedef enum
+{
+    CROSS_STATE_IDLE = 0,        /**< 空闲状态。 */
+    CROSS_STATE_WAIT_SIGNAL = 1, /**< 等待电感和连续命中。 */
+    CROSS_STATE_TIMING = 2       /**< 编码器积分通过双十字。 */
+} CrossState;
+
+/**
  * @brief 复位双十字状态机。
  */
 void a_run_cross_reset(void);
@@ -20,8 +30,8 @@ uint8 a_run_cross_update_5ms(void);
 
 /**
  * @brief 读取双十字状态。
- * @return int8 0-空闲，1-等电感强信号，2-编码器积分。
+ * @return CrossState 当前双十字状态。
  */
-int8 a_run_cross_get_state(void);
+CrossState a_run_cross_get_state(void);
 
 #endif /* __A_RUN_CROSS_H__ */

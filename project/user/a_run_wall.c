@@ -8,14 +8,7 @@
 #define WALL_AD_SUM_THRESHOLD 100u     /* 墙面入口四路归一化电感和阈值，超过后才允许推进墙面确认。 */
 #define WALL_SIGNAL_CONFIRM_COUNT 2u   /* 电感和连续命中次数，2ms * 2 = 4ms，用于过滤单拍毛刺。 */
 
-enum WallStep
-{
-    WALL_IDLE = 0,
-    WALL_WAIT_SIGNAL = 1,
-    WALL_TIMING = 2
-};
-
-static enum WallStep wall_state = WALL_IDLE; /**< 墙面状态机阶段，圆桶/跷跷板完成后由 2ms 主环推进。 */
+static WallState wall_state = WALL_STATE_IDLE; /**< 墙面状态机阶段，圆桶/跷跷板完成后由 2ms 主环推进。 */
 static uint16 wall_timer_count = 0;          /**< 墙面完整波形确认后的下墙计时，单位：2ms。 */
 static uint16 wall_slow_count = 0;           /**< 降速阶段计时，单位：2ms。 */
 static uint16 wall_signal_count = 0;         /**< 宽松电感条件连续命中次数，断开即清零，避免离散毛刺累计。 */
@@ -23,11 +16,11 @@ static float wall_encoder_sum = 0.0f;        /**< 进入墙面后的编码器积
 
 /**
  * @brief 读取当前墙面状态机阶段。
- * @return int8 0-空闲，1-等墙面强信号，2-下墙计时。
+ * @return WallState 当前墙面状态。
  */
-int8 a_run_wall_get_state(void)
+WallState a_run_wall_get_state(void)
 {
-    return (int8)wall_state;
+    return wall_state;
 }
 
 /**
@@ -37,7 +30,7 @@ int8 a_run_wall_get_state(void)
  */
 void a_run_wall_reset(void)
 {
-    wall_state = WALL_IDLE;
+    wall_state = WALL_STATE_IDLE;
     wall_timer_count = 0;
     wall_slow_count = 0;
     wall_signal_count = 0;
@@ -81,14 +74,14 @@ uint8 a_run_wall_update_5ms(float *speed)
 
     switch (wall_state)
     {
-    case WALL_IDLE:
+    case WALL_STATE_IDLE:
         wall_timer_count = 0;
         wall_slow_count = 0;
         wall_signal_count = 0;
         wall_encoder_sum = 0.0f;
-        wall_state = WALL_WAIT_SIGNAL;
+        wall_state = WALL_STATE_WAIT_SIGNAL;
         break;
-    case WALL_WAIT_SIGNAL:
+    case WALL_STATE_WAIT_SIGNAL:
         if (ad_sum > WALL_AD_SUM_THRESHOLD)
         {
             wall_signal_count++;
@@ -98,7 +91,7 @@ uint8 a_run_wall_update_5ms(float *speed)
                 wall_slow_count = 0;
                 wall_signal_count = 0;
                 wall_encoder_sum = 0.0f;
-                wall_state = WALL_TIMING;
+                wall_state = WALL_STATE_TIMING;
             }
         }
         else
@@ -107,7 +100,7 @@ uint8 a_run_wall_update_5ms(float *speed)
         }
         break;
 
-    case WALL_TIMING:
+    case WALL_STATE_TIMING:
         wall_timer_count++;
         /* 0.012f：里程积分系数，由采样周期(2ms)和轮径/编码器标定共同决定，将速度值转为每周期行驶距离(cm)。 */
         wall_encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;

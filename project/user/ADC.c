@@ -66,12 +66,15 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     float b_value;
     float c_value;
     int16 diff23;
+    CylinderState cylinder_state;
 
     a_value = app.angle.A_1;
     b_value = app.angle.B_1;
     c_value = app.angle.C_l;
 
-    if (a_run_cylinder_get_state() == A_RUN_CYLINDER_STATE_WAIT_GROUND)
+    cylinder_state = a_run_cylinder_get_state();
+    if (cylinder_state == CYLINDER_STATE_WAIT_GROUND ||
+        cylinder_state == CYLINDER_STATE_EXIT_SLOW)
     {
         /*
          * 圆桶窗口确认后才切专用 ABC，避免序列轮到圆桶但尚未识别时削弱普通循迹。
@@ -90,6 +93,13 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
         a_value = ADC_SEESAW_CENTER_A_1;
         b_value = ADC_SEESAW_CENTER_B_1;
         c_value = ADC_SEESAW_CENTER_C_L;
+    }
+    if (a_run_cross_get_state() == CROSS_STATE_TIMING)
+    {
+        /* 双十字确认后使用独立权重，离开 TIMING 后自动恢复全局 ABC。 */
+        a_value = app.cross.adc_a_1;
+        b_value = app.cross.adc_b_1;
+        c_value = app.cross.adc_c_l;
     }
 
     /* 1) 先计算竖向差分，供分母修正项复用 */

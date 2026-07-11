@@ -11,8 +11,11 @@ A_RUN_TRACK_ELEMENT_H = ROOT / "project" / "user" / "a_run_track_element.h"
 A_RUN_RING_C = ROOT / "project" / "user" / "a_run_ring.c"
 A_RUN_RING_H = ROOT / "project" / "user" / "a_run_ring.h"
 A_RUN_CYLINDER_C = ROOT / "project" / "user" / "a_run_cylinder.c"
+A_RUN_CYLINDER_H = ROOT / "project" / "user" / "a_run_cylinder.h"
 A_RUN_WALL_C = ROOT / "project" / "user" / "a_run_wall.c"
 A_RUN_WALL_H = ROOT / "project" / "user" / "a_run_wall.h"
+A_RUN_CROSS_C = ROOT / "project" / "user" / "a_run_cross.c"
+A_RUN_CROSS_H = ROOT / "project" / "user" / "a_run_cross.h"
 IMU_C = ROOT / "project" / "user" / "imu.c"
 ADC_C = ROOT / "project" / "user" / "ADC.c"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
@@ -190,6 +193,137 @@ def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
     assert "fly_finish_event = 1;" in fly_source
 
 
+def test_element_state_interfaces_use_public_typed_enums():
+    ring_header = _read(A_RUN_RING_H)
+    ring_source = _read(A_RUN_RING_C)
+    cylinder_header = _read(A_RUN_CYLINDER_H)
+    cylinder_source = _read(A_RUN_CYLINDER_C)
+    wall_header = _read(A_RUN_WALL_H)
+    wall_source = _read(A_RUN_WALL_C)
+    cross_header = _read(A_RUN_CROSS_H)
+    cross_source = _read(A_RUN_CROSS_C)
+    fly_header = _read(A_RUN_FLY_H)
+    fly_source = _read(A_RUN_FLY_C)
+    runner = _read(A_RUN_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
+
+    expected_interfaces = (
+        (ring_header, ring_source, "RingState", "ring_state", "RING_STATE_IDLE"),
+        (cylinder_header, cylinder_source, "CylinderState", "cylinder_state", "CYLINDER_STATE_IDLE"),
+        (wall_header, wall_source, "WallState", "wall_state", "WALL_STATE_IDLE"),
+        (cross_header, cross_source, "CrossState", "cross_state", "CROSS_STATE_IDLE"),
+        (fly_header, fly_source, "FlyState", "fly_state", "FLY_STATE_IDLE"),
+        (fly_header, fly_source, "SeesawState", "seesaw_state", "SEESAW_STATE_IDLE"),
+    )
+
+    for header, source, state_type, state_var, idle_state in expected_interfaces:
+        assert f"}} {state_type};" in header
+        assert f"static {state_type} {state_var} = {idle_state};" in source
+
+    assert "RingState a_run_ring_get_state(void);" in ring_header
+    assert "CylinderState a_run_cylinder_get_state(void);" in cylinder_header
+    assert "WallState a_run_wall_get_state(void);" in wall_header
+    assert "CrossState a_run_cross_get_state(void);" in cross_header
+    assert "FlyState a_run_fly_get_state(void);" in fly_header
+    assert "SeesawState a_run_seesaw_get_state(void);" in fly_header
+    assert "volatile int flat_fly" not in runner
+    assert "extern volatile int flat_fly" not in _read(ROOT / "project" / "user" / "a_run.h")
+    assert "a_run_fly_get_state() != FLY_STATE_COOLDOWN" in track_source
+
+
+def test_cross_timing_uses_dedicated_adc_weights():
+    adc_source = _read(ADC_C)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    menu_source = _read(MENU_C)
+
+    assert "float adc_a_1;              /**< 双十字专用横向主差分权重。 */" in eeprom_header
+    assert "float adc_b_1;              /**< 双十字专用竖向差分权重。 */" in eeprom_header
+    assert "float adc_c_l;              /**< 双十字专用分母补偿权重。 */" in eeprom_header
+
+    assert "config->cross.adc_a_1 = 1.00f;" in eeprom_source
+    assert "config->cross.adc_b_1 = 1.00f;" in eeprom_source
+    assert "config->cross.adc_c_l = 1.00f;" in eeprom_source
+    assert "config->cross.adc_a_1 = read_float(57);" in eeprom_source
+    assert "config->cross.adc_b_1 = read_float(58);" in eeprom_source
+    assert "config->cross.adc_c_l = read_float(59);" in eeprom_source
+    assert "save_float(config->cross.adc_a_1, 57);" in eeprom_source
+    assert "save_float(config->cross.adc_b_1, 58);" in eeprom_source
+    assert "save_float(config->cross.adc_c_l, 59);" in eeprom_source
+
+    assert "if (a_run_cross_get_state() == CROSS_STATE_TIMING)" in adc_source
+    assert "a_value = app.cross.adc_a_1;" in adc_source
+    assert "b_value = app.cross.adc_b_1;" in adc_source
+    assert "c_value = app.cross.adc_c_l;" in adc_source
+    assert adc_source.index("if (seesaw_centering_active != 0)") < adc_source.index(
+        "if (a_run_cross_get_state() == CROSS_STATE_TIMING)"
+    )
+
+    assert '"adc_a_1", &app.cross.adc_a_1' in menu_source
+    assert '"adc_b_1", &app.cross.adc_b_1' in menu_source
+    assert '"adc_c_l", &app.cross.adc_c_l' in menu_source
+    assert menu_source.count("MENU_FLOAT_STEP_01") >= 3
+
+
+def test_cylinder_exit_slow_state_uses_remaining_encoder_distance():
+    cylinder_header = _read(A_RUN_CYLINDER_H)
+    cylinder_source = _read(A_RUN_CYLINDER_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
+    runner = _read(A_RUN_C)
+    adc_source = _read(ADC_C)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    menu_source = _read(MENU_C)
+
+    assert "CYLINDER_STATE_EXIT_SLOW = 3" in cylinder_header
+    assert "CYLINDER_STATE_RELEASE = 4" in cylinder_header
+    assert "uint8 a_run_cylinder_update_5ms(float *speed);" in cylinder_header
+    assert "void a_run_cylinder_update_release_speed(float *speed);" in cylinder_header
+    assert "uint8 a_run_cylinder_update_5ms(float *speed)" in cylinder_source
+    assert "a_run_cylinder_update_5ms(speed)" in track_source
+
+    assert "#define CYLINDER_SPEED_RAMP_STEP 0.5f" in cylinder_source
+    assert "static float cylinder_ramp_speed = 0.0f;" in cylinder_source
+    assert "cylinder_encoder_sum + exit_slow_distance >= encoder_target" in cylinder_source
+    assert "cylinder_state = CYLINDER_STATE_EXIT_SLOW;" in cylinder_source
+    assert "cylinder_ramp_speed = *speed;" in cylinder_source
+    assert "case CYLINDER_STATE_EXIT_SLOW:" in cylinder_source
+    assert "cylinder_ramp_speed -= CYLINDER_SPEED_RAMP_STEP;" in cylinder_source
+    assert "cylinder_ramp_speed < (float)exit_slow_speed" in cylinder_source
+    assert "*speed = cylinder_ramp_speed;" in cylinder_source
+    assert "*speed = (float)exit_slow_speed;" not in cylinder_source
+    assert "cylinder_state = CYLINDER_STATE_RELEASE;" in cylinder_source
+    assert "void a_run_cylinder_update_release_speed(float *speed)" in cylinder_source
+    assert "cylinder_ramp_speed += CYLINDER_SPEED_RAMP_STEP;" in cylinder_source
+
+    release_call = "a_run_cylinder_update_release_speed(speed);"
+    assert release_call in track_source
+    assert track_source.index(release_call) < track_source.index("switch (expected_element)")
+    assert "element == ELEMENT_CYLINDER ||" in track_source
+    assert "a_run_cylinder_get_state() != CYLINDER_STATE_RELEASE" in track_source
+
+    assert "int exit_slow_speed;" in eeprom_header
+    assert "float exit_slow_distance;" in eeprom_header
+    assert "config->cylinder.exit_slow_speed = 30;" in eeprom_source
+    assert "config->cylinder.exit_slow_distance = 50.0f;" in eeprom_source
+    assert "config->cylinder.exit_slow_speed = (int)read_int(26);" in eeprom_source
+    assert "config->cylinder.exit_slow_distance = read_float(27);" in eeprom_source
+    assert "save_int(config->cylinder.exit_slow_speed, 26);" in eeprom_source
+    assert "save_float(config->cylinder.exit_slow_distance, 27);" in eeprom_source
+
+    assert "cylinder_state == CYLINDER_STATE_WAIT_GROUND ||" in adc_source
+    assert "cylinder_state == CYLINDER_STATE_EXIT_SLOW" in adc_source
+    assert "cylinder_state == CYLINDER_STATE_WAIT_GROUND ||" in runner
+    assert "cylinder_state == CYLINDER_STATE_EXIT_SLOW" in runner
+
+    assert '"exit_spd", &app.cylinder.exit_slow_speed' in menu_source
+    assert '"exit_dist", &app.cylinder.exit_slow_distance' in menu_source
+    assert '"cyl_kp"' not in menu_source
+    assert '"cyl_kd"' not in menu_source
+    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), 5}' in menu_source
+    assert 'MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_5}' in menu_source
+
+
 def test_wall_entry_uses_adc_sum_threshold():
     wall_source = _read(A_RUN_WALL_C)
     wall_header = _read(A_RUN_WALL_H)
@@ -220,9 +354,8 @@ def test_wall_entry_uses_adc_sum_threshold():
     assert "wall_encoder_sum >= app.wall.encoder_target)" in update_body
     assert "float encoder_target; /**< 墙面退出编码器积分阈值。 */" in eeprom_header
     assert "config->wall.encoder_target =" in eeprom_source
-    assert 'ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "wall_enc");' in menu_source
-    assert "ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.wall.encoder_target, 4, 1);" in menu_source
-    assert "Menu_Process_Float_Value(&app.wall.encoder_target, 1.0f);" in menu_source
+    assert '"wall_enc", &app.wall.encoder_target' in menu_source
+    assert 'MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1}' in menu_source
 
 
 def test_imu_drops_wall_pitch_history_after_wall_uses_adc_only():
@@ -304,24 +437,20 @@ def test_track_mode_config_and_menu_reflect_current_debug_state():
 
 def test_fly_menu_draw_puts_seesaw_mode_on_first_editable_row():
     menu_source = _read(MENU_C)
-    start = menu_source.rindex("static void Menu_Draw_Fly_Sub(int edit_line)")
-    end = menu_source.index("static void Menu_Draw_Element_Len(int edit_line)", start)
-    fly_draw_body = menu_source[start:end]
 
-    assert 'ips114_show_string(8, 0, "<<SEESAW");' in fly_draw_body
-    assert 'ips114_show_string(16, 0, "mode:");' not in fly_draw_body
-    assert 'ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "seesaw_mode");' in fly_draw_body
-    assert 'ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.seesaw_mode, 1);' in fly_draw_body
-    assert 'ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_speed");' in fly_draw_body
-    assert 'ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "seesaw_spd");' in fly_draw_body
+    assert '{"<<SEESAW", menu_fly_items' in menu_source
+    assert '"mode:"' not in menu_source
+    assert menu_source.count('"seesaw_mode", &app.fly.seesaw_mode') == 2
+    assert 'MENU_META(MENU_ITEM_BOOL, 1, 0)' in menu_source
+    assert '"fly_speed", &app.fly.fly_speed' in menu_source
+    assert '"seesaw_spd", &app.fly.seesaw_speed' in menu_source
 
 
 def test_fly_menu_exposes_land_confirm_count_in_fly_mode():
     menu_source = _read(MENU_C)
 
-    assert 'ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "land_cnt");' in menu_source
-    assert 'ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.fly.fly_land_confirm_count, 4);' in menu_source
-    assert "Menu_Process_Int_Value(&app.fly.fly_land_confirm_count, 1);" in menu_source
+    assert '"land_cnt", &app.fly.fly_land_confirm_count' in menu_source
+    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), 1}' in menu_source
 
 
 def test_seesaw_recover_speed_is_fixed_macro_not_menu_or_eeprom_config():
@@ -343,13 +472,12 @@ def test_seesaw_recover_speed_is_fixed_macro_not_menu_or_eeprom_config():
 def test_cross_menu_entry_is_reachable_and_has_subpage():
     menu_source = _read(MENU_C)
 
-    assert "case 4:\n        return 5 * MENU_ROW_HEIGHT;" in menu_source
-    assert "45, 451," in menu_source
-    assert 'ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "CROSS");' in menu_source
-    assert "case 45:" in menu_source
-    assert "case 451:" in menu_source
-    assert 'ips114_show_string(8, 0, "<<CROSS");' in menu_source
-    assert 'ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "enc_target");' in menu_source
+    assert '{"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS}' in menu_source
+    assert '{"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU}' in menu_source
+    assert '"enc_target", &app.cross.encoder_target' in menu_source
+    assert '"adc_a_1", &app.cross.adc_a_1' in menu_source
+    assert '"adc_b_1", &app.cross.adc_b_1' in menu_source
+    assert '"adc_c_l", &app.cross.adc_c_l' in menu_source
 
 
 def test_cross_eeprom_layout_bumps_version_and_uses_slot_56():

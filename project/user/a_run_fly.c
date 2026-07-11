@@ -8,6 +8,7 @@
 #include "zf_common_headfile.h"
 
 /* --- 飞坡/跷跷板状态内部变量 --- */
+static FlyState fly_state = FLY_STATE_IDLE; /**< 飞坡模式状态机阶段。 */
 static int fly_detect_count = 0;          /* 入口弱磁连续确认计数，单位为 2ms 周期。 */
 static int fly_state_count = 0;           /* 飞坡入口趋势确认窗口计数，单位为 2ms 周期。 */
 static uint8 fly_finish_event = 0;        /* 跷跷板恢复完成事件，由元素仲裁在 2ms 链路中单次消费。 */
@@ -21,7 +22,7 @@ static uint16 fly_last_ad5 = 0;           /* 飞坡入口上一拍 ad5，用于�
 static uint8 fly_last_ad_valid = 0;       /* 上一拍 ad1/ad4/ad5 是否可用于递减比较。 */
 
 /* --- 跷跷板停止等待状态内部变量 --- */
-static SeesawState seesaw_state = SEESAW_IDLE; /**< 停止等待状态机阶段 */
+static SeesawState seesaw_state = SEESAW_STATE_IDLE; /**< 停止等待状态机阶段 */
 static int seesaw_detect_count = 0;            /**< 停止等待入口窗口内有效命中计数，单位为 2ms 周期。 */
 static int seesaw_entry_window_count = 0;      /**< 停止等待入口趋势确认窗口计数，单位为 2ms 周期。 */
 static int seesaw_brake_count = 0;             /**< 零速闭环刹车计数，单位为 2ms 周期。 */
@@ -165,6 +166,24 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
 }
 
 /**
+ * @brief 读取飞坡模式状态。
+ * @return FlyState 当前飞坡状态。
+ */
+FlyState a_run_fly_get_state(void)
+{
+    return fly_state;
+}
+
+/**
+ * @brief 读取停止等待模式状态。
+ * @return SeesawState 当前停止等待状态。
+ */
+SeesawState a_run_seesaw_get_state(void)
+{
+    return seesaw_state;
+}
+
+/**
  * @brief 取出并清除飞坡/跷跷板完成事件。
  *
  * 完成事件只允许元素仲裁消费一次，避免后续元素被同一次恢复确认重复触发。
@@ -200,7 +219,8 @@ void a_run_fly_reset(void)
     fly_last_ad4 = 0;
     fly_last_ad5 = 0;
     fly_last_ad_valid = 0;
-    flat_fly = FLY_STATE_IDLE;
+    fly_state = FLY_STATE_IDLE;
+    seesaw_state = SEESAW_STATE_IDLE;
 }
 
 /**
@@ -210,7 +230,8 @@ void a_run_fly_reset(void)
  */
 void a_run_seesaw_reset(void)
 {
-    seesaw_state = SEESAW_IDLE;
+    fly_state = FLY_STATE_IDLE;
+    seesaw_state = SEESAW_STATE_IDLE;
     seesaw_detect_count = 0;
     seesaw_entry_window_count = 0;
     seesaw_brake_count = 0;
@@ -249,7 +270,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
 
     switch (seesaw_state)
     {
-    case SEESAW_IDLE:
+    case SEESAW_STATE_IDLE:
         /*
          * 普通赛道也可能出现单拍弱磁，跷跷板入口要求在 20ms 窗口内多次出现
          * 四路弱磁且 ad1/ad4 同时递减，确认整车正在离开电磁线后再刹车。
@@ -273,11 +294,11 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
             fly_lost_line_blocked = 1;
             stop = 0;
             seesaw_zero_brake_active = 1;
-            seesaw_state = SEESAW_BRAKE;
+            seesaw_state = SEESAW_STATE_BRAKE;
         }
         break;
 
-    case SEESAW_STOP:
+    case SEESAW_STATE_STOP:
         /* 借用全局停车锁存，直接压住电机输出，恢复阶段再释放。 */
         *speed = 0.0f;
         fly_lost_line_blocked = 1;
@@ -290,10 +311,10 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         seesaw_centering_active = 0;
         stop = 1;
         seesaw_wait_count = 0;
-        seesaw_state = SEESAW_WAIT;
+        seesaw_state = SEESAW_STATE_WAIT;
         break;
 
-    case SEESAW_BRAKE:
+    case SEESAW_STATE_BRAKE:
         /*
          * 上板后单靠 stop=1 会滑行，先用速度环把目标压到 0。
          * 这里临时放开 stop，并要求主控链路使用 signed 编码器反馈，避免倒滑也被当成前进速度。
@@ -311,16 +332,16 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
             seesaw_centering_active = 0;
             if (creep_target > 0.0f)
             {
-                seesaw_state = SEESAW_CREEP;
+                seesaw_state = SEESAW_STATE_CREEP;
             }
             else
             {
-                seesaw_state = SEESAW_STOP;
+                seesaw_state = SEESAW_STATE_STOP;
             }
         }
         break;
 
-    case SEESAW_CREEP:
+    case SEESAW_STATE_CREEP:
         /*
          * 零速刹车后低速向前循迹一小段，让车重更靠后压住跷跷板。
          * 里程积分沿用普通 abs 速度反馈和现场标定系数，保持与原前挪距离调参一致。
@@ -344,22 +365,22 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         {
             seesaw_creep_distance = 0.0f;
             seesaw_centering_active = 0;
-            seesaw_state = SEESAW_STOP;
+            seesaw_state = SEESAW_STATE_STOP;
         }
         break;
 
-    case SEESAW_WAIT:
+    case SEESAW_STATE_WAIT:
         /* 等待时间由菜单配置，单位为 2ms 主控制周期。 */
         *speed = 0.0f;
         stop = 1;
         seesaw_wait_count++;
         if (seesaw_wait_count >= seesaw_wait_limit)
         {
-            seesaw_state = SEESAW_CHECK;
+            seesaw_state = SEESAW_STATE_CHECK;
         }
         break;
 
-    case SEESAW_CHECK:
+    case SEESAW_STATE_CHECK:
         /* 检查电感信号恢复 */
         *speed = 0.0f;
         stop = 1;
@@ -368,22 +389,22 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
             ad2 > SEESAW_LAND_CENTER_TH ||
             ad3 > SEESAW_LAND_CENTER_TH)
         {
-            seesaw_state = SEESAW_RECOVER;
+            seesaw_state = SEESAW_STATE_RECOVER;
         }
         break;
 
-    case SEESAW_RECOVER:
+    case SEESAW_STATE_RECOVER:
         /* 阶梯增速恢复，复用 COOLDOWN 逻辑 */
         pid_speed_reset(&PID.left_speed);
         pid_speed_reset(&PID.right_speed);
         stop = 0;
         fly_release_speed = (float)SEESAW_RECOVER_SPEED;
         fly_finish_event = 1;
-        flat_fly = FLY_STATE_COOLDOWN;
-        seesaw_state = SEESAW_COOLDOWN;
+        fly_state = FLY_STATE_COOLDOWN;
+        seesaw_state = SEESAW_STATE_COOLDOWN;
         break;
 
-    case SEESAW_COOLDOWN:
+    case SEESAW_STATE_COOLDOWN:
         /* 释放阶段由 a_run_fly_update_release_speed() 执行 */
         break;
     }
@@ -401,7 +422,7 @@ void a_run_fly_update_release_speed(float *speed)
 {
     float target_speed;
 
-    if (flat_fly != FLY_STATE_COOLDOWN)
+    if (fly_state != FLY_STATE_COOLDOWN)
     {
         return;
     }
@@ -447,7 +468,7 @@ void a_run_fly_update_release_speed(float *speed)
  */
 void a_run_fly_update_speed(float *speed, uint8 allow_entry)
 {
-    switch (flat_fly)
+    switch (fly_state)
     {
     case FLY_STATE_IDLE:
         /*
@@ -468,7 +489,7 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
                                         &fly_last_ad_valid) != 0)
         {
             fly_lost_line_blocked = 1;
-            flat_fly = FLY_STATE_LOW;
+            fly_state = FLY_STATE_LOW;
         }
         else
         {
@@ -502,7 +523,7 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
                 fly_release_speed = (float)app.fly.fly_recover_speed;
                 fly_finish_event = 1;
                 fly_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
-                flat_fly = FLY_STATE_COOLDOWN;
+                fly_state = FLY_STATE_COOLDOWN;
             }
         }
         else

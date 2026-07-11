@@ -9,24 +9,10 @@
 #define RING_YAW_DT_SCALE 0.40f     /* yaw 积分缩放系数 0.40f：圆环状态机以 5ms 周期运行， \
                                      * gyro_z 每周期增量需乘 0.40（≈2ms/5ms）以保持与迁移前 2ms 周期等效的累计角度。 */
 
-/**
- * @brief 环岛阶段枚举。
- */
-enum RingStep
-{
-    no_ring,        /**< 未进入环岛流程。 */
-    ring,           /**< 已识别到圆环入口。 */
-    pre_ring,       /**< 预入环阶段。 */
-    in_ring,        /**< 环内阶段。 */
-    pre_out_ring,   /**< 预出环阶段。 */
-    drive_out_ring, /**< 出环前直走段，编码器累计到阈值后切入 out_ring。 */
-    out_ring        /**< 出环确认阶段。 */
-};
-
 static int8 ring_is_left_entry_signal(void);
 static int8 ring_is_right_entry_signal(void);
 
-static enum RingStep current_state = no_ring; /**< 当前圆环状态机阶段，左右圆环共用。 */
+static RingState ring_state = RING_STATE_IDLE; /**< 当前圆环状态机阶段，左右圆环共用。 */
 RingStruct ring_data = {0};                   /**< 环岛过程数据，菜单和调试界面允许直接读取。 */
 static uint8 ring_entry_count = 0;            /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
 
@@ -44,11 +30,11 @@ void a_run_ring_update_angle_target(float *angle_target)
 
 /**
  * @brief 读取当前环岛状态机阶段。
- * @return int8 当前阶段编号：0-no_ring，1-ring，2-pre_ring，3-in_ring，4-pre_out_ring，5-out_ring。
+ * @return RingState 当前圆环状态。
  */
-int8 a_run_ring_get_state(void)
+RingState a_run_ring_get_state(void)
 {
-    return (int8)current_state;
+    return ring_state;
 }
 
 /**
@@ -72,7 +58,7 @@ void a_run_ring_reset(void)
     ring_data.gyro_flat = 0;
     ring_data.yaw_delta_sum = 0;
     ring_entry_count = 0;
-    current_state = no_ring;
+    ring_state = RING_STATE_IDLE;
 }
 
 /**
@@ -131,9 +117,9 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
     }
 
     a_run_ring_update_integrals();
-    switch (current_state)
+    switch (ring_state)
     {
-    case no_ring:
+    case RING_STATE_IDLE:
         if (ring_dir > 0)
         {
             entry_signal = ring_is_left_entry_signal();
@@ -164,7 +150,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
                     ring_data.flast_l = 0;
                     ring_data.flast_r = 1;
                 }
-                current_state = ring;
+                ring_state = RING_STATE_ENTRY;
             }
             else if (timeadd(&ring_data.time_l, 300))
             {
@@ -174,7 +160,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         }
         break;
 
-    case ring:
+    case RING_STATE_ENTRY:
         ring_data.diff_set = 0;
         ring_data.distance = 1;
         ring_data.yaw_delta_sum = 0;
@@ -185,38 +171,38 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
             ring_data.last_yaw = 0;
             ring_data.gyro_flat = 1;
             ring_data.yaw_delta_sum = 0;
-            current_state = pre_ring;
+            ring_state = RING_STATE_PRE_RING;
         }
         break;
 
-    case pre_ring:
+    case RING_STATE_PRE_RING:
         ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz)
         {
             ring_data.diff_set = 0;
-            current_state = in_ring;
+            ring_state = RING_STATE_IN_RING;
         }
         break;
 
-    case in_ring:
+    case RING_STATE_IN_RING:
         if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz)
         {
-            current_state = pre_out_ring;
+            ring_state = RING_STATE_PRE_OUT_RING;
         }
         break;
 
-    case pre_out_ring:
+    case RING_STATE_PRE_OUT_RING:
         ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_out_ring_Gyroz)
         {
             ring_data.diff_set = 0;
             ring_data.encoder = 0;
             ring_data.distance = 1;
-            current_state = drive_out_ring;
+            ring_state = RING_STATE_DRIVE_OUT_RING;
         }
         break;
 
-    case drive_out_ring:
+    case RING_STATE_DRIVE_OUT_RING:
         ring_data.diff_set = 0 * ring_dir;
         if (ring_data.encoder >= app.ring.drive_out_ring_encoder)
         {
@@ -224,11 +210,11 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;
             timedestroy(&ring_data.out_ring_time);
-            current_state = out_ring;
+            ring_state = RING_STATE_OUT_RING;
         }
         break;
 
-    case out_ring:
+    case RING_STATE_OUT_RING:
         if (timeadd(&ring_data.out_ring_time, 200))
         {
             timedestroy(&ring_data.out_ring_time);
@@ -240,7 +226,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
             ring_data.encoder = 0;
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;
-            current_state = no_ring;
+            ring_state = RING_STATE_IDLE;
             return 1;
         }
         break;

@@ -5,7 +5,7 @@
 
 /**
  * @brief 飞坡/跷跷板控制阶段。
- * @details flat_fly 使用该枚举值保存当前阶段，外部可按 0/非 0 判断跷跷板过渡期。
+ * @details 飞坡状态变量仅保留在模块内部，外部通过 a_run_fly_get_state() 查询。
  */
 typedef enum
 {
@@ -20,15 +20,27 @@ typedef enum
  */
 typedef enum
 {
-    SEESAW_IDLE = 0,      /**< 等待入口检测 */
-    SEESAW_STOP = 1,      /**< 停车，目标速度为 0 */
-    SEESAW_BRAKE = 2,     /**< 零速闭环刹车，抵消上板惯性 */
-    SEESAW_CREEP = 3,     /**< 刹车后低速前挪，让车重更靠近跷跷板转轴后方 */
-    SEESAW_WAIT = 4,      /**< 等待跷跷板倾斜 */
-    SEESAW_CHECK = 5,     /**< 检查电感信号恢复 */
-    SEESAW_RECOVER = 6,   /**< 阶梯增速恢复 */
-    SEESAW_COOLDOWN = 7   /**< 复用飞坡 COOLDOWN */
+    SEESAW_STATE_IDLE = 0,      /**< 等待入口检测 */
+    SEESAW_STATE_STOP = 1,      /**< 停车，目标速度为 0 */
+    SEESAW_STATE_BRAKE = 2,     /**< 零速闭环刹车，抵消上板惯性 */
+    SEESAW_STATE_CREEP = 3,     /**< 刹车后低速前挪，让车重更靠近跷跷板转轴后方 */
+    SEESAW_STATE_WAIT = 4,      /**< 等待跷跷板倾斜 */
+    SEESAW_STATE_CHECK = 5,     /**< 检查电感信号恢复 */
+    SEESAW_STATE_RECOVER = 6,   /**< 阶梯增速恢复 */
+    SEESAW_STATE_COOLDOWN = 7   /**< 复用飞坡 COOLDOWN */
 } SeesawState;
+
+/**
+ * @brief 读取飞坡模式状态。
+ * @return FlyState 当前飞坡状态。
+ */
+FlyState a_run_fly_get_state(void);
+
+/**
+ * @brief 读取停止等待模式状态。
+ * @return SeesawState 当前停止等待状态。
+ */
+SeesawState a_run_seesaw_get_state(void);
 
 /**
  * @brief 更新飞坡模式速度覆盖状态机。
@@ -44,7 +56,7 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry);
 /**
  * @brief 更新跷跷板完成后的阶梯增速。
  *
- * 该接口不依赖当前元素是否仍为跷跷板，只要 flat_fly 处于 COOLDOWN，
+ * 该接口不依赖当前元素是否仍为跷跷板，只要飞坡状态处于 COOLDOWN，
  * 就继续限制速度并逐拍释放，直到恢复到巡线目标速度后复位飞坡状态机。
  *
  * @param speed 输出目标速度指针，保留小数速度设定；COOLDOWN 阶段会被斜坡释放值覆盖。

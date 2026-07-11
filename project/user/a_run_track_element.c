@@ -66,14 +66,19 @@ static int8 track_element_is_executable(int element)
 static void track_element_enter(enum TrackElement element)
 {
     a_run_ring_reset();
-    a_run_cylinder_reset();
+    if (element == ELEMENT_NONE ||
+        element == ELEMENT_CYLINDER ||
+        a_run_cylinder_get_state() != CYLINDER_STATE_RELEASE)
+    {
+        a_run_cylinder_reset();
+    }
     a_run_wall_reset();
     a_run_cross_reset();
     /*
      * 跷跷板完成事件只推进元素序列，COOLDOWN 还要继续释放速度。
      * 切到任意后续元素时都不能清掉 fly_release_speed，否则会一拍回到巡线速度。
      */
-    if (element == ELEMENT_NONE || flat_fly != FLY_STATE_COOLDOWN)
+    if (element == ELEMENT_NONE || a_run_fly_get_state() != FLY_STATE_COOLDOWN)
     {
         if (app.fly.seesaw_mode == 0)
         {
@@ -169,6 +174,9 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         element_sequence_started = 1;
     }
 
+    /* 圆桶恢复只提供基础速度上限，当前元素可在后续 switch 中覆盖更低速度。 */
+    a_run_cylinder_update_release_speed(speed);
+
     switch (expected_element)
     {
     case ELEMENT_LEFT_RING:
@@ -186,7 +194,7 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         break;
 
     case ELEMENT_CYLINDER:
-        if (a_run_cylinder_update_5ms() != 0)
+        if (a_run_cylinder_update_5ms(speed) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }

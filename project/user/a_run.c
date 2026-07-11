@@ -12,7 +12,6 @@
 #include "zf_common_headfile.h"
 
 /* --- 运行状态变量 --- */
-volatile int flat_fly = 0;          /* 飞坡阶段状态：0-普通巡线，1-保持，2-恢复，3-冷却 */
 volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/调试显示） */
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
@@ -29,6 +28,7 @@ void run_time_1(void)
 {
     float diff_output;
     int8 start_state;
+    CylinderState cylinder_state;
     steer_div_10++;
     a_run_apply_iap_guard();
     start_state = a_run_mode_get_start_state();
@@ -39,7 +39,9 @@ void run_time_1(void)
     if (steer_div_10 >= 3)
     {
         /* 圆桶窗口确认后才切专用方向环，避免元素序列轮到圆桶时起步提前降增益。 */
-        if (a_run_cylinder_get_state() == A_RUN_CYLINDER_STATE_WAIT_GROUND)
+        cylinder_state = a_run_cylinder_get_state();
+        if (cylinder_state == CYLINDER_STATE_WAIT_GROUND ||
+            cylinder_state == CYLINDER_STATE_EXIT_SLOW)
         {
             PID.steer.Kp = app.cylinder.kp_Err;
             PID.steer.Kd = app.cylinder.kd_Err;
