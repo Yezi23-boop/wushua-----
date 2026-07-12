@@ -13,8 +13,8 @@ static int8 ring_is_left_entry_signal(void);
 static int8 ring_is_right_entry_signal(void);
 
 static RingState ring_state = RING_STATE_IDLE; /**< 当前圆环状态机阶段，左右圆环共用。 */
-RingStruct ring_data = {0};                   /**< 环岛过程数据，菜单和调试界面允许直接读取。 */
-static uint8 ring_entry_count = 0;            /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
+RingStruct ring_data = {0};                    /**< 环岛过程数据，菜单和调试界面允许直接读取。 */
+static uint8 ring_entry_count = 0;             /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
 
 /**
  * @brief 根据环岛状态更新角速度目标。
@@ -138,6 +138,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
             /* 首次命中后开启窗口，窗口内累计命中次数，避免单拍电感抖动打断进环确认。 */
             if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
             {
+                //                stop = 1;
                 ring_entry_count = 0;
                 timedestroy(&ring_data.time_l);
                 if (ring_dir > 0)
@@ -206,6 +207,7 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         ring_data.diff_set = 0 * ring_dir;
         if (ring_data.encoder >= app.ring.drive_out_ring_encoder)
         {
+
             ring_data.distance = 0;
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;

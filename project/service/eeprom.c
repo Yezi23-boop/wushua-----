@@ -37,7 +37,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.track_mode = 0;     /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f; /* 默认平地负压百分比 90 */
     config->start.element_len = 4;
-    config->start.element_seq[0] = TRACK_ELEMENT_CROSS; // TRACK_ELEMENT_RIGHT_RING
+    config->start.element_seq[0] = TRACK_ELEMENT_CROSS; // TRACK_ELEMENT_CROSS
     config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;   // TRACK_ELEMENT_WALL
     config->start.element_seq[2] = TRACK_ELEMENT_WALL;
     config->start.element_seq[3] = TRACK_ELEMENT_SEESAW;
@@ -67,13 +67,13 @@ static void eeprom_load_defaults(AppConfig *config)
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 1.0;          /* ring->pre_ring编码器积分阈值 */
+    config->ring.ring_entry_encoder = 5.0;          /* ring->pre_ring编码器积分阈值 */
     config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
     config->ring.pre_ring_Gyroz = 40.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值 220 */
-    config->ring.pre_out_ring_Gyro_target = 45.00f; /* pre_out_ring固定目标角速度 25 */
-    config->ring.pre_out_ring_Gyroz = 330.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
-    config->ring.drive_out_ring_encoder = 10.0f;     /* 出环前直走距离（cm） */
+    config->ring.pre_out_ring_Gyro_target = 40.00f; /* pre_out_ring固定目标角速度 25 */
+    config->ring.pre_out_ring_Gyroz = 340.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
+    config->ring.drive_out_ring_encoder = 5.0f;     /* 出环前直走距离（cm） */
 
     /* 飞坡策略默认参数 */
     /* 飞坡模式专用 */
@@ -110,8 +110,8 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 双十字策略默认参数 */
     config->cross.encoder_target = 300.0f; /* 双十字退出编码器积分阈值 */
     config->cross.adc_a_1 = 1.00f;         /* 双十字横向主差分默认权重 */
-    config->cross.adc_b_1 = 1.00f;         /* 双十字竖向差分默认权重 */
-    config->cross.adc_c_l = 1.00f;         /* 双十字分母补偿默认权重 */
+    config->cross.adc_b_1 = 1.20f;         /* 双十字竖向差分默认权重 */
+    config->cross.adc_c_l = 0.60f;         /* 双十字分母补偿默认权重 */
 }
 
 /**
