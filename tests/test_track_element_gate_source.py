@@ -25,6 +25,7 @@ EEPROM_H = ROOT / "project" / "service" / "eeprom.h"
 EEPROM_C = ROOT / "project" / "service" / "eeprom.c"
 MENU_C = ROOT / "project" / "service" / "menu.c"
 MOTOR_C = ROOT / "project" / "service" / "motor.c"
+PID_C = ROOT / "project" / "service" / "pid.c"
 
 
 def _read(path):
@@ -68,6 +69,21 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     )
     assert "a_run_track_element_update_gate" not in mode_source
     assert "a_run_track_element_update_gate" not in run_time_2_body
+
+
+def test_encoder_total_distance_stops_at_32_meters():
+    pid_source = _read(PID_C)
+    encoder_body = _function_body(
+        pid_source,
+        "void Encoder_get(PID_Speed *left, PID_Speed *right)",
+        "/**\n * @brief 速度环 PID 更新",
+    )
+
+    assert "#define ENCODER_STOP_DISTANCE_CM 3200.0f" in pid_source
+    assert "static float encoder_sum = 0.0f;" in encoder_body
+    assert "encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;" in encoder_body
+    assert "if (encoder_sum >= ENCODER_STOP_DISTANCE_CM)" in encoder_body
+    assert "stop = 1;" in encoder_body
 
 
 def test_track_element_sequence_supports_current_executable_elements():
