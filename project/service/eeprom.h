@@ -93,8 +93,7 @@ typedef struct
     float adc_c_l;              /**< 圆桶专用分母补偿权重。 */
     float kp_Err;               /**< 圆桶专用方向环比例系数，后续运行期切换 PID 时使用。 */
     float kd_Err;               /**< 圆桶专用方向环微分系数，后续运行期切换 PID 时使用。 */
-    int exit_slow_speed;        /**< 出圆桶前减速阶段目标速度。 */
-    float exit_slow_distance;   /**< 距离退出积分阈值多少时开始减速。 */
+    int exit_slow_speed;        /**< 圆桶确认后阶梯减速的最低目标速度。 */
 } AppCylinderConfig;
 
 /**

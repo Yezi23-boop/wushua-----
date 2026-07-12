@@ -147,8 +147,7 @@ static const MenuItemDef menu_cylinder_items[] = {
     {"adc_a_1", &app.cylinder.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
     {"adc_b_1", &app.cylinder.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
     {"adc_c_l", &app.cylinder.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"exit_spd", &app.cylinder.exit_slow_speed, MENU_META(MENU_ITEM_INT16, 4, 0), 5},
-    {"exit_dist", &app.cylinder.exit_slow_distance, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_5}};
+    {"exit_spd", &app.cylinder.exit_slow_speed, MENU_META(MENU_ITEM_INT16, 4, 0), 5}};
 
 static const MenuItemDef menu_wall_items[] = {
     {"wall_spd", &app.wall.slow_speed, MENU_META(MENU_ITEM_INT16, 3, 0), 5},
@@ -496,8 +495,6 @@ static void Menu_Draw_Sensor(void)
     Menu_Show_Float(48, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
     ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "cyl");
     Menu_Show_Int32(144, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
-    ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "rdeg");
-    Menu_Show_Float(192, 6 * MENU_ROW_HEIGHT, imu_get_gravity_vz(), 4, 1);
 }
 
 /**

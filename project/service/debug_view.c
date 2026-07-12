@@ -31,10 +31,6 @@ void debug_vofa_service(void)
  */
 void printf_imu(void)
 {
-    float roll_delta_deg;
-    /* 调试页直接显示 2ms IMU 缓存，避免圆桶仲裁关闭时看到旧缓存。 */
-    roll_delta_deg = imu_get_gravity_vz();
-
     ips114_show_float(4 * 24, 18 * 0, imu660rc_roll, 4, 1);
     ips114_show_float(4 * 24, 18 * 1, imu660rc_pitch, 4, 1);
     ips114_show_float(4 * 24, 18 * 2, imu660rc_yaw, 4, 1);

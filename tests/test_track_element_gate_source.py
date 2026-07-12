@@ -24,6 +24,7 @@ FUYA_H = ROOT / "project" / "user" / "FUYA.h"
 EEPROM_H = ROOT / "project" / "service" / "eeprom.h"
 EEPROM_C = ROOT / "project" / "service" / "eeprom.c"
 MENU_C = ROOT / "project" / "service" / "menu.c"
+MOTOR_C = ROOT / "project" / "service" / "motor.c"
 
 
 def _read(path):
@@ -265,7 +266,7 @@ def test_cross_timing_uses_dedicated_adc_weights():
     assert menu_source.count("MENU_FLOAT_STEP_01") >= 3
 
 
-def test_cylinder_exit_slow_state_uses_remaining_encoder_distance():
+def test_cylinder_confirmation_starts_immediate_ramp_deceleration():
     cylinder_header = _read(A_RUN_CYLINDER_H)
     cylinder_source = _read(A_RUN_CYLINDER_C)
     track_source = _read(A_RUN_TRACK_ELEMENT_C)
@@ -275,19 +276,23 @@ def test_cylinder_exit_slow_state_uses_remaining_encoder_distance():
     eeprom_source = _read(EEPROM_C)
     menu_source = _read(MENU_C)
 
-    assert "CYLINDER_STATE_EXIT_SLOW = 3" in cylinder_header
-    assert "CYLINDER_STATE_RELEASE = 4" in cylinder_header
+    assert "CYLINDER_STATE_DECEL = 2" in cylinder_header
+    assert "CYLINDER_STATE_RELEASE = 3" in cylinder_header
+    assert "CYLINDER_STATE_WAIT_GROUND" not in cylinder_header
+    assert "CYLINDER_STATE_EXIT_SLOW" not in cylinder_header
     assert "uint8 a_run_cylinder_update_5ms(float *speed);" in cylinder_header
     assert "void a_run_cylinder_update_release_speed(float *speed);" in cylinder_header
     assert "uint8 a_run_cylinder_update_5ms(float *speed)" in cylinder_source
     assert "a_run_cylinder_update_5ms(speed)" in track_source
 
-    assert "#define CYLINDER_SPEED_RAMP_STEP 0.5f" in cylinder_source
+    assert "#define CYLINDER_SPEED_RAMP_STEP 0.2f" in cylinder_source
     assert "static float cylinder_ramp_speed = 0.0f;" in cylinder_source
-    assert "cylinder_encoder_sum + exit_slow_distance >= encoder_target" in cylinder_source
-    assert "cylinder_state = CYLINDER_STATE_EXIT_SLOW;" in cylinder_source
     assert "cylinder_ramp_speed = *speed;" in cylinder_source
-    assert "case CYLINDER_STATE_EXIT_SLOW:" in cylinder_source
+    assert "cylinder_state = CYLINDER_STATE_DECEL;" in cylinder_source
+    assert "case CYLINDER_STATE_DECEL:" in cylinder_source
+    assert "CYLINDER_STATE_WAIT_GROUND" not in cylinder_source
+    assert "CYLINDER_STATE_EXIT_SLOW" not in cylinder_source
+    assert "exit_slow_distance" not in cylinder_source
     assert "cylinder_ramp_speed -= CYLINDER_SPEED_RAMP_STEP;" in cylinder_source
     assert "cylinder_ramp_speed < (float)exit_slow_speed" in cylinder_source
     assert "*speed = cylinder_ramp_speed;" in cylinder_source
@@ -303,25 +308,26 @@ def test_cylinder_exit_slow_state_uses_remaining_encoder_distance():
     assert "a_run_cylinder_get_state() != CYLINDER_STATE_RELEASE" in track_source
 
     assert "int exit_slow_speed;" in eeprom_header
-    assert "float exit_slow_distance;" in eeprom_header
-    assert "config->cylinder.exit_slow_speed = 30;" in eeprom_source
-    assert "config->cylinder.exit_slow_distance = 50.0f;" in eeprom_source
+    assert "exit_slow_distance" not in eeprom_header
     assert "config->cylinder.exit_slow_speed = (int)read_int(26);" in eeprom_source
-    assert "config->cylinder.exit_slow_distance = read_float(27);" in eeprom_source
     assert "save_int(config->cylinder.exit_slow_speed, 26);" in eeprom_source
-    assert "save_float(config->cylinder.exit_slow_distance, 27);" in eeprom_source
+    assert "read_float(27)" not in eeprom_source
+    assert "save_float(config->cylinder.exit_slow_distance, 27)" not in eeprom_source
 
-    assert "cylinder_state == CYLINDER_STATE_WAIT_GROUND ||" in adc_source
-    assert "cylinder_state == CYLINDER_STATE_EXIT_SLOW" in adc_source
-    assert "cylinder_state == CYLINDER_STATE_WAIT_GROUND ||" in runner
-    assert "cylinder_state == CYLINDER_STATE_EXIT_SLOW" in runner
+    assert "cylinder_state == CYLINDER_STATE_DECEL" in adc_source
+    assert "CYLINDER_STATE_WAIT_GROUND" not in adc_source
+    assert "CYLINDER_STATE_EXIT_SLOW" not in adc_source
+    assert "cylinder_state == CYLINDER_STATE_DECEL" in runner
+    assert "CYLINDER_STATE_WAIT_GROUND" not in runner
+    assert "CYLINDER_STATE_EXIT_SLOW" not in runner
 
     assert '"exit_spd", &app.cylinder.exit_slow_speed' in menu_source
-    assert '"exit_dist", &app.cylinder.exit_slow_distance' in menu_source
+    assert '"exit_dist"' not in menu_source
+    cylinder_menu = menu_source.split("static const MenuItemDef menu_cylinder_items[] = {", 1)[1].split("};", 1)[0]
+    assert cylinder_menu.count("MENU_META(") == 6
     assert '"cyl_kp"' not in menu_source
     assert '"cyl_kd"' not in menu_source
     assert 'MENU_META(MENU_ITEM_INT16, 4, 0), 5}' in menu_source
-    assert 'MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_5}' in menu_source
 
 
 def test_wall_entry_uses_adc_sum_threshold():
@@ -401,8 +407,13 @@ def test_imu_and_fuya_match_current_fixed_output_strategy():
     runner = _read(A_RUN_C)
 
     assert "#define IMU_GYRO_Z_SIGN (1.0f)" in imu_source
-    assert "void imu_update_gravity_vz_from_roll(void)" in imu_source
-    assert "float imu_get_gravity_vz(void)" in imu_source
+    assert "imu_update_gravity_vz_from_roll" not in imu_source
+    assert "imu_get_gravity_vz" not in imu_source
+    assert "imu_roll_delta_deg" not in imu_source
+    assert "extern float acc_1;" not in imu_header
+    assert "imu_update_gravity_vz_from_roll" not in imu_header
+    assert "imu_get_gravity_vz" not in imu_header
+    assert "imu_update_gravity_vz_from_roll" not in runner
     assert "imu_update_gravity_vz_from_quaternion" not in imu_source
     assert "imu_update_gravity_vz_from_quaternion" not in imu_header
 
@@ -453,20 +464,78 @@ def test_fly_menu_exposes_land_confirm_count_in_fly_mode():
     assert 'MENU_META(MENU_ITEM_INT16, 4, 0), 1}' in menu_source
 
 
-def test_seesaw_recover_speed_is_fixed_macro_not_menu_or_eeprom_config():
+def test_seesaw_recover_speed_reuses_creep_speed():
     fly_source = _read(A_RUN_FLY_C)
     eeprom_header = _read(EEPROM_H)
     eeprom_source = _read(EEPROM_C)
     menu_source = _read(MENU_C)
 
-    assert "#define SEESAW_RECOVER_SPEED 10" in fly_source
-    assert "fly_release_speed = (float)SEESAW_RECOVER_SPEED;" in fly_source
+    assert "SEESAW_RECOVER_SPEED" not in fly_source
+    assert "fly_release_speed = (float)app.fly.seesaw_speed;" in fly_source
     assert "app.fly.seesaw_recover_speed" not in fly_source
 
     assert "int seesaw_recover_speed;" not in eeprom_header
     assert "config->fly.seesaw_recover_speed" not in eeprom_source
     assert "app.fly.seesaw_recover_speed" not in menu_source
     assert 'ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "recover_spd");' not in menu_source
+
+
+def test_seesaw_wait_state_machine_uses_global_stop_only_at_hold_boundaries():
+    fly_header = _read(A_RUN_FLY_H)
+    fly_source = _read(A_RUN_FLY_C)
+    motor_source = _read(MOTOR_C)
+    eeprom_source = _read(EEPROM_C)
+    seesaw_body = _function_body(
+        fly_source,
+        "void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)",
+        "void a_run_fly_update_release_speed(float *speed)",
+    )
+    reset_body = _function_body(
+        fly_source,
+        "void a_run_seesaw_reset(void)",
+        "/**\n * @brief 跷跷板停止等待模式速度状态机。",
+    )
+
+    for state in (
+        "SEESAW_STATE_IDLE = 0",
+        "SEESAW_STATE_BRAKE = 1",
+        "SEESAW_STATE_CREEP = 2",
+        "SEESAW_STATE_HOLD_DELAY = 3",
+        "SEESAW_STATE_WAIT_SIGNAL = 4",
+        "SEESAW_STATE_RELEASE = 5",
+    ):
+        assert state in fly_header
+
+    for old_state in (
+        "SEESAW_STATE_STOP =",
+        "SEESAW_STATE_WAIT =",
+        "SEESAW_STATE_CHECK =",
+        "SEESAW_STATE_RECOVER =",
+        "SEESAW_STATE_COOLDOWN =",
+    ):
+        assert old_state not in fly_header
+        assert old_state not in fly_source
+
+    assert seesaw_body.count("stop = 1;") == 1
+    assert seesaw_body.count("stop = 0;") == 1
+    assert "if (seesaw_wait_count == 0)" in seesaw_body
+    assert "seesaw_state = SEESAW_STATE_HOLD_DELAY;" in seesaw_body
+    assert "seesaw_state = SEESAW_STATE_WAIT_SIGNAL;" in seesaw_body
+    assert "seesaw_state = SEESAW_STATE_RELEASE;" in seesaw_body
+    assert "seesaw_hold_active" not in fly_header
+    assert "seesaw_hold_active" not in fly_source
+    assert "seesaw_hold_active" not in motor_source
+
+    assert "seesaw_state == SEESAW_STATE_HOLD_DELAY ||" in reset_body
+    assert "seesaw_state == SEESAW_STATE_WAIT_SIGNAL" in reset_body
+    assert reset_body.count("stop = 0;") == 1
+
+    assert "if (stop == 0)" in motor_source
+    assert "motor_update_start_pwm_ramp(0, 0);" in motor_source
+    assert "pwm_set_duty(PWMB_CH2_P13, 100);" in motor_source
+    assert "pwm_set_duty(PWMB_CH3_P52, 100);" in motor_source
+    assert "config->fly.seesaw_wait_count = 10;" in eeprom_source
+    assert "10 * 2ms = 20ms" in eeprom_source
 
 
 def test_cross_menu_entry_is_reachable_and_has_subpage():
@@ -585,6 +654,9 @@ def test_fly_and_seesaw_share_the_same_entry_gate_helper():
     assert "a_run_fly_update_entry_gate(" in fly_body
     assert "app.fly.fly_detect_count" in fly_body
     assert "app.fly.seesaw_detect_count" in seesaw_body
+    assert "SEESAW_ENTRY_WINDOW_COUNT,\n                                        0," in seesaw_body
+    assert "FLY_ENTRY_WINDOW_COUNT,\n                                        1," in fly_body
+    assert "if (require_decrease == 0)" in fly_source
 
 
 def test_fly_mode_landing_requires_multi_frame_recovery_confirm():

@@ -219,6 +219,7 @@ void motor_output(int32 lpwm, int32 rpwm)
          * 此处 设置成 100，设置成0会出现电机无法完全停止的情况，可能是由于 PWM 输出的非线性或电机特性导致的死区现象
          * 100 的占空比足以让电机保持静止状态，同时也能在某些情况下提供微小的反向力矩来抵消外部扰动，从而更有效地实现停车保护
          */
+        motor_update_start_pwm_ramp(0, 0);
         pwm_set_duty(PWMB_CH2_P13, 100);
         pwm_set_duty(PWMB_CH3_P52, 100);
     }

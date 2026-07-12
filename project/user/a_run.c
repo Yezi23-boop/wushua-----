@@ -35,13 +35,11 @@ void run_time_1(void)
     read_AD();                                      /* 1) 传感器采样：获取归一化位置信息及赛道丢失警告。由于是在中断中调用，禁止内嵌耗时过长的排序运算 */
     Encoder_get(&PID.left_speed, &PID.right_speed); /* 读取左右轮编码器速度 */
     imu_update_gyro_z_from_imu660rc();
-    imu_update_gravity_vz_from_roll();
     if (steer_div_10 >= 3)
     {
         /* 圆桶窗口确认后才切专用方向环，避免元素序列轮到圆桶时起步提前降增益。 */
         cylinder_state = a_run_cylinder_get_state();
-        if (cylinder_state == CYLINDER_STATE_WAIT_GROUND ||
-            cylinder_state == CYLINDER_STATE_EXIT_SLOW)
+        if (cylinder_state == CYLINDER_STATE_DECEL)
         {
             PID.steer.Kp = app.cylinder.kp_Err;
             PID.steer.Kd = app.cylinder.kd_Err;
@@ -139,7 +137,6 @@ void run_time_3(void)
     /* 试验链路同样遵循主链路顺序，便于与正式控制策略对比 */
     a_run_apply_iap_guard();
     imu_update_gyro_z_from_imu660rc();
-    imu_update_gravity_vz_from_roll();
     read_AD();
     Encoder_get(&PID.left_speed, &PID.right_speed);
 

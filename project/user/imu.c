@@ -3,7 +3,6 @@
  * @brief IMU 姿态辅助计算与角速度桥接
  * @details
  * 本模块对 IMU660RC 输出进行轻量转换，向控制环提供：
- * - 基于 roll 角的姿态角差缓存；
  * - 统一量纲后的 gyro_z 实时反馈；
  * - 若干数学辅助函数（快速平方根、反平方根、atan2 兼容实现）。
  *
@@ -12,7 +11,6 @@
 #include "zf_common_headfile.h"
 #include "math.h"
 #include "imu.h"
-LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，2ms IMU 更新链路写入。 */
 #ifndef M_PI
 #define M_PI 3.14159265358979f
 #endif
@@ -22,14 +20,8 @@ LowPassFilter_t acc_z; /* acc_z 低通滤波器状态，2ms IMU 更新链路写�
 #define IMU_GYRO_Z_SIGN (1.0f) /* 驱动 gyro_z 顺时针为负；控制差速约定左转为正，需在桥接层翻转。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
-#define IMU_ROLL_FLAT_DEG 180.0f         /* 当前安装姿态下平地 roll 约 180 度，输出角差前先扣除该基准。 */
-#define IMU_ROLL_DELTA_MIN_DEG (-180.0f) /* roll 角差输出下限，单位：度。 */
-#define IMU_ROLL_DELTA_MAX_DEG 180.0f    /* roll 角差输出上限，单位：度。 */
-
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
-static volatile float imu_roll_delta_deg = 0.0f; /**< 2ms 主环写入、控制和调试链路读取的 roll 角差，单位：度。 */
-float acc_1 = 0.0;                               /**< acc_z 低通滤波输入/输出缓存，单位沿用 IMU660RC 原始 acc_z。 */
 
 /**
  * @brief 上电标定 gyro_z 零偏
@@ -64,42 +56,6 @@ void imu_calibrate_gyro_z_zero_drift(void)
         imu_gyro_z_zero_bias = 0.0f;
     }
     gyro_z = 0.0f;
-}
-
-/**
- * @brief 由 IMU 姿态角更新轻量缓存。
- * @details
- * 驱动层已把姿态解算结果更新到 `imu660rc_roll`。当前安装姿态下平地约 180 度，
- * 因此这里得到 `imu660rc_roll - 180` 的角差并折回 -180~180 度。
- *
- * @note 由 2ms 主控制链路调用一次；其他模块读取缓存，避免重复处理姿态量。
- */
-void imu_update_gravity_vz_from_roll(void)
-{
-    float roll_delta;
-
-    roll_delta = imu660rc_roll - IMU_ROLL_FLAT_DEG;
-    if (roll_delta > IMU_ROLL_DELTA_MAX_DEG)
-    {
-        roll_delta -= 360.0f;
-    }
-    else if (roll_delta < IMU_ROLL_DELTA_MIN_DEG)
-    {
-        roll_delta += 360.0f;
-    }
-
-    imu_roll_delta_deg = roll_delta;
-    acc_1 = imu660rc_acc_z;
-    low_pass_filter_mt(&acc_z, &acc_1, 0.01f);
-}
-
-/**
- * @brief 读取最近一次 2ms 更新的 roll 角差。
- * @return float 已折回到 -180.0f~180.0f 的 roll 角差，单位：度；平地约 0。
- */
-float imu_get_gravity_vz(void)
-{
-    return imu_roll_delta_deg;
 }
 
 /**

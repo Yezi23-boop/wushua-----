@@ -51,7 +51,7 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_model_items": 6,
         "menu_yuanshu_items": 5,
         "menu_ring_items": 7,
-        "menu_cylinder_items": 7,
+        "menu_cylinder_items": 6,
         "menu_wall_items": 4,
         "menu_fly_items": 6,
         "menu_seesaw_items": 6,
@@ -95,9 +95,8 @@ def test_menu_parameter_steps_match_tuning_contract():
 
     cylinder = _item_block(source, "menu_cylinder_items")
     assert '"exit_spd", &app.cylinder.exit_slow_speed' in cylinder
-    assert '"exit_dist", &app.cylinder.exit_slow_distance' in cylinder
+    assert '"exit_dist"' not in cylinder
     assert "MENU_META(MENU_ITEM_INT16, 4, 0), 5" in cylinder
-    assert "MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_5" in cylinder
 
     wall = _item_block(source, "menu_wall_items")
     assert "MENU_META(MENU_ITEM_INT16, 3, 0), 5" in wall

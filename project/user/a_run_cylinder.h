@@ -8,11 +8,10 @@
  */
 typedef enum
 {
-    CYLINDER_STATE_IDLE = 0,        /**< 空闲或尚未进入圆桶确认流程。 */
-    CYLINDER_STATE_WAIT_TOP = 1,    /**< 等待顶部强信号窗口确认。 */
-    CYLINDER_STATE_WAIT_GROUND = 2, /**< 已确认圆桶，按编码器积分通过。 */
-    CYLINDER_STATE_EXIT_SLOW = 3,   /**< 距离出口较近，阶梯减速到退出阈值。 */
-    CYLINDER_STATE_RELEASE = 4      /**< 圆桶完成后后台阶梯恢复巡线速度。 */
+    CYLINDER_STATE_IDLE = 0,     /**< 空闲或尚未进入圆桶确认流程。 */
+    CYLINDER_STATE_WAIT_TOP = 1, /**< 等待顶部强信号窗口确认。 */
+    CYLINDER_STATE_DECEL = 2,    /**< 圆桶确认后按编码器积分阶梯减速。 */
+    CYLINDER_STATE_RELEASE = 3   /**< 圆桶完成后后台阶梯恢复巡线速度。 */
 } CylinderState;
 
 /**
@@ -22,7 +21,7 @@ void a_run_cylinder_reset(void);
 
 /**
  * @brief 按主控制环周期更新圆桶状态机。
- * @param speed 当前目标速度指针，出圆桶减速阶段会覆盖该值。
+ * @param speed 当前目标速度指针，圆桶确认后的减速阶段会覆盖该值。
  * @return uint8 1-圆桶流程完成，0-未完成。
  */
 uint8 a_run_cylinder_update_5ms(float *speed);

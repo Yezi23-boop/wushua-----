@@ -14,9 +14,9 @@
 #include "ADC.h"
 
 /* 内部常量定义 */
-#define ADC_RAW_MAX 3500 /* ADC 原始采样的理论最大有效值 */
-#define ADC_NORM_MAX 100 /* 归一化后的量程上限 */
-#define SORT_LENGTH 4    /* 滑动排序/均值滤波的样本长度 */
+#define ADC_RAW_MAX 3500            /* ADC 原始采样的理论最大有效值 */
+#define ADC_NORM_MAX 100            /* 归一化后的量程上限 */
+#define SORT_LENGTH 4               /* 滑动排序/均值滤波的样本长度 */
 #define ADC_SEESAW_CENTER_A_1 1.50f /* 跷跷板前挪/恢复期横向主差分权重，强调左右主电感居中。 */
 #define ADC_SEESAW_CENTER_B_1 0.50f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
 #define ADC_SEESAW_CENTER_C_L 1.00f /* 跷跷板前挪/恢复期弱信号分母补偿，抑制偏差突变。 */
@@ -73,8 +73,7 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     c_value = app.angle.C_l;
 
     cylinder_state = a_run_cylinder_get_state();
-    if (cylinder_state == CYLINDER_STATE_WAIT_GROUND ||
-        cylinder_state == CYLINDER_STATE_EXIT_SLOW)
+    if (cylinder_state == CYLINDER_STATE_DECEL)
     {
         /*
          * 圆桶窗口确认后才切专用 ABC，避免序列轮到圆桶但尚未识别时削弱普通循迹。
@@ -260,10 +259,10 @@ static void adc_read_channels(uint16 *raw_buffer)
     raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
     raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */
     raw_buffer[4] = adc_convert(ADC_CH2_P12); /* 中横电感 P1.2 */
-//    raw_buffer[0] = adc_convert(ADC_CH0_P10); /* 左横电感 */
-//    raw_buffer[1] = adc_convert(ADC_CH1_P11); /* 左竖电感 */
-//    raw_buffer[2] = adc_convert(ADC_CH9_P01); /* 右横电感 */
-//    raw_buffer[3] = adc_convert(ADC_CH8_P00); /* 右竖电感 */
+    //    raw_buffer[0] = adc_convert(ADC_CH0_P10); /* 左横电感 */
+    //    raw_buffer[1] = adc_convert(ADC_CH1_P11); /* 左竖电感 */
+    //    raw_buffer[2] = adc_convert(ADC_CH9_P01); /* 右横电感 */
+    //    raw_buffer[3] = adc_convert(ADC_CH8_P00); /* 右竖电感 */
 }
 
 /**

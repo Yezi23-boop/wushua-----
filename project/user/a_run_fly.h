@@ -20,14 +20,12 @@ typedef enum
  */
 typedef enum
 {
-    SEESAW_STATE_IDLE = 0,      /**< 等待入口检测 */
-    SEESAW_STATE_STOP = 1,      /**< 停车，目标速度为 0 */
-    SEESAW_STATE_BRAKE = 2,     /**< 零速闭环刹车，抵消上板惯性 */
-    SEESAW_STATE_CREEP = 3,     /**< 刹车后低速前挪，让车重更靠近跷跷板转轴后方 */
-    SEESAW_STATE_WAIT = 4,      /**< 等待跷跷板倾斜 */
-    SEESAW_STATE_CHECK = 5,     /**< 检查电感信号恢复 */
-    SEESAW_STATE_RECOVER = 6,   /**< 阶梯增速恢复 */
-    SEESAW_STATE_COOLDOWN = 7   /**< 复用飞坡 COOLDOWN */
+    SEESAW_STATE_IDLE = 0,        /**< 等待入口检测。 */
+    SEESAW_STATE_BRAKE = 1,       /**< 零速闭环刹车，抵消上板惯性。 */
+    SEESAW_STATE_CREEP = 2,       /**< 刹车后低速前挪到设定距离。 */
+    SEESAW_STATE_HOLD_DELAY = 3,  /**< 保持 PWM 100 并等待设定周期。 */
+    SEESAW_STATE_WAIT_SIGNAL = 4, /**< 继续保持并等待电感恢复。 */
+    SEESAW_STATE_RELEASE = 5      /**< 跷跷板完成，后台阶梯恢复速度。 */
 } SeesawState;
 
 /**
@@ -79,7 +77,7 @@ void a_run_fly_reset(void);
 /**
  * @brief 更新跷跷板停止等待模式速度状态机。
  *
- * 检测到跷跷板后停车等待 1 秒，利用重力让跷跷板倾斜，
+ * 检测到跷跷板后刹车、前挪并短暂保持，利用重力让跷跷板倾斜，
  * 电感信号恢复后出发，阶梯增速恢复到巡线速度。
  *
  * @param speed 输出目标速度指针。
