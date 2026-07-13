@@ -68,6 +68,7 @@ typedef enum
     MENU_PAGE_START,
     MENU_PAGE_SPEED,
     MENU_PAGE_MODEL,
+    MENU_PAGE_DIFF,
     MENU_PAGE_YUANSHU,
     MENU_PAGE_SENSOR,
     MENU_PAGE_RING,
@@ -111,6 +112,7 @@ static const MenuItemDef menu_home_items[] = {
     {"START", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_START},
     {"CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_SPEED},
     {"MODEL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_MODEL},
+    {"DIFF", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_DIFF},
     {"YUANSHU", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_YUANSHU},
     {"SENSOR", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_SENSOR}};
 
@@ -138,6 +140,12 @@ static const MenuItemDef menu_model_items[] = {
     {"A_1", &app.angle.A_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
     {"B_1", &app.angle.B_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
     {"C_l", &app.angle.C_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
+
+static const MenuItemDef menu_diff_items[] = {
+    {"inner_g", &app.speed.diff_inner_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"outer_g", &app.speed.diff_outer_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
 
 static const MenuItemDef menu_yuanshu_items[] = {
     {"RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING},
@@ -228,6 +236,7 @@ static const MenuPageDef menu_pages[] = {
     {"<<START", menu_start_items, MENU_ITEM_COUNT(menu_start_items), MENU_PAGE_HOME},
     {"<<CTRL", menu_speed_items, MENU_ITEM_COUNT(menu_speed_items), MENU_PAGE_HOME},
     {"<<MODEL", menu_model_items, MENU_ITEM_COUNT(menu_model_items), MENU_PAGE_HOME},
+    {"<<DIFF", menu_diff_items, MENU_ITEM_COUNT(menu_diff_items), MENU_PAGE_HOME},
     {"<<YUANSHU", menu_yuanshu_items, MENU_ITEM_COUNT(menu_yuanshu_items), MENU_PAGE_HOME},
     {"<<SENSOR", 0, 0, MENU_PAGE_HOME},
     {"<<RING", menu_ring_items, MENU_ITEM_COUNT(menu_ring_items), MENU_PAGE_YUANSHU},

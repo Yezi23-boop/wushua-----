@@ -93,11 +93,12 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro);
 /**
  * @brief 差速分配逻辑
  * @param speed_run 基础运行速度
+ * @param diff_output 角速度内环输出的差速控制量
  * @param left_target 输出：左轮目标速度指针
  * @param right_target 输出：右轮目标速度指针
- * @param Scope 差速灵敏度范围
+ * @param scope 差速归一化范围
  */
-void Pid_Differential(float speed_run, float *left_target, float *right_target, float Scope);
+void Pid_Differential(float speed_run, float diff_output, float *left_target, float *right_target, float scope);
 
 /**
  * @brief 纯追踪算法控制（电感偏差驱动）

@@ -213,40 +213,43 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
 
 /**
  * @brief 差速分配函数
- * @details 将转向控制器的输出转化为左右轮的目标速度差
+ * @details 大弯主要降低内轮；负压提供额外抓地力，允许外轮小幅增速以保持转弯力度。
  * @param speed_run 基础运行速度（直道速度）
+ * @param diff_output 角速度内环输出的差速控制量
  * @param left_target 输出：左轮目标速度
  * @param right_target 输出：右轮目标速度
- * @param Scope 差速系数映射范围（通常根据赛道宽度和车体特性标定）
+ * @param scope 差速归一化范围，正式控制链传入角速度内环限幅
  */
-void Pid_Differential(float speed_run, float *left_target, float *right_target, float Scope)
+void Pid_Differential(float speed_run, float diff_output, float *left_target, float *right_target, float scope)
 {
-    float k;
-    float delta = PID.steer.output; /* 获取当前转向差速控制输出 */
+    float ratio;
+    float inner_scale;
+    float outer_scale;
 
-    /* Scope 作为教程版 eleOut->k 的归一化范围，默认按 -100~100 处理 */
-    if (Scope < 0.001f)
-        Scope = 100.0f;
-
-    k = delta / Scope;
-
-    /* 教程版差速限幅：k 限制在 ±0.65，即单轮最多减速 65%，保留 35% 基础速度。
-     * 超过 0.65 时差速过猛会导致内侧轮接近停转甚至反转，车身姿态失控。 */
-    if (k > 0.65f)
-        k = 0.65f;
-    else if (k < -0.65f)
-        k = -0.65f;
-
-    if (k >= 0.0f) /* 左转：左轮减速更多，右轮做小幅补偿（系数 0.2f 限制非主导轮减速幅度） */
+    if (scope < 1.0f)
     {
-        *left_target = speed_run * (1.0f - k);
-        *right_target = speed_run * (1.0f + k * 0.2f);
+        scope = 1.0f;
     }
-    else /* 右转：右轮减速更多，左轮做小幅补偿（系数 0.2f 限制非主导轮减速幅度） */
-    {
-        k = -k;
 
-        *left_target = speed_run * (1.0f + k * 0.2f);
-        *right_target = speed_run * (1.0f - k);
+    ratio = func_abs(diff_output) / scope;
+    if (ratio > 1.0f)
+    {
+        ratio = 1.0f;
+    }
+
+    /* 小弯保持柔和，大弯快速增强内外轮差速。 */
+    ratio = ratio * (0.6f + 0.4f * ratio);
+    inner_scale = 1.0f - app.speed.diff_inner_gain * ratio;
+    outer_scale = 1.0f + app.speed.diff_outer_gain * ratio;
+
+    if (diff_output >= 0.0f)
+    {
+        *left_target = speed_run * inner_scale;
+        *right_target = speed_run * outer_scale;
+    }
+    else
+    {
+        *left_target = speed_run * outer_scale;
+        *right_target = speed_run * inner_scale;
     }
 }

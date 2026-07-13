@@ -1,7 +1,7 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区，用于与 IAP 接口交换数据，大小为 250 字节 */
-uint8 date_buff[250];
+/* 数据缓冲区覆盖逻辑槽位 0~62，每个槽位占 4 字节。 */
+uint8 date_buff[252];
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 4L
+#define EEPROM_CONFIG_VERSION 5L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -56,6 +56,8 @@ static void eeprom_load_defaults(AppConfig *config)
     config->speed.speed_run = 75.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.01f;
+    config->speed.diff_inner_gain = 0.80f;
+    config->speed.diff_outer_gain = 0.10f;
 
     /* 电感偏差解算默认参数 */
     config->angle.kp_Angle = 0.82f;
@@ -131,6 +133,8 @@ static void eeprom_read_config(AppConfig *config)
     config->speed.speed_run = read_float(8);
     config->speed.limiting_Err = read_float(9);
     config->speed.gyro_damp_Err = read_float(10);
+    config->speed.diff_inner_gain = read_float(60);
+    config->speed.diff_outer_gain = read_float(62);
 
     /* 槽位 3 复用为角速度内环限幅，保留原 EEPROM 布局。 */
     config->angle.limiting_Angle = read_float(3);
@@ -210,6 +214,8 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->speed.speed_run, 8);
     save_float(config->speed.limiting_Err, 9);
     save_float(config->speed.gyro_damp_Err, 10);
+    save_float(config->speed.diff_inner_gain, 60);
+    save_float(config->speed.diff_outer_gain, 62);
     save_float(config->angle.kp_Angle, 11);
     save_float(config->angle.kd_Angle, 12);
     save_float(config->angle.B_1, 13);
@@ -282,7 +288,7 @@ void eeprom_init(void)
 
     /* 初始化 IAP (In-Application Programming) 模块 */
     iap_init();
-    /* 从扇区 0 读取 250 字节到缓冲区 */
+    /* 从扇区 0 读取完整配置到缓冲区。 */
     iap_read_buff(0x00, date_buff, sizeof(date_buff));
 
     /* 预加载默认值到内存结构体（防止读取失败时无初值） */

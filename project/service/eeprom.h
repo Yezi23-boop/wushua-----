@@ -29,6 +29,8 @@ typedef struct
     float speed_run;     /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
     float limiting_Err;  /**< 转向输出限幅值（防止舵机/电机过载） */
     float kp2_Err;       /**< 二次项系数（用于处理大角度弯道的非线性增强） */
+    float diff_inner_gain; /**< 差速分配内轮减速增益 */
+    float diff_outer_gain; /**< 差速分配外轮增速增益 */
 } AppSpeedConfig;
 
 /**
@@ -135,7 +137,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[250]; /**< EEPROM 数据读写缓冲区，新增圆桶/墙面和版本槽位后使用 250 字节。 */
+extern uint8 date_buff[252]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 62。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

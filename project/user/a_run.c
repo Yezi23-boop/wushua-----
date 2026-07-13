@@ -26,7 +26,6 @@ static float speed_active = 0.0f;   /* 当前参与速度环计算的目标速�
  */
 void run_time_1(void)
 {
-    float diff_output;
     int8 start_state;
     CylinderState cylinder_state;
     steer_div_10++;
@@ -81,9 +80,9 @@ void run_time_1(void)
         return;
     }
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
-    diff_output = PID.angle.output;
-    left_target = speed_active - diff_output;
-    right_target = speed_active + diff_output;
+    Pid_Differential(speed_active, PID.angle.output,
+                     &left_target, &right_target,
+                     app.angle.limiting_Angle);
 
     /* 速度环保持高频更新，保证电机执行链路带宽 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);

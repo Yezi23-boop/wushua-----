@@ -50,10 +50,11 @@ def test_menu_page_counts_and_parent_links_are_complete():
     compact_source = _without_whitespace(source)
 
     expected_counts = {
-        "menu_home_items": 5,
+        "menu_home_items": 6,
         "menu_start_items": 5,
         "menu_speed_items": 6,
         "menu_model_items": 6,
+        "menu_diff_items": 2,
         "menu_yuanshu_items": 5,
         "menu_ring_items": 7,
         "menu_cylinder_items": 6,
@@ -69,8 +70,10 @@ def test_menu_page_counts_and_parent_links_are_complete():
 
     assert '{"WALL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_WALL}' in compact_source
     assert '{"CROSS",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_CROSS}' in compact_source
+    assert '{"DIFF",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_DIFF}' in compact_source
     assert '{"<<WALL",menu_wall_items,MENU_ITEM_COUNT(menu_wall_items),MENU_PAGE_YUANSHU}' in compact_source
     assert '{"<<CROSS",menu_cross_items,MENU_ITEM_COUNT(menu_cross_items),MENU_PAGE_YUANSHU}' in compact_source
+    assert '{"<<DIFF",menu_diff_items,MENU_ITEM_COUNT(menu_diff_items),MENU_PAGE_HOME}' in compact_source
     assert '{"<<ELEM",menu_element_len_items,MENU_ITEM_COUNT(menu_element_len_items),MENU_PAGE_START}' in compact_source
     assert '{"<<ELEM",menu_element_items,MENU_ITEM_COUNT(menu_element_items),MENU_PAGE_ELEMENT_LEN}' in compact_source
 
@@ -111,6 +114,15 @@ def test_menu_parameter_steps_match_tuning_contract():
     cross = _item_block(source, "menu_cross_items")
     assert cross.count("MENU_FLOAT_STEP_01") == 3
     assert "MENU_FLOAT_STEP_1" in cross
+
+
+def test_diff_menu_exposes_both_gains_with_point_one_step():
+    source = _read(MENU_C)
+    diff = _item_block(source, "menu_diff_items")
+
+    assert '"inner_g", &app.speed.diff_inner_gain' in diff
+    assert '"outer_g", &app.speed.diff_outer_gain' in diff
+    assert diff.count("MENU_FLOAT_STEP_01") == 2
 
 
 def test_menu_integer_steps_are_named_and_source_is_consistently_wrapped():
