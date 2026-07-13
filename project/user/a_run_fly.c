@@ -43,7 +43,7 @@ volatile uint8 seesaw_centering_active = 0;          /**< 跷跷板前挪/恢复
 
 /* --- 停止等待模式专用阈值 --- */
 #define SEESAW_DETECT_SIDE_TH 25u    /* 停止等待入口横向电感阈值 */
-#define SEESAW_DETECT_CENTER_TH 8u  /* 停止等待入口竖向电感阈值 */
+#define SEESAW_DETECT_CENTER_TH 8u   /* 停止等待入口竖向电感阈值 */
 #define SEESAW_LAND_SIDE_TH 25u      /* CHECK 阶段横向电感恢复阈值 */
 #define SEESAW_LAND_CENTER_TH 10u    /* CHECK 阶段竖向电感恢复阈值 */
 #define SEESAW_ENTRY_WINDOW_COUNT 20 /* 停止等待入口确认窗口，20 * 2ms = 40ms。 */
@@ -105,8 +105,8 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
              * 0.9f 速度门槛：要求当前速度不低于目标速度的 90%，避免起步/低速段
              * 因电感信号天然偏弱而误判为飞坡入口。低速时弱磁是常态，不是飞坡。
              */
-            if (!(speed_l > app.speed.speed_run * 0.9f &&
-                  speed_r > app.speed.speed_run * 0.9f))
+            if (!(speed_l > app.speed.speed_run * 0.6f &&
+                  speed_r > app.speed.speed_run * 0.6f))
             {
                 return 0;
             }
@@ -356,11 +356,11 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
         }
         if (seesaw_creep_distance >= creep_target)
         {
-//					stop=1;///
+            //					stop=1;///
             seesaw_creep_distance = 0.0f;
             seesaw_wait_count = 0;
             seesaw_centering_active = 0;
-           seesaw_state = SEESAW_STATE_HOLD_DELAY;
+            seesaw_state = SEESAW_STATE_HOLD_DELAY;
         }
         break;
 

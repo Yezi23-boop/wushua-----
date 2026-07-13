@@ -105,10 +105,10 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     diff23 = (int16)ad22 - (int16)ad33;
 
     /* 2) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
-    numer = a_value * (float)ad11 - (float)ad44 +
-            b_value * (float)ad22 - (float)ad33;
+    numer = a_value * ((float)ad11 - (float)ad44) +
+            b_value * ((float)ad22 - (float)ad33);
     /* 3) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
-    denom = a_value * (float)ad11 + (float)ad44 +
+    denom = a_value * ((float)ad11 + (float)ad44) +
             c_value * (float)func_abs(diff23);
 
     /* 4) 分母过小时直接归零，避免瞬态噪声被异常放大 */
