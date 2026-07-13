@@ -343,7 +343,7 @@ def test_cylinder_confirmation_starts_immediate_ramp_deceleration():
     assert cylinder_menu.count("MENU_META(") == 6
     assert '"cyl_kp"' not in menu_source
     assert '"cyl_kd"' not in menu_source
-    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), 5}' in menu_source
+    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_5}' in menu_source
 
 
 def test_wall_entry_uses_adc_sum_threshold():
@@ -477,7 +477,7 @@ def test_fly_menu_exposes_land_confirm_count_in_fly_mode():
     menu_source = _read(MENU_C)
 
     assert '"land_cnt", &app.fly.fly_land_confirm_count' in menu_source
-    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), 1}' in menu_source
+    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}' in menu_source
 
 
 def test_seesaw_recover_speed_reuses_creep_speed():

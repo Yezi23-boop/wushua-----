@@ -29,8 +29,10 @@
 #define MENU_TYPE_MASK 0xE0u
 #define MENU_WIDTH_MASK 0x1Cu
 #define MENU_DECIMAL_MASK 0x03u
-#define MENU_META(type, width, decimal) +    ((uint8)(((type) << MENU_TYPE_SHIFT) | ((width) << MENU_WIDTH_SHIFT) | (decimal)))
+#define MENU_META(type, width, decimal) \
+    ((uint8)(((type) << MENU_TYPE_SHIFT) | ((width) << MENU_WIDTH_SHIFT) | (decimal)))
 
+/** @brief 菜单行类型。 */
 typedef enum
 {
     MENU_ITEM_FLOAT = 0,
@@ -40,6 +42,7 @@ typedef enum
     MENU_ITEM_LENGTH
 } MenuItemType;
 
+/** @brief 浮点参数步长索引。 */
 typedef enum
 {
     MENU_FLOAT_STEP_0001 = 0,
@@ -50,6 +53,15 @@ typedef enum
     MENU_FLOAT_STEP_10
 } MenuFloatStep;
 
+/** @brief 整数参数步长。 */
+typedef enum
+{
+    MENU_INT_STEP_1 = 1,
+    MENU_INT_STEP_5 = 5,
+    MENU_INT_STEP_10 = 10
+} MenuIntStep;
+
+/** @brief 菜单页面编号。 */
 typedef enum
 {
     MENU_PAGE_HOME = 0,
@@ -105,8 +117,10 @@ static const MenuItemDef menu_home_items[] = {
 static const MenuItemDef menu_start_items[] = {
     {"Start_Flag", &app.start.start_flag, MENU_META(MENU_ITEM_BOOL, 3, 0), 0},
     {"elem_en", &app.start.element_enable, MENU_META(MENU_ITEM_BOOL, 3, 0), 0},
-    {"fuya_ground", &app.start.fuya_xili, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
-    {"gyro_fbN", &app.angle.gyro_feedback_scale, MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"fuya_ground", &app.start.fuya_xili,
+     MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
+    {"gyro_fbN", &app.angle.gyro_feedback_scale,
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_001},
     {"ELEM", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_ELEMENT_LEN}};
 
 static const MenuItemDef menu_speed_items[] = {
@@ -115,7 +129,7 @@ static const MenuItemDef menu_speed_items[] = {
     {"gyro_dmp", &app.speed.gyro_damp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001},
     {"speed_run", &app.speed.speed_run, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
     {"limit_Err", &app.speed.limiting_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_1},
-    {"kp2_Err", &app.speed.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+    {"kp2_Err", &app.speed.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001}};
 
 static const MenuItemDef menu_model_items[] = {
     {"kp_Ang", &app.angle.kp_Angle, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
@@ -133,43 +147,62 @@ static const MenuItemDef menu_yuanshu_items[] = {
     {"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS}};
 
 static const MenuItemDef menu_ring_items[] = {
-    {"entry_E", &app.ring.ring_entry_encoder, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
-    {"pre_r_T", &app.ring.pre_ring_Gyro_target, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
+    {"entry_E", &app.ring.ring_entry_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
+    {"pre_r_T", &app.ring.pre_ring_Gyro_target,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
     {"pre_r_Gz", &app.ring.pre_ring_Gyroz, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
     {"in_r_Gz", &app.ring.in_ring_Gyroz, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
-    {"pre_o_T", &app.ring.pre_out_ring_Gyro_target, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
+    {"pre_o_T", &app.ring.pre_out_ring_Gyro_target,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
     {"pre_o_Gz", &app.ring.pre_out_ring_Gyroz, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
-    {"drv_o_E", &app.ring.drive_out_ring_encoder, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1}};
+    {"drv_o_E", &app.ring.drive_out_ring_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1}};
 
 static const MenuItemDef menu_cylinder_items[] = {
-    {"cyl_enc", &app.cylinder.encoder_target, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_10},
-    {"cyl_both", &app.cylinder.ad_both_high_threshold, MENU_META(MENU_ITEM_INT16, 3, 0), 5},
+    {"cyl_enc", &app.cylinder.encoder_target,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_10},
+    {"cyl_both", &app.cylinder.ad_both_high_threshold,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"adc_a_1", &app.cylinder.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
     {"adc_b_1", &app.cylinder.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
     {"adc_c_l", &app.cylinder.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"exit_spd", &app.cylinder.exit_slow_speed, MENU_META(MENU_ITEM_INT16, 4, 0), 5}};
+    {"exit_spd", &app.cylinder.exit_slow_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}};
 
 static const MenuItemDef menu_wall_items[] = {
-    {"wall_spd", &app.wall.slow_speed, MENU_META(MENU_ITEM_INT16, 3, 0), 5},
-    {"wall_slow_t", &app.wall.slow_time, MENU_META(MENU_ITEM_INT16, 3, 0), 10},
-    {"wall_timing", &app.wall.timing_count, MENU_META(MENU_ITEM_INT16, 3, 0), 10},
+    {"wall_spd", &app.wall.slow_speed,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"wall_slow_t", &app.wall.slow_time,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10},
+    {"wall_timing", &app.wall.timing_count,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10},
     {"wall_enc", &app.wall.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1}};
 
 static const MenuItemDef menu_fly_items[] = {
     {"seesaw_mode", &app.fly.seesaw_mode, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
-    {"fly_speed", &app.fly.fly_speed, MENU_META(MENU_ITEM_INT16, 4, 0), 1},
-    {"detect_cnt", &app.fly.fly_detect_count, MENU_META(MENU_ITEM_INT16, 4, 0), 1},
-    {"recover_spd", &app.fly.fly_recover_speed, MENU_META(MENU_ITEM_INT16, 4, 0), 1},
-    {"release_stp", &app.fly.fly_release_step, MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_001},
-    {"land_cnt", &app.fly.fly_land_confirm_count, MENU_META(MENU_ITEM_INT16, 4, 0), 1}};
+    {"fly_speed", &app.fly.fly_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"detect_cnt", &app.fly.fly_detect_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"recover_spd", &app.fly.fly_recover_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"release_stp", &app.fly.fly_release_step,
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"land_cnt", &app.fly.fly_land_confirm_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}};
 
 static const MenuItemDef menu_seesaw_items[] = {
     {"seesaw_mode", &app.fly.seesaw_mode, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
-    {"seesaw_spd", &app.fly.seesaw_speed, MENU_META(MENU_ITEM_INT16, 4, 0), 1},
-    {"detect_cnt", &app.fly.seesaw_detect_count, MENU_META(MENU_ITEM_INT16, 4, 0), 1},
-    {"wait_cnt", &app.fly.seesaw_wait_count, MENU_META(MENU_ITEM_INT16, 4, 0), 10},
+    {"seesaw_spd", &app.fly.seesaw_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"detect_cnt", &app.fly.seesaw_detect_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"wait_cnt", &app.fly.seesaw_wait_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
     {"creep_cm", &app.fly.seesaw_creep_cm, MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
-    {"release_stp", &app.fly.seesaw_release_step, MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_001}};
+    {"release_stp", &app.fly.seesaw_release_step,
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01}};
 
 static const MenuItemDef menu_cross_items[] = {
     {"enc_target", &app.cross.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
@@ -181,12 +214,12 @@ static const MenuItemDef menu_element_len_items[] = {
     {"LEN", &app.start.element_len, MENU_META(MENU_ITEM_LENGTH, 3, 0), MENU_PAGE_ELEMENT}};
 
 static const MenuItemDef menu_element_items[] = {
-    {"E1", &app.start.element_seq[0], MENU_META(MENU_ITEM_INT16, 3, 0), 1},
-    {"E2", &app.start.element_seq[1], MENU_META(MENU_ITEM_INT16, 3, 0), 1},
-    {"E3", &app.start.element_seq[2], MENU_META(MENU_ITEM_INT16, 3, 0), 1},
-    {"E4", &app.start.element_seq[3], MENU_META(MENU_ITEM_INT16, 3, 0), 1},
-    {"E5", &app.start.element_seq[4], MENU_META(MENU_ITEM_INT16, 3, 0), 1},
-    {"E6", &app.start.element_seq[5], MENU_META(MENU_ITEM_INT16, 3, 0), 1}};
+    {"E1", &app.start.element_seq[0], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E2", &app.start.element_seq[1], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E3", &app.start.element_seq[2], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E4", &app.start.element_seq[3], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E5", &app.start.element_seq[4], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E6", &app.start.element_seq[5], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1}};
 
 #define MENU_ITEM_COUNT(items) ((uint8)(sizeof(items) / sizeof((items)[0])))
 
@@ -198,12 +231,14 @@ static const MenuPageDef menu_pages[] = {
     {"<<YUANSHU", menu_yuanshu_items, MENU_ITEM_COUNT(menu_yuanshu_items), MENU_PAGE_HOME},
     {"<<SENSOR", 0, 0, MENU_PAGE_HOME},
     {"<<RING", menu_ring_items, MENU_ITEM_COUNT(menu_ring_items), MENU_PAGE_YUANSHU},
-    {"<<CYLINDER", menu_cylinder_items, MENU_ITEM_COUNT(menu_cylinder_items), MENU_PAGE_YUANSHU},
+    {"<<CYLINDER", menu_cylinder_items,
+     MENU_ITEM_COUNT(menu_cylinder_items), MENU_PAGE_YUANSHU},
     {"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU},
     {"<<SEESAW", menu_fly_items, MENU_ITEM_COUNT(menu_fly_items), MENU_PAGE_YUANSHU},
     {"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU},
     {"<<ELEM", menu_element_len_items, MENU_ITEM_COUNT(menu_element_len_items), MENU_PAGE_START},
-    {"<<ELEM", menu_element_items, MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_ELEMENT_LEN}};
+    {"<<ELEM", menu_element_items,
+     MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_ELEMENT_LEN}};
 
 static uint8 menu_service_enabled = 0;
 static uint8 menu_page = MENU_PAGE_HOME;
@@ -386,7 +421,9 @@ static void Menu_Show_Float(uint16 x, uint16 y, float dat, uint8 num, uint8 poin
     uint16 fraction_part;
     float value;
 
-    scale = (pointnum == 3) ? 1000u : ((pointnum == 2) ? 100u : ((pointnum == 1) ? 10u : 1u));
+    scale = (pointnum == 3)
+                ? 1000u
+                : ((pointnum == 2) ? 100u : ((pointnum == 1) ? 10u : 1u));
     pos = 0;
     if (dat < 0.0f)
     {
@@ -676,9 +713,13 @@ static void Menu_Apply_Item_Change(const MenuItemDef *item, uint8 increase)
         else if (type == MENU_ITEM_LENGTH)
         {
             if (increase)
-                *int_value = (*int_value >= TRACK_ELEMENT_SEQUENCE_MAX) ? 1 : (int16)(*int_value + 1);
+                *int_value = (*int_value >= TRACK_ELEMENT_SEQUENCE_MAX)
+                                 ? 1
+                                 : (int16)(*int_value + 1);
             else
-                *int_value = (*int_value <= 1) ? TRACK_ELEMENT_SEQUENCE_MAX : (int16)(*int_value - 1);
+                *int_value = (*int_value <= 1)
+                                 ? TRACK_ELEMENT_SEQUENCE_MAX
+                                 : (int16)(*int_value - 1);
         }
         else
         {
@@ -728,8 +769,7 @@ static void Menu_Handle_Edit(uint8 event_code)
             Menu_Change_Page(item->action);
             return;
         }
-        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u :
-                                 ((menu_change_multiplier == 10) ? 100u : 1u);
+        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u : ((menu_change_multiplier == 10) ? 100u : 1u);
         break;
     case KEYSTROKE_FOUR:
     case KEYSTROKE_FOUR_LONG:

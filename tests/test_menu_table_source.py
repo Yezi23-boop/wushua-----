@@ -22,6 +22,10 @@ def _item_count(source, name):
     return _item_block(source, name).count('{"')
 
 
+def _without_whitespace(source):
+    return re.sub(r"\s+", "", source)
+
+
 def test_menu_uses_single_table_driven_engine():
     source = _read(MENU_C)
     header = _read(MENU_H)
@@ -43,6 +47,7 @@ def test_menu_uses_single_table_driven_engine():
 
 def test_menu_page_counts_and_parent_links_are_complete():
     source = _read(MENU_C)
+    compact_source = _without_whitespace(source)
 
     expected_counts = {
         "menu_home_items": 5,
@@ -62,12 +67,12 @@ def test_menu_page_counts_and_parent_links_are_complete():
     for name, count in expected_counts.items():
         assert _item_count(source, name) == count
 
-    assert '{"WALL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_WALL}' in source
-    assert '{"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS}' in source
-    assert '{"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU}' in source
-    assert '{"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU}' in source
-    assert '{"<<ELEM", menu_element_len_items, MENU_ITEM_COUNT(menu_element_len_items), MENU_PAGE_START}' in source
-    assert '{"<<ELEM", menu_element_items, MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_ELEMENT_LEN}' in source
+    assert '{"WALL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_WALL}' in compact_source
+    assert '{"CROSS",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_CROSS}' in compact_source
+    assert '{"<<WALL",menu_wall_items,MENU_ITEM_COUNT(menu_wall_items),MENU_PAGE_YUANSHU}' in compact_source
+    assert '{"<<CROSS",menu_cross_items,MENU_ITEM_COUNT(menu_cross_items),MENU_PAGE_YUANSHU}' in compact_source
+    assert '{"<<ELEM",menu_element_len_items,MENU_ITEM_COUNT(menu_element_len_items),MENU_PAGE_START}' in compact_source
+    assert '{"<<ELEM",menu_element_items,MENU_ITEM_COUNT(menu_element_items),MENU_PAGE_ELEMENT_LEN}' in compact_source
 
 
 def test_menu_parameter_steps_match_tuning_contract():
@@ -96,16 +101,35 @@ def test_menu_parameter_steps_match_tuning_contract():
     cylinder = _item_block(source, "menu_cylinder_items")
     assert '"exit_spd", &app.cylinder.exit_slow_speed' in cylinder
     assert '"exit_dist"' not in cylinder
-    assert "MENU_META(MENU_ITEM_INT16, 4, 0), 5" in cylinder
+    assert "MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_5" in cylinder
 
     wall = _item_block(source, "menu_wall_items")
-    assert "MENU_META(MENU_ITEM_INT16, 3, 0), 5" in wall
-    assert wall.count("MENU_META(MENU_ITEM_INT16, 3, 0), 10") == 2
+    assert "MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_5" in wall
+    assert wall.count("MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10") == 2
     assert "MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1" in wall
 
     cross = _item_block(source, "menu_cross_items")
     assert cross.count("MENU_FLOAT_STEP_01") == 3
     assert "MENU_FLOAT_STEP_1" in cross
+
+
+def test_menu_integer_steps_are_named_and_source_is_consistently_wrapped():
+    source = _read(MENU_C)
+
+    assert re.search(
+        r"typedef enum\s*\{\s*"
+        r"MENU_INT_STEP_1\s*=\s*1,\s*"
+        r"MENU_INT_STEP_5\s*=\s*5,\s*"
+        r"MENU_INT_STEP_10\s*=\s*10\s*"
+        r"\}\s*MenuIntStep;",
+        source,
+    )
+    assert not re.search(
+        r"MENU_META\(MENU_ITEM_INT16,[^)]*\),\s*(?:1|5|10)\s*\}",
+        source,
+    )
+    assert all(len(line) <= 100 for line in source.splitlines())
+    assert not re.search(r"#define MENU_META\([^\n]+\)\s+\+", source)
 
 
 def test_menu_preserves_edit_and_special_page_semantics():
