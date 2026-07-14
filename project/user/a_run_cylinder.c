@@ -5,17 +5,17 @@
 #include "zf_common_headfile.h"
 #include "a_run_cylinder.h"
 
-#define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 80   /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
-#define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 80 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
+#define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 70   /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
+#define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 70 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
 #define CYLINDER_TOP_WINDOW_COUNT 250u         /* 圆桶命中统计窗口，2ms * 250 = 500ms。 */
 #define CYLINDER_TOP_HIT_COUNT 5               /* 500ms 窗口内强信号达到该次数才认定进入圆桶段。 */
-#define CYLINDER_SPEED_RAMP_STEP 0.1f           /* 圆桶确认后每个 2ms 周期的阶梯加减速步长。 */
+#define CYLINDER_SPEED_RAMP_STEP 0.1f          /* 圆桶确认后每个 2ms 周期的阶梯加减速步长。 */
 
 static CylinderState cylinder_state = CYLINDER_STATE_IDLE; /**< 圆桶状态机阶段，由 2ms 主环推进。 */
-static uint8 cylinder_top_count = 0;                /**< 圆桶窗口内命中次数，达到阈值后认定进入圆桶段。 */
-static uint8 cylinder_top_window_count = 0;         /**< 圆桶命中统计窗口计数，首个强信号后开始计时。 */
-static float cylinder_encoder_sum = 0.0f;           /**< 圆桶编码器里程积分，用于判断行驶距离。 */
-static float cylinder_ramp_speed = 0.0f;            /**< 圆桶阶梯加减速的当前目标速度。 */
+static uint8 cylinder_top_count = 0;                       /**< 圆桶窗口内命中次数，达到阈值后认定进入圆桶段。 */
+static uint8 cylinder_top_window_count = 0;                /**< 圆桶命中统计窗口计数，首个强信号后开始计时。 */
+static float cylinder_encoder_sum = 0.0f;                  /**< 圆桶编码器里程积分，用于判断行驶距离。 */
+static float cylinder_ramp_speed = 0.0f;                   /**< 圆桶阶梯加减速的当前目标速度。 */
 
 /**
  * @brief 读取当前圆桶状态机阶段。

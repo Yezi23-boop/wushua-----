@@ -123,7 +123,9 @@ static const MenuItemDef menu_start_items[] = {
      MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
     {"gyro_fbN", &app.angle.gyro_feedback_scale,
      MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_001},
-    {"ELEM", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_ELEMENT_LEN}};
+    {"ELEM", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_ELEMENT_LEN},
+    {"stop_cm", &app.start.encoder_stop_distance_cm,
+     MENU_META(MENU_ITEM_FLOAT, 4, 0), MENU_FLOAT_STEP_10}};
 
 static const MenuItemDef menu_speed_items[] = {
     {"kp_Err", &app.speed.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
@@ -142,6 +144,7 @@ static const MenuItemDef menu_model_items[] = {
     {"C_l", &app.angle.C_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
 
 static const MenuItemDef menu_diff_items[] = {
+    {"diff_en", &app.speed.diff_enable, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
     {"inner_g", &app.speed.diff_inner_gain,
      MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
     {"outer_g", &app.speed.diff_outer_gain,

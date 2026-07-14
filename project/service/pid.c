@@ -1,7 +1,5 @@
 #include "pid.h"
 
-#define ENCODER_STOP_DISTANCE_CM 3200.0f /* 开机后累计行驶 32m 时停车。 */
-
 LowPassFilter_t encoder_filter_left;
 LowPassFilter_t encoder_filter_right;
 /* 内部中间变量 */
@@ -105,7 +103,7 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);
 
     encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
-    if (encoder_sum >= ENCODER_STOP_DISTANCE_CM)
+    if (encoder_sum >= app.start.encoder_stop_distance_cm)
     {
         stop = 1;
     }

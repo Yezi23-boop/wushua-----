@@ -80,9 +80,17 @@ void run_time_1(void)
         return;
     }
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
-    Pid_Differential(speed_active, PID.angle.output,
-                     &left_target, &right_target,
-                     app.angle.limiting_Angle);
+    if (app.speed.diff_enable != 0)
+    {
+        Pid_Differential(speed_active, PID.angle.output,
+                         &left_target, &right_target,
+                         app.angle.limiting_Angle);
+    }
+    else
+    {
+        left_target = speed_active - PID.angle.output;
+        right_target = speed_active + PID.angle.output;
+    }
 
     /* 速度环保持高频更新，保证电机执行链路带宽 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);

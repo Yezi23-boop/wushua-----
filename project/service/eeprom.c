@@ -1,7 +1,7 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区覆盖逻辑槽位 0~62，每个槽位占 4 字节。 */
-uint8 date_buff[252];
+/* 数据缓冲区覆盖逻辑槽位 0~63，每个槽位占 4 字节。 */
+uint8 date_buff[256];
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 5L
+#define EEPROM_CONFIG_VERSION 7L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -36,19 +36,20 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.element_enable = 1; /* 默认开启整体赛道元素识别 */
     config->start.track_mode = 0;     /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f; /* 默认平地负压百分比 90 */
+    config->start.encoder_stop_distance_cm = 3200.0f;
     config->start.element_len = 4;
-    config->start.element_seq[0] = TRACK_ELEMENT_CROSS; // TRACK_ELEMENT_CROSS
-    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;   // TRACK_ELEMENT_WALL
+    config->start.element_seq[0] = TRACK_ELEMENT_CROSS;    // TRACK_ELEMENT_CROSS
+    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_WALL
     config->start.element_seq[2] = TRACK_ELEMENT_WALL;
     config->start.element_seq[3] = TRACK_ELEMENT_SEESAW;
     config->start.element_seq[4] = TRACK_ELEMENT_RIGHT_RING;
     config->start.element_seq[5] = TRACK_ELEMENT_NONE;
-//	    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_RIGHT_RING
-//    config->start.element_seq[1] = TRACK_ELEMENT_WALL;   // TRACK_ELEMENT_WALL
-//    config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
-//    config->start.element_seq[3] = TRACK_ELEMENT_RIGHT_RING;
-//    config->start.element_seq[4] = TRACK_ELEMENT_NONE;
-//    config->start.element_seq[5] = TRACK_ELEMENT_NONE;
+    //	    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_RIGHT_RING
+    //    config->start.element_seq[1] = TRACK_ELEMENT_WALL;   // TRACK_ELEMENT_WALL
+    //    config->start.element_seq[2] = TRACK_ELEMENT_SEESAW;
+    //    config->start.element_seq[3] = TRACK_ELEMENT_RIGHT_RING;
+    //    config->start.element_seq[4] = TRACK_ELEMENT_NONE;
+    //    config->start.element_seq[5] = TRACK_ELEMENT_NONE;
     /* 转向差速环 PID 默认参数 */
     config->speed.kp_Err = 9.40f;  // 3.50
     config->speed.kd_Err = 12.80f; // 2ms 主环第一版保守微分
@@ -56,6 +57,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->speed.speed_run = 75.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.01f;
+    config->speed.diff_enable = 1;
     config->speed.diff_inner_gain = 0.80f;
     config->speed.diff_outer_gain = 0.10f;
 
@@ -95,7 +97,7 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
     config->cylinder.encoder_target = 250.0f;     /* 后续圆桶里程退出阈值 */
-    config->cylinder.ad_both_high_threshold = 50; /* 圆桶双路强信号阈值 */
+    config->cylinder.ad_both_high_threshold = 45; /* 圆桶双路强信号阈值 */
     config->cylinder.adc_a_1 = 1.20f;             /* 圆桶专用横向主差分权重 */
     config->cylinder.adc_b_1 = 1.00f;             /* 圆桶专用竖向差分权重 */
     config->cylinder.adc_c_l = 1.00f;             /* 保持当前圆桶硬编码 C_l 默认值 */
@@ -125,6 +127,7 @@ static void eeprom_read_config(AppConfig *config)
 {
     config->start.start_flag = (int16)read_int(1);
     config->start.element_enable = (int16)read_int(2);
+    config->start.encoder_stop_distance_cm = read_float(63);
 
     config->speed.kp_Err = read_float(4);
     config->start.fuya_xili = read_float(5);
@@ -133,6 +136,7 @@ static void eeprom_read_config(AppConfig *config)
     config->speed.speed_run = read_float(8);
     config->speed.limiting_Err = read_float(9);
     config->speed.gyro_damp_Err = read_float(10);
+    config->speed.diff_enable = (int16)read_int(27);
     config->speed.diff_inner_gain = read_float(60);
     config->speed.diff_outer_gain = read_float(62);
 
@@ -205,6 +209,7 @@ static void eeprom_write_config(const AppConfig *config)
 {
     save_int(config->start.start_flag, 1);
     save_int(config->start.element_enable, 2);
+    save_float(config->start.encoder_stop_distance_cm, 63);
     save_float(config->angle.limiting_Angle, 3);
 
     save_float(config->speed.kp_Err, 4);
@@ -214,6 +219,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->speed.speed_run, 8);
     save_float(config->speed.limiting_Err, 9);
     save_float(config->speed.gyro_damp_Err, 10);
+    save_int(config->speed.diff_enable, 27);
     save_float(config->speed.diff_inner_gain, 60);
     save_float(config->speed.diff_outer_gain, 62);
     save_float(config->angle.kp_Angle, 11);

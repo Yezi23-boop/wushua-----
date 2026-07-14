@@ -71,19 +71,25 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "a_run_track_element_update_gate" not in run_time_2_body
 
 
-def test_encoder_total_distance_stops_at_32_meters():
+def test_encoder_total_distance_uses_persisted_menu_threshold():
     pid_source = _read(PID_C)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
     encoder_body = _function_body(
         pid_source,
         "void Encoder_get(PID_Speed *left, PID_Speed *right)",
         "/**\n * @brief 速度环 PID 更新",
     )
 
-    assert "#define ENCODER_STOP_DISTANCE_CM 3200.0f" in pid_source
+    assert "#define ENCODER_STOP_DISTANCE_CM" not in pid_source
     assert "static float encoder_sum = 0.0f;" in encoder_body
     assert "encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;" in encoder_body
-    assert "if (encoder_sum >= ENCODER_STOP_DISTANCE_CM)" in encoder_body
+    assert "if (encoder_sum >= app.start.encoder_stop_distance_cm)" in encoder_body
     assert "stop = 1;" in encoder_body
+    assert "float encoder_stop_distance_cm;" in eeprom_header
+    assert "config->start.encoder_stop_distance_cm = 3200.0f;" in eeprom_source
+    assert "config->start.encoder_stop_distance_cm = read_float(63);" in eeprom_source
+    assert "save_float(config->start.encoder_stop_distance_cm, 63);" in eeprom_source
 
 
 def test_main_control_uses_stable_nonlinear_differential_distribution():
@@ -104,10 +110,11 @@ def test_main_control_uses_stable_nonlinear_differential_distribution():
     assert "ratio = ratio * (0.6f + 0.4f * ratio);" in differential_body
     assert "inner_scale = 1.0f - app.speed.diff_inner_gain * ratio;" in differential_body
     assert "outer_scale = 1.0f + app.speed.diff_outer_gain * ratio;" in differential_body
+    assert "if (app.speed.diff_enable != 0)" in run_time_1_body
     assert "Pid_Differential(speed_active, PID.angle.output," in run_time_1_body
     assert "app.angle.limiting_Angle);" in run_time_1_body
-    assert "left_target = speed_active - diff_output;" not in run_time_1_body
-    assert "right_target = speed_active + diff_output;" not in run_time_1_body
+    assert "left_target = speed_active - PID.angle.output;" in run_time_1_body
+    assert "right_target = speed_active + PID.angle.output;" in run_time_1_body
 
 
 def test_differential_gains_are_persisted_with_menu_defaults():
@@ -116,15 +123,19 @@ def test_differential_gains_are_persisted_with_menu_defaults():
 
     assert "float diff_inner_gain;" in eeprom_header
     assert "float diff_outer_gain;" in eeprom_header
+    assert "int16 diff_enable;" in eeprom_header
     assert "config->speed.diff_inner_gain = 0.80f;" in eeprom_source
     assert "config->speed.diff_outer_gain = 0.10f;" in eeprom_source
+    assert "config->speed.diff_enable = 1;" in eeprom_source
     assert "config->speed.diff_inner_gain = read_float(60);" in eeprom_source
     assert "config->speed.diff_outer_gain = read_float(62);" in eeprom_source
+    assert "config->speed.diff_enable = (int16)read_int(27);" in eeprom_source
     assert "save_float(config->speed.diff_inner_gain, 60);" in eeprom_source
     assert "save_float(config->speed.diff_outer_gain, 62);" in eeprom_source
-    assert "uint8 date_buff[252];" in eeprom_source
-    assert "extern uint8 date_buff[252];" in eeprom_header
-    assert "#define EEPROM_CONFIG_VERSION 5L" in eeprom_source
+    assert "save_int(config->speed.diff_enable, 27);" in eeprom_source
+    assert "uint8 date_buff[256];" in eeprom_source
+    assert "extern uint8 date_buff[256];" in eeprom_header
+    assert "#define EEPROM_CONFIG_VERSION 7L" in eeprom_source
 
 
 def test_track_element_sequence_supports_current_executable_elements():

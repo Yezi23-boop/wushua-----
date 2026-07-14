@@ -13,6 +13,7 @@ typedef struct
     int16 element_enable;    /**< 整体赛道元素识别开关：1-开启，0-关闭 */
     int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
+    float encoder_stop_distance_cm; /**< 上电累计里程达到该值后停车，单位 cm */
     int element_len;                            /**< 元素序列有效长度，运行期超出 1~6 时进入无元素状态。 */
     int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板、6双十字；其他值运行期跳过。 */
 } AppStartConfig;
@@ -29,6 +30,7 @@ typedef struct
     float speed_run;     /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
     float limiting_Err;  /**< 转向输出限幅值（防止舵机/电机过载） */
     float kp2_Err;       /**< 二次项系数（用于处理大角度弯道的非线性增强） */
+    int16 diff_enable;   /**< 非线性内外轮差速开关：1-开启，0-使用线性差速 */
     float diff_inner_gain; /**< 差速分配内轮减速增益 */
     float diff_outer_gain; /**< 差速分配外轮增速增益 */
 } AppSpeedConfig;
@@ -137,7 +139,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[252]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 62。 */
+extern uint8 date_buff[256]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 63。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

@@ -51,10 +51,10 @@ def test_menu_page_counts_and_parent_links_are_complete():
 
     expected_counts = {
         "menu_home_items": 6,
-        "menu_start_items": 5,
+        "menu_start_items": 6,
         "menu_speed_items": 6,
         "menu_model_items": 6,
-        "menu_diff_items": 2,
+        "menu_diff_items": 3,
         "menu_yuanshu_items": 5,
         "menu_ring_items": 7,
         "menu_cylinder_items": 6,
@@ -116,13 +116,23 @@ def test_menu_parameter_steps_match_tuning_contract():
     assert "MENU_FLOAT_STEP_1" in cross
 
 
-def test_diff_menu_exposes_both_gains_with_point_one_step():
+def test_diff_menu_exposes_switch_and_both_gains():
     source = _read(MENU_C)
     diff = _item_block(source, "menu_diff_items")
 
+    assert '"diff_en", &app.speed.diff_enable' in diff
+    assert "MENU_META(MENU_ITEM_BOOL, 1, 0), 0" in diff
     assert '"inner_g", &app.speed.diff_inner_gain' in diff
     assert '"outer_g", &app.speed.diff_outer_gain' in diff
     assert diff.count("MENU_FLOAT_STEP_01") == 2
+
+
+def test_start_menu_exposes_encoder_stop_distance_in_centimeters():
+    source = _read(MENU_C)
+    start = _item_block(source, "menu_start_items")
+
+    assert '"stop_cm", &app.start.encoder_stop_distance_cm' in start
+    assert "MENU_META(MENU_ITEM_FLOAT, 4, 0), MENU_FLOAT_STEP_10" in start
 
 
 def test_menu_integer_steps_are_named_and_source_is_consistently_wrapped():
