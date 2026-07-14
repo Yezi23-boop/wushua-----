@@ -62,10 +62,18 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "static float speed_active = 0.0f;" in runner
     assert "static int speed_active" not in runner
     assert "speed_active = app.speed.speed_run;" in run_time_1_body
-    assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" in run_time_1_body
-    assert "pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);" in run_time_1_body
+    assert "steer_pwm = PID.steer.output;" in run_time_1_body
+    assert "ring_angle_target = 0.0f;" in run_time_1_body
+    assert "a_run_track_element_update_gate(&speed_active, &ring_angle_target);" in run_time_1_body
+    assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" not in run_time_1_body
+    assert "pid_angle_update(&PID.angle, ring_angle_target, gyro_feedback);" in run_time_1_body
+    assert "Pid_Differential(" not in run_time_1_body
+    assert "left_target = speed_active;" in run_time_1_body
+    assert "right_target = speed_active;" in run_time_1_body
+    assert "left_pwm = PID.left_speed.output - steer_pwm;" in run_time_1_body
+    assert "right_pwm = PID.right_speed.output + steer_pwm;" in run_time_1_body
     assert run_time_1_body.index("pid_steer_update(&PID.steer, Err, 0.0f);") < run_time_1_body.index(
-        "a_run_track_element_update_gate(&speed_active, &PID.steer.output);"
+        "a_run_track_element_update_gate(&speed_active, &ring_angle_target);"
     )
     assert "a_run_track_element_update_gate" not in mode_source
     assert "a_run_track_element_update_gate" not in run_time_2_body
@@ -86,7 +94,7 @@ def test_encoder_total_distance_stops_at_32_meters():
     assert "stop = 1;" in encoder_body
 
 
-def test_main_control_uses_stable_nonlinear_differential_distribution():
+def test_legacy_differential_helper_is_not_used_by_parallel_main_control():
     pid_source = _read(PID_C)
     pid_header = _read(ROOT / "project" / "service" / "pid.h")
     runner = _read(A_RUN_C)
@@ -104,8 +112,8 @@ def test_main_control_uses_stable_nonlinear_differential_distribution():
     assert "ratio = ratio * (0.6f + 0.4f * ratio);" in differential_body
     assert "inner_scale = 1.0f - app.speed.diff_inner_gain * ratio;" in differential_body
     assert "outer_scale = 1.0f + app.speed.diff_outer_gain * ratio;" in differential_body
-    assert "Pid_Differential(speed_active, PID.angle.output," in run_time_1_body
-    assert "app.angle.limiting_Angle);" in run_time_1_body
+    assert "Pid_Differential(" not in run_time_1_body
+    assert "pid_angle_update(&PID.angle, ring_angle_target, gyro_feedback);" in run_time_1_body
     assert "left_target = speed_active - diff_output;" not in run_time_1_body
     assert "right_target = speed_active + diff_output;" not in run_time_1_body
 
@@ -178,6 +186,7 @@ def test_ring_state_is_split_and_directional():
     assert "uint8 a_run_ring_update_5ms(int8 ring_dir)" in ring_source
     assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in ring_source
     assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in ring_source
+    assert "void a_run_ring_update_angle_target(float *angle_target)" in ring_source
     assert "#define RING_ENTRY_CONFIRM_COUNT 8u" in ring_source
     assert "#define RING_YAW_DT_SCALE 0.40f" in ring_source
     assert "ring_data.yaw_delta_sum += delta_angle * RING_YAW_DT_SCALE;" in ring_source

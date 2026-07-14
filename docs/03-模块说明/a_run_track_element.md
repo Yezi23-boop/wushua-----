@@ -6,7 +6,7 @@
 
 ## 对外入口函数
 
-- `a_run_track_element_update_gate(int *speed, float *angle_target)`
+- `a_run_track_element_update_gate(float *speed, float *angle_target)`
 - `a_run_ring_get_state()`
 - `a_run_track_element_get_expected_element()`
 - `a_run_cylinder_get_state()`
@@ -64,8 +64,8 @@
 
 ## 高频路径注意事项
 
-- `a_run_track_element_update_gate(int *speed, float *angle_target)` 运行在 5ms 主控制链中，应避免串口输出和复杂计算。
-- 圆环角度累计依赖 `gyro_z` 已按 5ms 周期准备好；若 IMU 缩放或周期改变，圆环阈值要重新标定。
+- `a_run_track_element_update_gate(float *speed, float *angle_target)` 运行在 2ms 主控制链中，应避免串口输出和复杂计算。
+- 圆环角度累计依赖 `gyro_z` 已按 2ms 周期准备好；若 IMU 缩放或周期改变，圆环阈值要重新标定。
 - `expected_element` 是误触发防线，不应被菜单或调试代码直接改写。
 
 ## 调参与常见风险

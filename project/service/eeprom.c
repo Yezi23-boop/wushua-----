@@ -54,12 +54,12 @@ static void eeprom_load_defaults(AppConfig *config)
     config->speed.kd_Err = 12.80f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 75.00f;     /* 默认基础速度 60 */
-    config->speed.limiting_Err = 800.00f; /* 转向限幅 */
+    config->speed.limiting_Err = 800.00f; /* 最终转向差速 PWM 限幅 */
     config->speed.kp2_Err = 0.01f;
     config->speed.diff_inner_gain = 0.80f;
     config->speed.diff_outer_gain = 0.10f;
 
-    /* 电感偏差解算默认参数 */
+    /* 圆环角速度控制参数；A/B/C 用于电感偏差解算。 */
     config->angle.kp_Angle = 0.82f;
     config->angle.kd_Angle = 0.70f; // 2ms 主环第一版保守微分
     config->angle.gyro_feedback_scale = 1.50f;
@@ -70,10 +70,10 @@ static void eeprom_load_defaults(AppConfig *config)
 
     /* 圆环策略默认参数 */
     config->ring.ring_entry_encoder = 5.0;          /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring 固定目标角速度 */
     config->ring.pre_ring_Gyroz = 40.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值 220 */
-    config->ring.pre_out_ring_Gyro_target = 40.00f; /* pre_out_ring固定目标角速度 25 */
+    config->ring.pre_out_ring_Gyro_target = 40.00f; /* pre_out_ring 固定目标角速度 */
     config->ring.pre_out_ring_Gyroz = 340.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
     config->ring.drive_out_ring_encoder = 5.0f;     /* 出环前直走距离（cm） */
 

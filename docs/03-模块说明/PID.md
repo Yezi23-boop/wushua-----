@@ -10,9 +10,9 @@
 - `pid_steer_init()`
 - `pid_speed_update()`
 - `pid_steer_update()`
-- `pid_angle_update()`
+- `pid_angle_update()`（仅圆环目标角速度非零时调用）
 - `Encoder_get()`
-- `Pid_Differential()`
+- `Pid_Differential()`（旧串级目标轮速分配接口，正式并级主链不调用）
 - `Pure_Pursuit_Gyro_Control()`
 
 ## 依赖与被依赖关系
@@ -35,7 +35,7 @@
 - `PID.left_speed`
 - `PID.right_speed`
 - `PID.steer`
-- `PID.angle`
+- `PID.angle`（圆环专用角速度控制器状态）
 
 ## 高频路径注意事项
 

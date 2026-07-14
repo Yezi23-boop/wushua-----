@@ -31,10 +31,10 @@
 
 | 字段 | 含义 |
 | --- | --- |
-| `kp_Angle` | 角速度内环比例参数 |
-| `kd_Angle` | 角速度内环微分参数 |
-| `gyro_feedback_scale` | gyro_z 反馈缩放系数 |
-| `limiting_Angle` | 角速度内环输出限幅 |
+| `kp_Angle` | 圆环角速度环比例参数 |
+| `kd_Angle` | 圆环角速度环微分参数 |
+| `gyro_feedback_scale` | 圆环 gyro_z 反馈缩放系数 |
+| `limiting_Angle` | 圆环角速度环差速 PWM 限幅 |
 | `A_1` | 主亮度权重 |
 | `B_1` | 竖向差分权重 |
 | `C_l` | 弱信号分母补偿权重 |

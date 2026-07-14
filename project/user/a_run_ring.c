@@ -17,8 +17,8 @@ RingStruct ring_data = {0};                    /**< 环岛过程数据，菜单�
 static uint8 ring_entry_count = 0;             /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
 
 /**
- * @brief 根据环岛状态更新角速度目标。
- * @param angle_target 指向目标角速度的指针，由调用方提供上下文。
+ * @brief 根据环岛状态覆盖圆环目标角速度。
+ * @param angle_target 指向圆环目标角速度的指针，由调用方提供上下文。
  */
 void a_run_ring_update_angle_target(float *angle_target)
 {

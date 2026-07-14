@@ -3,7 +3,7 @@
  * @brief 主控制任务调度与执行入口
  * @details
  * 本文件承接定时中断任务链，将“采样-解算-控制输出”组织为固定周期流程：
- * - run_time_1(): 高频控制环，负责电感/转向差速/速度闭环与电机输出
+ * - run_time_1(): 高频控制环，负责电感误差环/双轮速度环并级控制与电机输出
  * - run_time_2(): 低频状态环，负责保护检测、状态机与软定时器
  * - run_time_3(): 差速实验链路，用于算法验证
  *
@@ -18,14 +18,20 @@ volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/�
 /* --- 周期任务内部变量 --- */
 static int steer_div_10 = 0;        /* 2ms 主环分频：每 3 拍约 6ms 更新一次转向环 */
 static float speed_active = 0.0f;   /* 当前参与速度环计算的目标速度，保留 speed_run 的小数调参精度。 */
+static uint8 ring_angle_active = 0; /* 圆环角速度环活动标志，用于进入时抑制微分突跳。 */
 /**
  * @brief 主控制核心任务 (运行于 TM0 2ms 中断)
- * @details 串行执行传感器采集 -> 姿态获取 -> 转向偏差融合 -> 速度设定 -> 电机执行链路。
+ * @details 串行执行传感器采集 -> 姿态获取 -> 双轮速度闭环 -> 误差差速叠加 -> 电机执行链路。
  * 必须始终保证函数总体耗时远小于 2ms 的中断周期，且严禁加入任何可能阻塞的任务（如 printf、延迟函数），
  * 任何超时都会导致电机脱管、失控。
  */
 void run_time_1(void)
 {
+    float steer_pwm;
+    float ring_angle_target;
+    float gyro_feedback;
+    float left_pwm;
+    float right_pwm;
     int8 start_state;
     CylinderState cylinder_state;
     steer_div_10++;
@@ -48,23 +54,43 @@ void run_time_1(void)
             PID.steer.Kp = app.speed.kp_Err;
             PID.steer.Kd = app.speed.kd_Err;
         }
-        /* 方向外环根据电感偏差生成差速目标，后续再结合 gyro 阻尼输出最终差速。 */
+        /* 误差环根据电感偏差生成最终 PWM 差速修正量。 */
         pid_steer_update(&PID.steer, Err, 0.0f);
         steer_div_10 = 0;
     }
     speed_active = app.speed.speed_run;
+    steer_pwm = PID.steer.output;
+    ring_angle_target = 0.0f;
     /*
-     * 元素仲裁跟随 2ms 采样链路，并放在转向外环之后执行。
-     * 原因：跷跷板和圆环都可能覆盖 PID.steer.output，必须压住普通循迹目标。
+     * 元素仲裁跟随 2ms 采样链路，并放在误差环之后执行。
+     * 普通路段保留误差环差速，圆环固定阶段只覆盖本拍目标角速度。
      */
-    a_run_track_element_update_gate(&speed_active, &PID.steer.output);
+    a_run_track_element_update_gate(&speed_active, &ring_angle_target);
+    if (ring_angle_target != 0.0f)
+    {
+        gyro_feedback = gyro_z * app.angle.gyro_feedback_scale;
+        if (ring_angle_active == 0)
+        {
+            /* 首拍预置微分历史，只保留比例响应，避免圆环接管时 D 项突跳。 */
+            PID.angle.prev_error = ring_angle_target - gyro_feedback;
+            ring_angle_active = 1;
+        }
+        pid_angle_update(&PID.angle, ring_angle_target, gyro_feedback);
+        steer_pwm = PID.angle.output;
+    }
+    else
+    {
+        ring_angle_active = 0;
+        PID.angle.error = 0.0f;
+        PID.angle.prev_error = 0.0f;
+        PID.angle.output = 0.0f;
+    }
     if (seesaw_zero_brake_active != 0)
     {
         /*
          * 跷跷板停止等待前零速闭环刹车。
          * 此阶段使用 signed 编码器速度，前滑给反向力矩，倒滑则自动收回到正向。
          */
-        PID.angle.output = 0.0f;
         left_target = 0.0f;
         right_target = 0.0f;
         pid_speed_update(&PID.left_speed, left_target, speed_l_signed);
@@ -79,19 +105,21 @@ void run_time_1(void)
         }
         return;
     }
-    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
-    Pid_Differential(speed_active, PID.angle.output,
-                     &left_target, &right_target,
-                     app.angle.limiting_Angle);
+    left_target = speed_active;
+    right_target = speed_active;
 
-    /* 速度环保持高频更新，保证电机执行链路带宽 */
+    /* 左右速度环各自维持基础速度，允许其与最终叠加的转向差速互相作用。 */
     pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
     pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
+
+    /* 误差环直接叠加到最终 PWM：正输出左轮减、右轮加。 */
+    left_pwm = PID.left_speed.output - steer_pwm;
+    right_pwm = PID.right_speed.output + steer_pwm;
 
     /* 7. 仅在运行态时允许电机输出 */
     if (start_state == 2)
     {
-        motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
+        motor_output((int32)left_pwm, (int32)right_pwm);
     }
     else
     {

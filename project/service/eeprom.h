@@ -27,10 +27,10 @@ typedef struct
     float kd_Err;        /**< 转向误差微分系数 Kd（抑制电感偏差变化的速率） */
     float gyro_damp_Err; /**< 转向环陀螺仪阻尼系数（抑制高速摆振） */
     float speed_run;     /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
-    float limiting_Err;  /**< 转向输出限幅值（防止舵机/电机过载） */
+    float limiting_Err;  /**< 最终转向差速 PWM 限幅 */
     float kp2_Err;       /**< 二次项系数（用于处理大角度弯道的非线性增强） */
-    float diff_inner_gain; /**< 差速分配内轮减速增益 */
-    float diff_outer_gain; /**< 差速分配外轮增速增益 */
+    float diff_inner_gain; /**< 旧串级差速分配内轮减速增益 */
+    float diff_outer_gain; /**< 旧串级差速分配外轮增速增益 */
 } AppSpeedConfig;
 
 /**
@@ -39,10 +39,10 @@ typedef struct
  */
 typedef struct
 {
-    float kp_Angle;            /**< 角速度内环比例系数 Kp（跟踪转向目标角速度） */
-    float kd_Angle;            /**< 角速度内环微分系数 Kd（抑制角速度过冲） */
-    float gyro_feedback_scale; /**< 角速度反馈缩放系数 N（匹配 gyro_z 与目标角速度量级） */
-    float limiting_Angle;      /**< 角速度内环输出限幅（差速目标限幅） */
+    float kp_Angle;            /**< 圆环角速度环比例系数 */
+    float kd_Angle;            /**< 圆环角速度环微分系数 */
+    float gyro_feedback_scale; /**< 圆环 gyro_z 反馈缩放系数 */
+    float limiting_Angle;      /**< 圆环角速度环差速 PWM 限幅 */
     float A_1;                 /**< 主亮度权重，用于横向主差分归一化 */
     float B_1;                 /**< 竖向差分权重，用于斜入/斜出姿态修正 */
     float C_l;                 /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
@@ -54,10 +54,10 @@ typedef struct
 typedef struct
 {
     float ring_entry_encoder;       /**< ring阶段编码器积分阈值，达到后进入pre_ring */
-    float pre_ring_Gyro_target;     /**< pre_ring阶段固定目标角速度 */
+    float pre_ring_Gyro_target;     /**< pre_ring 阶段固定目标角速度 */
     float pre_ring_Gyroz;           /**< pre_ring阶段累计转角阈值，达到后进入in_ring */
     float in_ring_Gyroz;            /**< in_ring阶段累计转角阈值，达到后进入pre_out_ring */
-    float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
+    float pre_out_ring_Gyro_target; /**< pre_out_ring 阶段固定目标角速度 */
     float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入drive_out_ring */
     float drive_out_ring_encoder;   /**< drive_out_ring直走段编码器阈值（cm），达到后进入out_ring */
 } AppRingConfig;

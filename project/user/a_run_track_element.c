@@ -158,7 +158,7 @@ static void track_element_reset_state(void)
  * 元素顺序由 `app.start.element_len` 和 `app.start.element_seq[]` 决定，0/不可执行槽位会跳过。
  *
  * @param speed 2ms 主控制链路当前目标速度，保留小数速度设定；跷跷板和完成后释放阶段可能覆盖该值。
- * @param angle_target 转向外环输出的目标角速度，圆环和跷跷板阶段可能覆盖该值。
+ * @param angle_target 圆环目标角速度，圆环固定转向阶段可能覆盖该值。
  */
 void a_run_track_element_update_gate(float *speed, float *angle_target)
 {

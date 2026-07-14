@@ -64,6 +64,39 @@ def test_steer_encoder_and_ring_scaling_match_2ms_loop():
     assert "#define IMU_GYRO_Z_SCALE (0.005f)" in imu
 
 
+def test_ring_angle_pid_and_dual_speed_pid_are_combined_at_pwm_stage():
+    runner = _read(A_RUN_C)
+    run_time_1_body = _function_body(runner, "void run_time_1(void)", "void run_time_2(void)")
+
+    assert "Pid_Differential(" not in run_time_1_body
+    assert "left_target = speed_active;" in run_time_1_body
+    assert "right_target = speed_active;" in run_time_1_body
+    assert "steer_pwm = PID.steer.output;" in run_time_1_body
+    assert "ring_angle_target = 0.0f;" in run_time_1_body
+    assert "a_run_track_element_update_gate(&speed_active, &ring_angle_target);" in run_time_1_body
+    assert "if (ring_angle_target != 0.0f)" in run_time_1_body
+    assert "gyro_feedback = gyro_z * app.angle.gyro_feedback_scale;" in run_time_1_body
+    assert "if (ring_angle_active == 0)" in run_time_1_body
+    assert "PID.angle.prev_error = ring_angle_target - gyro_feedback;" in run_time_1_body
+    assert "pid_angle_update(&PID.angle, ring_angle_target, gyro_feedback);" in run_time_1_body
+    assert "steer_pwm = PID.angle.output;" in run_time_1_body
+    assert "ring_angle_active = 0;" in run_time_1_body
+    assert "PID.angle.error = 0.0f;" in run_time_1_body
+    assert "PID.angle.prev_error = 0.0f;" in run_time_1_body
+    assert "PID.angle.output = 0.0f;" in run_time_1_body
+    assert "pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);" in run_time_1_body
+    assert "pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);" in run_time_1_body
+    assert "left_pwm = PID.left_speed.output - steer_pwm;" in run_time_1_body
+    assert "right_pwm = PID.right_speed.output + steer_pwm;" in run_time_1_body
+    assert "motor_output((int32)left_pwm, (int32)right_pwm);" in run_time_1_body
+    assert run_time_1_body.index("steer_pwm = PID.steer.output;") < run_time_1_body.index(
+        "a_run_track_element_update_gate(&speed_active, &ring_angle_target);"
+    )
+    assert run_time_1_body.index(
+        "pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);"
+    ) < run_time_1_body.index("left_pwm = PID.left_speed.output - steer_pwm;")
+
+
 def test_element_counts_keep_original_wall_clock_time_at_2ms():
     cylinder = _read(A_RUN_CYLINDER_C)
     wall = _read(A_RUN_WALL_C)

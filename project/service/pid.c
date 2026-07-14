@@ -184,8 +184,8 @@ void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback)
 }
 
 /**
- * @brief 角速度环 PID 更新（位置式算法）
- * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
+ * @brief 圆环专用角速度 PID 更新（位置式算法）
+ * @details 仅在圆环给出非零目标角速度时启用，输出直接作为最终差速 PWM。
  * @param pid PID 结构指针
  * @param error 目标偏差（通常是 目标角速度 - 当前角速度）
  * @param gyro Calibrated steering feedback value
@@ -212,13 +212,13 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
 }
 
 /**
- * @brief 差速分配函数
- * @details 大弯主要降低内轮；负压提供额外抓地力，允许外轮小幅增速以保持转弯力度。
+ * @brief 旧串级控制的目标轮速差速分配函数
+ * @details 正式并级主链不调用，保留用于旧控制链对照调试。
  * @param speed_run 基础运行速度（直道速度）
  * @param diff_output 角速度内环输出的差速控制量
  * @param left_target 输出：左轮目标速度
  * @param right_target 输出：右轮目标速度
- * @param scope 差速归一化范围，正式控制链传入角速度内环限幅
+ * @param scope 差速归一化范围
  */
 void Pid_Differential(float speed_run, float diff_output, float *left_target, float *right_target, float scope)
 {
