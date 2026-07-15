@@ -21,7 +21,7 @@ typedef enum
     RING_STATE_PRE_RING = 2,       /**< 预入环阶段；新算法在该阶段放大外侧电感。 */
     RING_STATE_IN_RING = 3,        /**< 环内阶段。 */
     RING_STATE_PRE_OUT_RING = 4,   /**< 预出环阶段。 */
-    RING_STATE_DRIVE_OUT_RING = 5, /**< 达到最小距离后按外侧电感和 ad5 确认的固定向外转向阶段。 */
+    RING_STATE_DRIVE_OUT_RING = 5, /**< 达到最小距离后按外侧电感确认的固定向外转向阶段。 */
     RING_STATE_OUT_RING = 6        /**< 出环确认阶段。 */
 } RingState;
 

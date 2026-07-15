@@ -18,8 +18,7 @@ volatile int32 fly_pwm_output_limit = 0;    /* COOLDOWN 期间限制最终 PWM �
 static uint8 fly_land_confirm_count = 0;    /* 飞坡落地回升连续确认计数，单位为 2ms 周期。 */
 static uint16 fly_last_ad1 = 0;             /* 飞坡入口上一拍 ad1，用于确认横向电感持续递减。 */
 static uint16 fly_last_ad4 = 0;             /* 飞坡入口上一拍 ad4，用于确认横向电感持续递减。 */
-static uint16 fly_last_ad5 = 0;             /* 飞坡入口上一拍 ad5，用于确认中横电感持续递减。 */
-static uint8 fly_last_ad_valid = 0;         /* 上一拍 ad1/ad4/ad5 是否可用于递减比较。 */
+static uint8 fly_last_ad_valid = 0;         /* 上一拍 ad1/ad4 是否可用于递减比较。 */
 
 /* --- 跷跷板停止等待状态内部变量 --- */
 static SeesawState seesaw_state = SEESAW_STATE_IDLE; /**< 停止等待状态机阶段 */
@@ -30,8 +29,7 @@ static int seesaw_wait_count = 0;                    /**< 等待倾斜计数，�
 static float seesaw_creep_distance = 0.0f;           /**< 零速刹车后前挪里程积分，单位沿用速度积分标尺 cm。 */
 static uint16 seesaw_last_ad1 = 0;                   /**< 停止等待入口上一拍 ad1，用于确认横向电感持续递减。 */
 static uint16 seesaw_last_ad4 = 0;                   /**< 停止等待入口上一拍 ad4，用于确认横向电感持续递减。 */
-static uint16 seesaw_last_ad5 = 0;                   /**< 停止等待入口上一拍 ad5，用于确认中横电感持续递减。 */
-static uint8 seesaw_last_ad_valid = 0;               /**< 上一拍 ad1/ad4/ad5 是否可用于递减比较。 */
+static uint8 seesaw_last_ad_valid = 0;               /**< 上一拍 ad1/ad4 是否可用于递减比较。 */
 volatile uint8 seesaw_zero_brake_active = 0;         /**< 零速闭环刹车窗口，主控链路用 signed 速度反馈压到 0。 */
 volatile uint8 seesaw_centering_active = 0;          /**< 跷跷板前挪/恢复期临时居中权重开关。 */
 
@@ -55,14 +53,14 @@ volatile uint8 seesaw_centering_active = 0;          /**< 跷跷板前挪/恢复
 /**
  * @brief 更新飞坡/停止等待模式共用的入口判定窗口。
  *
- * 两种模式共用弱磁窗口；飞坡额外要求 ad1/ad4/ad5 递减，停止等待直接累计弱磁命中。
+ * 两种模式共用弱磁窗口；飞坡额外要求 ad1/ad4 递减，停止等待直接累计弱磁命中。
  *
  * @param allow_entry 当前元素仲裁是否允许开启入口检测。
  * @param side_th 横向电感弱磁阈值。
  * @param center_th 竖向电感弱磁阈值。
  * @param hit_limit 窗口内需要累计到的有效命中次数。
  * @param window_limit 入口统计窗口长度，单位为 2ms 周期。
- * @param require_decrease 1-要求 ad1/ad4/ad5 递减；0-弱磁拍直接计为命中。
+ * @param require_decrease 1-要求 ad1/ad4 递减；0-弱磁拍直接计为命中。
  * @param detect_count 有效命中次数指针。
  * @param window_count 入口窗口计数指针。
  * @param last_ad1 上一拍 ad1 指针。
@@ -80,7 +78,6 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
                                          int *window_count,
                                          uint16 *last_ad1,
                                          uint16 *last_ad4,
-                                         uint16 *last_ad5,
                                          uint8 *last_ad_valid)
 {
     uint8 weak_line;
@@ -90,8 +87,7 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
                         ad1 <= side_th &&
                         ad2 <= center_th &&
                         ad3 <= center_th &&
-                        ad4 <= side_th &&
-                        ad5 < 8u);
+                        ad4 <= side_th);
     entry_hit = 0;
     if (weak_line != 0)
     {
@@ -117,19 +113,16 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
         }
         else if (*last_ad_valid != 0 &&
                  ad1 <= *last_ad1 &&
-                 ad4 <= *last_ad4 &&
-                 ad5 <= *last_ad5)
+                 ad4 <= *last_ad4)
         {
             entry_hit = 1;
             *last_ad1 = ad1;
             *last_ad4 = ad4;
-            *last_ad5 = ad5;
         }
         else if (*last_ad_valid == 0)
         {
             *last_ad1 = ad1;
             *last_ad4 = ad4;
-            *last_ad5 = ad5;
             *last_ad_valid = 1;
         }
 
@@ -221,7 +214,6 @@ void a_run_fly_reset(void)
     seesaw_centering_active = 0;
     fly_last_ad1 = 0;
     fly_last_ad4 = 0;
-    fly_last_ad5 = 0;
     fly_last_ad_valid = 0;
     fly_state = FLY_STATE_IDLE;
     seesaw_state = SEESAW_STATE_IDLE;
@@ -248,7 +240,6 @@ void a_run_seesaw_reset(void)
     seesaw_creep_distance = 0.0f;
     seesaw_last_ad1 = 0;
     seesaw_last_ad4 = 0;
-    seesaw_last_ad5 = 0;
     seesaw_last_ad_valid = 0;
     seesaw_zero_brake_active = 0;
     seesaw_centering_active = 0;
@@ -282,7 +273,7 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
     case SEESAW_STATE_IDLE:
         /*
          * 普通赛道也可能出现单拍弱磁，跷跷板入口要求在 20ms 窗口内多次出现
-         * 五路弱磁在窗口内累计达到设定次数后刹车，不要求各路逐拍递减。
+         * 四路弱磁在窗口内累计达到设定次数后刹车，不要求各路逐拍递减。
          */
         if (a_run_fly_update_entry_gate(allow_entry,
                                         SEESAW_DETECT_SIDE_TH,
@@ -294,7 +285,6 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
                                         &seesaw_entry_window_count,
                                         &seesaw_last_ad1,
                                         &seesaw_last_ad4,
-                                        &seesaw_last_ad5,
                                         &seesaw_last_ad_valid) != 0)
         {
             seesaw_brake_count = 0;
@@ -479,7 +469,6 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
                                         &fly_state_count,
                                         &fly_last_ad1,
                                         &fly_last_ad4,
-                                        &fly_last_ad5,
                                         &fly_last_ad_valid) != 0)
         {
             fly_lost_line_blocked = 1;

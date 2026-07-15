@@ -9,7 +9,7 @@
 
 #define RING_ENTRY_CONFIRM_COUNT 5u    /* 300ms 窗口累计命中次数，2ms 调用下最快约 10ms。 */
 #define RING_YAW_DT_SCALE 0.40f        /* gyro_z 已缩放 0.005，二者相乘等效 2ms 角度积分。 */
-#define RING_DRIVE_OUT_AD_THRESHOLD 5u /* 出环结束时外侧电感和 ad5 的共同阈值。 */
+#define RING_DRIVE_OUT_AD_THRESHOLD 5u /* 出环结束时外侧电感阈值。 */
 
 static int8 ring_is_left_entry_signal(void);
 static int8 ring_is_right_entry_signal(void);
@@ -125,8 +125,7 @@ static int8 ring_is_left_entry_signal(void)
     if (ad1 > 30 &&
         ad2 > 5 &&
         ad3 > 5 &&
-        ad4 > 30 &&
-        ad5 > 20)
+        ad4 > 30)
     {
         return 1;
     }
@@ -144,8 +143,7 @@ static int8 ring_is_right_entry_signal(void)
     if (ad1 > 30 &&
         ad2 > 5 &&
         ad3 > 5 &&
-        ad4 > 30 &&
-        ad5 > 20)
+        ad4 > 30)
     {
         return 1;
     }
@@ -262,7 +260,6 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
     case RING_STATE_DRIVE_OUT_RING:
         ring_data.diff_set = -5 * ring_dir;
         if (ring_data.encoder >= app.ring.drive_out_ring_encoder &&
-            ad5 < RING_DRIVE_OUT_AD_THRESHOLD &&
             ((ring_dir < 0 && ad1 < RING_DRIVE_OUT_AD_THRESHOLD) ||
              (ring_dir > 0 && ad4 < RING_DRIVE_OUT_AD_THRESHOLD)))
         {
@@ -350,8 +347,7 @@ static int8 ring_is_entry_signal(void)
     if (ad1 > 30 &&
         ad2 > 5 &&
         ad3 > 5 &&
-        ad4 > 30 &&
-        ad5 > 20)
+        ad4 > 30)
     {
         return 1;
     }

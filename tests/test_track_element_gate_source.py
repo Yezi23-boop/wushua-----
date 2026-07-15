@@ -18,7 +18,9 @@ A_RUN_CROSS_C = ROOT / "project" / "user" / "a_run_cross.c"
 A_RUN_CROSS_H = ROOT / "project" / "user" / "a_run_cross.h"
 IMU_C = ROOT / "project" / "user" / "imu.c"
 ADC_C = ROOT / "project" / "user" / "ADC.c"
+ADC_H = ROOT / "project" / "user" / "ADC.h"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
+INT_USER_C = ROOT / "project" / "user" / "int_user.c"
 FUYA_C = ROOT / "project" / "user" / "FUYA.c"
 FUYA_H = ROOT / "project" / "user" / "FUYA.h"
 EEPROM_H = ROOT / "project" / "service" / "eeprom.h"
@@ -284,7 +286,6 @@ def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():
 
     exit_condition = (
         "if (ring_data.encoder >= app.ring.drive_out_ring_encoder &&\n"
-        "            ad5 < RING_DRIVE_OUT_AD_THRESHOLD &&\n"
         "            ((ring_dir < 0 && ad1 < RING_DRIVE_OUT_AD_THRESHOLD) ||\n"
         "             (ring_dir > 0 && ad4 < RING_DRIVE_OUT_AD_THRESHOLD)))"
     )
@@ -302,6 +303,23 @@ def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():
     assert "//                stop = 1;" not in ring_source
     assert "最快约 10ms" in ring_source
     assert "等效 2ms" in ring_source
+
+
+def test_fifth_inductor_is_removed_from_sampling_and_control():
+    adc_header = _read(ADC_H)
+    adc_source = _read(ADC_C)
+    init_source = _read(INT_USER_C)
+    menu_source = _read(MENU_C)
+
+    assert "#define NUM 4" in adc_header
+    assert "ADC_CH2_P12" not in init_source
+    assert "raw_buffer[4]" not in adc_source
+    assert "AD_ONE[4]" not in adc_source
+    assert '5 * MENU_ROW_HEIGHT, "Err"' in menu_source
+
+    for path in (ROOT / "project").rglob("*"):
+        if path.suffix.lower() in (".c", ".h"):
+            assert "ad5" not in _read(path), str(path)
 
 
 def test_cylinder_wall_and_fly_are_separate_simple_state_machines():

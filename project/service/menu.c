@@ -698,7 +698,6 @@ static void Menu_Draw_Sensor(void)
     Menu_Show_Int32(64, 2 * MENU_ROW_HEIGHT, ad2, 3);
     Menu_Show_Int32(64, 3 * MENU_ROW_HEIGHT, ad3, 3);
     Menu_Show_Int32(64, 4 * MENU_ROW_HEIGHT, ad4, 3);
-    Menu_Show_Int32(64, 5 * MENU_ROW_HEIGHT, ad5, 3);
 
     label[0] = 'a';
     label[1] = 'd';
@@ -710,10 +709,10 @@ static void Menu_Draw_Sensor(void)
         Menu_Show_Int32(112, (i + 1) * MENU_ROW_HEIGHT, RAW[i], 4);
     }
 
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "Err");
-    Menu_Show_Float(48, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
-    ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "cyl");
-    Menu_Show_Int32(144, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "Err");
+    Menu_Show_Float(48, 5 * MENU_ROW_HEIGHT, Err, 4, 1);
+    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "cyl");
+    Menu_Show_Int32(144, 5 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
 }
 
 /**

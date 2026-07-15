@@ -30,19 +30,18 @@ static uint16 AD_V[NUM] = {0};                    /* 当前周期的处理后值
 static uint8 adc_measure_enable = 1;              /* 默认记录原始采样极值，仅供调试显示和手动标定参考。 */
 
 /* 当前归一化固定使用该区间；MA/MI 只做显示参考，不参与实时映射。 */
-static const uint16 MIN_Err[NUM] = {0, 0, 0, 0, 0};
-static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
+static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
+static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 static const int limit = 10;
 
 /* 全局导出变量：这些变量将在定时器中断和主循环菜单/串口任务间共享，故用 volatile 修饰 */
 volatile uint16 RAW[NUM] = {0};
 volatile uint16 MA[NUM] = {0};
-volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
+volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 volatile uint16 ad1 = 0;
 volatile uint16 ad2 = 0;
 volatile uint16 ad3 = 0;
 volatile uint16 ad4 = 0;
-volatile uint16 ad5 = 0; /**< 第五路横向中间电感，归一化值 0~100 */
 volatile float Err = 0.0f;
 
 /* 内部私有函数声明 */
@@ -241,7 +240,6 @@ void read_AD(void)
     ad2 = AD_ONE[1];
     ad3 = AD_ONE[2];
     ad4 = AD_ONE[3];
-    ad5 = AD_ONE[4];
 
     /* 6. 执行偏差解算 */
     dispose(ad1, ad2, ad3, ad4);
@@ -281,7 +279,6 @@ static void adc_read_channels(uint16 *raw_buffer)
     raw_buffer[1] = adc_convert(ADC_CH0_P10); /* 左竖电感 */
     raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
     raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */
-    raw_buffer[4] = adc_convert(ADC_CH2_P12); /* 中横电感 P1.2 */
     //    raw_buffer[0] = adc_convert(ADC_CH0_P10); /* 左横电感 */
     //    raw_buffer[1] = adc_convert(ADC_CH1_P11); /* 左竖电感 */
     //    raw_buffer[2] = adc_convert(ADC_CH9_P01); /* 右横电感 */
