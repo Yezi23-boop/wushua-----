@@ -183,12 +183,12 @@ void motor_output(int32 lpwm, int32 rpwm)
         /* --- 左电机控制逻辑（lpwm_limited → P13/P14） --- */
         if (lpwm_limited > 0)
         {
-            P14 = 1;                                  /* 设置方向：正转 */
+            P14 = 0;                                  /* 设置方向：正转 */
             pwm_set_duty(PWMB_CH2_P13, lpwm_limited); /* 设置 PWM 占空比 */
         }
         else if (lpwm_limited < 0)
         {
-            P14 = 0;                                   /* 设置方向：反转 */
+            P14 = 1;                                   /* 设置方向：反转 */
             pwm_set_duty(PWMB_CH2_P13, -lpwm_limited); /* 取绝对值输出 PWM */
         }
         else

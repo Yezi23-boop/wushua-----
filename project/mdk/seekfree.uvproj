@@ -720,9 +720,19 @@
               <FilePath>..\user\int_user.c</FilePath>
             </File>
             <File>
+              <FileName>eeprom.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\eeprom.c</FilePath>
+            </File>
+            <File>
               <FileName>int_user.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\int_user.h</FilePath>
+            </File>
+            <File>
+              <FileName>stc_usb_cdc_32g.LIB</FileName>
+              <FileType>4</FileType>
+              <FilePath>.\stc_usb_cdc_32g.LIB</FilePath>
             </File>
             <File>
               <FileName>AI8051U_32_MDU32.LIB</FileName>
@@ -733,11 +743,6 @@
               <FileName>AI8051U_32_TFPU.LIB</FileName>
               <FileType>4</FileType>
               <FilePath>.\AI8051U_32_TFPU.LIB</FilePath>
-            </File>
-            <File>
-              <FileName>stc_usb_cdc_32g.LIB</FileName>
-              <FileType>4</FileType>
-              <FilePath>.\stc_usb_cdc_32g.LIB</FilePath>
             </File>
           </Files>
         </Group>
@@ -753,11 +758,6 @@
               <FileName>debug_view.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\service\debug_view.h</FilePath>
-            </File>
-            <File>
-              <FileName>eeprom.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\service\eeprom.c</FilePath>
             </File>
             <File>
               <FileName>eeprom.h</FileName>

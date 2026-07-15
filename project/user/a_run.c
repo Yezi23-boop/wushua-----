@@ -36,17 +36,22 @@ void run_time_1(void)
     imu_update_gyro_z_from_imu660rc();
     if (steer_div_10 >= 3)
     {
-        /* 圆桶窗口确认后才切专用方向环，避免元素序列轮到圆桶时起步提前降增益。 */
+        /* 每次方向环更新都先恢复全局参数，使菜单中的Kp2修改可以立即生效。 */
+        PID.steer.Kp = app.speed.kp_Err;
+        PID.steer.Kd = app.speed.kd_Err;
+        PID.steer.Kp2 = app.speed.kp2_Err;
         cylinder_state = a_run_cylinder_get_state();
         if (cylinder_state == CYLINDER_STATE_DECEL)
         {
+            /* 圆桶减速阶段保持最高优先级，沿用圆桶专用Kp/Kd和全局Kp2。 */
             PID.steer.Kp = app.cylinder.kp_Err;
             PID.steer.Kd = app.cylinder.kd_Err;
         }
         else
         {
-            PID.steer.Kp = app.speed.kp_Err;
-            PID.steer.Kd = app.speed.kd_Err;
+            a_run_ring_apply_steer_params(&PID.steer.Kp,
+                                          &PID.steer.Kd,
+                                          &PID.steer.Kp2);
         }
         /* 方向外环根据电感偏差生成差速目标，后续再结合 gyro 阻尼输出最终差速。 */
         pid_steer_update(&PID.steer, Err, 0.0f);

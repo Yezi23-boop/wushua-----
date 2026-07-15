@@ -65,7 +65,12 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     float a_value;
     float b_value;
     float c_value;
-    int16 diff23;
+    float left_signal;
+    float left_middle_signal;
+    float right_middle_signal;
+    float right_signal;
+    float middle_diff;
+    float middle_diff_abs;
     CylinderState cylinder_state;
 
     a_value = app.angle.A_1;
@@ -100,16 +105,34 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
         b_value = app.cross.adc_b_1;
         c_value = app.cross.adc_c_l;
     }
+    a_run_ring_apply_adc_params(&a_value, &b_value, &c_value);
+
+    left_signal = (float)ad11;
+    left_middle_signal = (float)ad22;
+    right_middle_signal = (float)ad33;
+    right_signal = (float)ad44;
+#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
+    /* 圆环模块只修改局部解算值，真实ad1~ad4继续供识别和菜单显示。 */
+    a_run_ring_apply_adc_bias(&left_signal,
+                              &left_middle_signal,
+                              &right_middle_signal,
+                              &right_signal);
+#endif
 
     /* 1) 先计算竖向差分，供分母修正项复用 */
-    diff23 = (int16)ad22 - (int16)ad33;
+    middle_diff = left_middle_signal - right_middle_signal;
+    middle_diff_abs = middle_diff;
+    if (middle_diff_abs < 0.0f)
+    {
+        middle_diff_abs = -middle_diff_abs;
+    }
 
     /* 2) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
-    numer = a_value * ((float)ad11 - (float)ad44) +
-            b_value * ((float)ad22 - (float)ad33);
+    numer = a_value * (left_signal - right_signal) +
+            b_value * middle_diff;
     /* 3) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
-    denom = a_value * ((float)ad11 + (float)ad44) +
-            c_value * (float)func_abs(diff23);
+    denom = a_value * (left_signal + right_signal) +
+            c_value * middle_diff_abs;
 
     /* 4) 分母过小时直接归零，避免瞬态噪声被异常放大 */
     if (denom < 1.0f)

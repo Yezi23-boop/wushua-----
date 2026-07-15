@@ -63,6 +63,16 @@ typedef struct
     float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
     float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入drive_out_ring */
     float drive_out_ring_encoder;   /**< drive_out_ring向外转向段最小距离（cm） */
+    float bias_entry_gain;          /**< 新算法进环阶段外侧电感放大倍数 */
+    float bias_entry_yaw;           /**< 新算法结束进环偏置的累计转角阈值（度） */
+    float bias_entry_encoder;       /**< 新算法结束进环偏置的编码器距离阈值（cm） */
+    float bias_finish_encoder;      /**< 新算法圆环完成的编码器距离阈值（cm） */
+    float adc_a_1;                  /**< 圆环阶段横向主差分权重 */
+    float adc_b_1;                  /**< 圆环阶段辅助电感差分权重 */
+    float adc_c_l;                  /**< 圆环阶段分母补偿权重 */
+    float kp_Err;                   /**< 圆环阶段方向环比例系数 */
+    float kd_Err;                   /**< 圆环阶段方向环微分系数 */
+    float kp2_Err;                  /**< 圆环阶段方向环非线性增强系数 */
 } AppRingConfig;
 
 /**
@@ -140,7 +150,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[260]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 64。 */
+extern uint8 date_buff[300]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 74。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**
