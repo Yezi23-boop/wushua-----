@@ -56,7 +56,7 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_model_items": 6,
         "menu_diff_items": 3,
         "menu_yuanshu_items": 5,
-        "menu_ring_items": 3,
+        "menu_ring_items": 4,
         "menu_ring_p0_items": 3,
         "menu_ring_p1_items": 3,
         "menu_ring_entry_items": 6,
@@ -182,6 +182,7 @@ def test_ring_menu_selects_sensor_bias_or_legacy_subpages_at_compile_time():
 
     assert "#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS" in source
     assert '"profile",&app.ring.profile_select,MENU_META(MENU_ITEM_BOOL,1,0),0' in compact_source
+    assert '"straight_E",&app.ring.entry_straight_encoder' in compact_source
     assert '{"P0",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_P0}' in compact_source
     assert '{"P1",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_P1}' in compact_source
     assert '{"DRIVE",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_DRIVE}' in compact_source
@@ -207,7 +208,7 @@ def test_ring_menu_selects_sensor_bias_or_legacy_subpages_at_compile_time():
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
     assert '"pre_o_Gz", &app.ring.pre_out_ring_Gyroz' in source
     assert '"drv_o_E", &app.ring.drive_out_ring_encoder' in source
-    assert source.count("&app.ring.") == 51
+    assert source.count("&app.ring.") == 52
     assert "ring_data.yaw_delta_sum" not in source
     assert "ring_data.encoder" not in source
 

@@ -360,12 +360,16 @@ static int8 ring_is_entry_signal(void)
 }
 
 /**
- * @brief 新圆环算法不覆盖普通循迹角速度目标。
- * @param angle_target 指向普通循迹角速度目标，当前算法保持其原值。
+ * @brief 新圆环识别后直走阶段强制零角速度，其余阶段保留普通循迹目标。
+ * @param angle_target 指向当前角速度目标。
  */
 void a_run_ring_update_angle_target(float *angle_target)
 {
-    if (ring_data.diff_set != 0.0f)
+    if (ring_state == RING_STATE_ENTRY)
+    {
+        *angle_target = 0.0f;
+    }
+    else if (ring_data.diff_set != 0.0f)
     {
         *angle_target = ring_data.diff_set;
     }
@@ -554,14 +558,27 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
                 ring_data.encoder = 0;
                 ring_data.yaw_delta_sum = 0;
                 ring_data.distance = 1;
-                ring_data.gyro_flat = 1;
-                ring_state = RING_STATE_PRE_RING;
+                ring_data.gyro_flat = 0;
+                ring_state = RING_STATE_ENTRY;
             }
             else if (timeadd(&ring_data.time_l, 300))
             {
                 ring_entry_count = 0;
                 timedestroy(&ring_data.time_l);
             }
+        }
+        break;
+
+    case RING_STATE_ENTRY:
+        ring_data.diff_set = 0;
+        if (ring_data.encoder >= app.ring.entry_straight_encoder)
+        {
+            /* 直走距离不计入进环和结束判定，PRE_RING从独立零点开始积分。 */
+            ring_data.encoder = 0;
+            ring_data.yaw_delta_sum = 0;
+            ring_data.distance = 1;
+            ring_data.gyro_flat = 1;
+            ring_state = RING_STATE_PRE_RING;
         }
         break;
 

@@ -170,6 +170,8 @@ static const MenuItemDef menu_yuanshu_items[] = {
 #if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
 static const MenuItemDef menu_ring_items[] = {
     {"profile", &app.ring.profile_select, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
+    {"straight_E", &app.ring.entry_straight_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
     {"P0", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_P0},
     {"P1", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_P1}};
 

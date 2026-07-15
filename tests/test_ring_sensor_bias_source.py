@@ -143,6 +143,11 @@ def test_sensor_bias_ring_uses_yaw_for_entry_and_encoder_only_for_finish():
 
     assert "#define RING_ENTRY_CONFIRM_COUNT 5u" in source
     assert "else if (timeadd(&ring_data.time_l, 300))" in source
+    assert "ring_state = RING_STATE_ENTRY;" in source
+    assert "case RING_STATE_ENTRY:" in source
+    assert "ring_data.encoder >= app.ring.entry_straight_encoder" in source
+    assert "if (ring_state == RING_STATE_ENTRY)" in source
+    assert "*angle_target = 0.0f;" in source
     assert "ring_state = RING_STATE_PRE_RING;" in source
     assert (
         "ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&\n"
@@ -261,10 +266,14 @@ def test_sensor_bias_profiles_are_independent_and_persisted():
     assert "save_int(config->ring.profile_select, 87);" in source
     assert "bias_finish_yaw" not in header
     assert "bias_finish_yaw" not in source
+    assert "float entry_straight_encoder;" in header
+    assert "config->ring.entry_straight_encoder = 5.0f;" in source
+    assert "config->ring.entry_straight_encoder = read_float(98);" in source
+    assert "save_float(config->ring.entry_straight_encoder, 98);" in source
 
-    assert "uint8 date_buff[392];" in source
-    assert "extern uint8 date_buff[392];" in header
-    assert "#define EEPROM_CONFIG_VERSION 14L" in source
+    assert "uint8 date_buff[396];" in source
+    assert "extern uint8 date_buff[396];" in header
+    assert "#define EEPROM_CONFIG_VERSION 15L" in source
 
 
 def test_ring_menu_only_exposes_parameters_for_selected_mode():
@@ -272,6 +281,7 @@ def test_ring_menu_only_exposes_parameters_for_selected_mode():
 
     assert "#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS" in source
     assert '"profile", &app.ring.profile_select' in source
+    assert '"straight_E", &app.ring.entry_straight_encoder' in source
     assert '"P0", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_P0' in source
     assert '"P1", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_P1' in source
     assert "static const MenuItemDef menu_ring_p0_items[]" in source
