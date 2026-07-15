@@ -97,8 +97,12 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro);
  * @param left_target 输出：左轮目标速度指针
  * @param right_target 输出：右轮目标速度指针
  * @param scope 差速归一化范围
+ * @param inner_gain 内轮减速增益
+ * @param outer_gain 外轮增速增益
  */
-void Pid_Differential(float speed_run, float diff_output, float *left_target, float *right_target, float scope);
+void Pid_Differential(float speed_run, float diff_output,
+                      float *left_target, float *right_target,
+                      float scope, float inner_gain, float outer_gain);
 
 /**
  * @brief 纯追踪算法控制（电感偏差驱动）

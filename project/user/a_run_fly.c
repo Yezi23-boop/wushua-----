@@ -42,7 +42,7 @@ volatile uint8 seesaw_centering_active = 0;          /**< 跷跷板前挪/恢复
 #define FLY_ENTRY_WINDOW_COUNT 10 /* 飞坡入口确认窗口，10 * 2ms = 20ms。 */
 
 /* --- 停止等待模式专用阈值 --- */
-#define SEESAW_DETECT_SIDE_TH 25u    /* 停止等待入口横向电感阈值 */
+#define SEESAW_DETECT_SIDE_TH 20u    /* 停止等待入口横向电感阈值 */
 #define SEESAW_DETECT_CENTER_TH 8u   /* 停止等待入口竖向电感阈值 */
 #define SEESAW_LAND_SIDE_TH 25u      /* CHECK 阶段横向电感恢复阈值 */
 #define SEESAW_LAND_CENTER_TH 10u    /* CHECK 阶段竖向电感恢复阈值 */

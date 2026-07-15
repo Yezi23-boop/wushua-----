@@ -56,6 +56,7 @@ typedef struct
 typedef struct
 {
     float bias_entry_gain;     /**< 进环阶段同侧两路电感放大倍数 */
+    float bias_exit_gain;      /**< 出环阶段对侧两路电感放大倍数 */
     float bias_entry_yaw;      /**< 结束进环偏置的累计转角阈值（度） */
     float bias_entry_encoder;  /**< 结束进环偏置的编码器距离阈值（cm） */
     float bias_finish_encoder; /**< 圆环完成的编码器距离阈值（cm） */
@@ -66,6 +67,10 @@ typedef struct
     float kp_Err;              /**< 圆环阶段方向环比例系数 */
     float kd_Err;              /**< 圆环阶段方向环微分系数 */
     float kp2_Err;             /**< 圆环阶段方向环非线性增强系数 */
+    float kp_Angle;            /**< 圆环阶段角速度内环比例系数 */
+    float kd_Angle;            /**< 圆环阶段角速度内环微分系数 */
+    float diff_inner_gain;     /**< 圆环阶段内轮减速增益 */
+    float diff_outer_gain;     /**< 圆环阶段外轮增速增益 */
 } AppRingProfileConfig;
 
 /**
@@ -160,7 +165,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[352]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 87。 */
+extern uint8 date_buff[392]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 97。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

@@ -41,15 +41,29 @@ def test_ring_implementations_are_selected_by_one_compile_time_macro():
     assert "a_run_ring_sensor_bias.c" not in project
 
 
-def test_sensor_bias_uses_outer_virtual_signal_only_during_pre_ring():
+def test_sensor_bias_reverses_virtual_signal_side_during_out_ring():
     adc = _read(ADC_C)
     _, ring = _ring_mode_sources()
     header = _read(RING_H)
-    left_ring_branch = ring[
-        ring.index("if (ring_data.flast_l != 0)"):
-        ring.index("else if (ring_data.flast_r != 0)")
+    bias_function = ring[
+        ring.index("void a_run_ring_apply_adc_bias(float *left_signal,"):
+        ring.index("void a_run_ring_reset(void)")
     ]
-    right_ring_branch = ring[ring.index("else if (ring_data.flast_r != 0)"):]
+    pre_ring = bias_function[
+        bias_function.index("if (ring_state == RING_STATE_PRE_RING)"):
+        bias_function.index("else if (ring_state == RING_STATE_OUT_RING)")
+    ]
+    out_ring = bias_function[bias_function.index("else if (ring_state == RING_STATE_OUT_RING)"):]
+    pre_left = pre_ring[
+        pre_ring.index("if (ring_data.flast_l != 0)"):
+        pre_ring.index("else if (ring_data.flast_r != 0)")
+    ]
+    pre_right = pre_ring[pre_ring.index("else if (ring_data.flast_r != 0)"):]
+    out_left = out_ring[
+        out_ring.index("if (ring_data.flast_l != 0)"):
+        out_ring.index("else if (ring_data.flast_r != 0)")
+    ]
+    out_right = out_ring[out_ring.index("else if (ring_data.flast_r != 0)"):]
 
     assert "left_signal = (float)ad11;" in adc
     assert "left_middle_signal = (float)ad22;" in adc
@@ -57,13 +71,17 @@ def test_sensor_bias_uses_outer_virtual_signal_only_during_pre_ring():
     assert "right_signal = (float)ad44;" in adc
     assert "a_run_ring_apply_adc_bias(&left_signal," in adc
     assert "void a_run_ring_apply_adc_bias(float *left_signal," in header
-    assert "ring_state != RING_STATE_PRE_RING" in ring
-    assert "*left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in left_ring_branch
-    assert "*left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in left_ring_branch
-    assert "*right_signal" not in left_ring_branch
-    assert "*right_middle_signal" not in left_ring_branch
-    assert "*right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in right_ring_branch
-    assert "*right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in right_ring_branch
+    assert "*left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_left
+    assert "*left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_left
+    assert "*right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_right
+    assert "*right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_right
+    assert "*right_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_left
+    assert "*right_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_left
+    assert "*left_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_right
+    assert "*left_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_right
+    assert "bias_entry_gain" not in out_ring
+    assert "bias_exit_gain" not in pre_ring
+    assert "RING_STATE_IN_RING" not in bias_function
     assert "ad1 *= app.ring.bias_entry_gain" not in adc
     assert "ad4 *= app.ring.bias_entry_gain" not in adc
     assert "a_value * (left_signal - right_signal)" in adc
@@ -72,7 +90,7 @@ def test_sensor_bias_uses_outer_virtual_signal_only_during_pre_ring():
     assert "c_value * middle_diff_abs" in adc
 
 
-def test_ring_uses_independent_adc_weights_until_out_ring():
+def test_ring_uses_independent_adc_weights_through_out_ring():
     adc = _read(ADC_C)
     header = _read(RING_H)
     legacy, bias = _ring_mode_sources()
@@ -83,7 +101,9 @@ def test_ring_uses_independent_adc_weights_until_out_ring():
     assert signature in bias
     assert "a_run_ring_apply_adc_params(&a_value, &b_value, &c_value);" in adc
     assert "ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING" in legacy
-    assert "ring_state == RING_STATE_PRE_RING || ring_state == RING_STATE_IN_RING" in bias
+    assert "ring_state == RING_STATE_PRE_RING ||" in bias
+    assert "ring_state == RING_STATE_IN_RING ||" in bias
+    assert "ring_state == RING_STATE_OUT_RING" in bias
     assert "*a_value = app.ring.profiles[0].adc_a_1;" in legacy
     assert "*b_value = app.ring.profiles[0].adc_b_1;" in legacy
     assert "*c_value = app.ring.profiles[0].adc_c_l;" in legacy
@@ -92,7 +112,7 @@ def test_ring_uses_independent_adc_weights_until_out_ring():
     assert "*c_value = RING_ACTIVE_PROFILE.adc_c_l;" in bias
 
 
-def test_ring_uses_independent_steer_parameters_until_out_ring():
+def test_ring_uses_independent_steer_parameters_through_out_ring():
     runner = _read(A_RUN_C)
     header = _read(RING_H)
     legacy, bias = _ring_mode_sources()
@@ -111,6 +131,11 @@ def test_ring_uses_independent_steer_parameters_until_out_ring():
     assert "*kp = RING_ACTIVE_PROFILE.kp_Err;" in bias
     assert "*kd = RING_ACTIVE_PROFILE.kd_Err;" in bias
     assert "*kp2 = RING_ACTIVE_PROFILE.kp2_Err;" in bias
+    steer_function = bias[
+        bias.index("void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)"):
+        bias.index("void a_run_ring_apply_speed(float *speed)")
+    ]
+    assert "ring_state == RING_STATE_OUT_RING" in steer_function
 
 
 def test_sensor_bias_ring_uses_yaw_for_entry_and_encoder_only_for_finish():
@@ -151,6 +176,37 @@ def test_profile_is_latched_at_entry_and_speed_covers_full_ring():
     )
 
 
+def test_ring_profile_overrides_angle_loop_and_differential_gains():
+    header = _read(RING_H)
+    runner = _read(A_RUN_C)
+    legacy, bias = _ring_mode_sources()
+    signature = "void a_run_ring_apply_angle_diff_params(float *kp,"
+    legacy_control = legacy[legacy.index(signature):legacy.index("/**", legacy.index(signature))]
+    bias_control = bias[bias.index(signature):bias.index("/**", bias.index(signature))]
+
+    assert signature in header
+    assert "ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING" in legacy_control
+    assert "*kp = app.ring.profiles[0].kp_Angle;" in legacy_control
+    assert "*kd = app.ring.profiles[0].kd_Angle;" in legacy_control
+    assert "*inner_gain = app.ring.profiles[0].diff_inner_gain;" in legacy_control
+    assert "*outer_gain = app.ring.profiles[0].diff_outer_gain;" in legacy_control
+
+    assert "ring_state == RING_STATE_PRE_RING ||" in bias_control
+    assert "ring_state == RING_STATE_IN_RING ||" in bias_control
+    assert "ring_state == RING_STATE_OUT_RING" in bias_control
+    assert "*kp = RING_ACTIVE_PROFILE.kp_Angle;" in bias_control
+    assert "*kd = RING_ACTIVE_PROFILE.kd_Angle;" in bias_control
+    assert "*inner_gain = RING_ACTIVE_PROFILE.diff_inner_gain;" in bias_control
+    assert "*outer_gain = RING_ACTIVE_PROFILE.diff_outer_gain;" in bias_control
+
+    global_kp = runner.index("PID.angle.Kp = app.angle.kp_Angle;")
+    global_kd = runner.index("PID.angle.Kd = app.angle.kd_Angle;")
+    apply_ring = runner.index("a_run_ring_apply_angle_diff_params(&PID.angle.Kp,")
+    angle_update = runner.index("pid_angle_update(&PID.angle,")
+    assert global_kp < apply_ring < angle_update
+    assert global_kd < apply_ring
+
+
 def test_sensor_bias_profiles_are_independent_and_persisted():
     header = _read(EEPROM_H)
     source = _read(EEPROM_C)
@@ -161,6 +217,7 @@ def test_sensor_bias_profiles_are_independent_and_persisted():
 
     defaults = {
         (0, "bias_entry_gain"): ("4.00f", 65),
+        (0, "bias_exit_gain"): ("4.00f", 88),
         (0, "bias_entry_yaw"): ("30.00f", 66),
         (0, "bias_entry_encoder"): ("200.00f", 67),
         (0, "kp_Err"): ("8.00f", 68),
@@ -171,7 +228,12 @@ def test_sensor_bias_profiles_are_independent_and_persisted():
         (0, "kd_Err"): ("12.00f", 73),
         (0, "kp2_Err"): ("0.06f", 74),
         (0, "target_speed"): ("50.00f", 75),
+        (0, "kp_Angle"): ("0.92f", 90),
+        (0, "kd_Angle"): ("0.78f", 91),
+        (0, "diff_inner_gain"): ("0.60f", 92),
+        (0, "diff_outer_gain"): ("0.50f", 93),
         (1, "bias_entry_gain"): ("2.00f", 76),
+        (1, "bias_exit_gain"): ("2.00f", 89),
         (1, "bias_entry_yaw"): ("30.00f", 77),
         (1, "bias_entry_encoder"): ("1.00f", 78),
         (1, "bias_finish_encoder"): ("200.00f", 79),
@@ -182,6 +244,10 @@ def test_sensor_bias_profiles_are_independent_and_persisted():
         (1, "kd_Err"): ("12.00f", 84),
         (1, "kp2_Err"): ("0.01f", 85),
         (1, "target_speed"): ("50.00f", 86),
+        (1, "kp_Angle"): ("0.92f", 94),
+        (1, "kd_Angle"): ("0.78f", 95),
+        (1, "diff_inner_gain"): ("0.60f", 96),
+        (1, "diff_outer_gain"): ("0.50f", 97),
     }
     for (profile, field), (value, slot) in defaults.items():
         assert re.search(
@@ -196,9 +262,9 @@ def test_sensor_bias_profiles_are_independent_and_persisted():
     assert "bias_finish_yaw" not in header
     assert "bias_finish_yaw" not in source
 
-    assert "uint8 date_buff[352];" in source
-    assert "extern uint8 date_buff[352];" in header
-    assert "#define EEPROM_CONFIG_VERSION 12L" in source
+    assert "uint8 date_buff[392];" in source
+    assert "extern uint8 date_buff[392];" in header
+    assert "#define EEPROM_CONFIG_VERSION 14L" in source
 
 
 def test_ring_menu_only_exposes_parameters_for_selected_mode():
@@ -206,15 +272,21 @@ def test_ring_menu_only_exposes_parameters_for_selected_mode():
 
     assert "#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS" in source
     assert '"profile", &app.ring.profile_select' in source
-    assert '"P0_ENTRY"' in source
-    assert '"P0_CTRL"' in source
-    assert '"P1_ENTRY"' in source
-    assert '"P1_CTRL"' in source
+    assert '"P0", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_P0' in source
+    assert '"P1", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_P1' in source
+    assert "static const MenuItemDef menu_ring_p0_items[]" in source
+    assert "static const MenuItemDef menu_ring_p1_items[]" in source
+    assert "static const MenuItemDef menu_ring_p1_drive_items[]" in source
     assert '"gain", &app.ring.profiles[0].bias_entry_gain' in source
     assert '"gain", &app.ring.profiles[1].bias_entry_gain' in source
+    assert source.count('"exit_gain", &app.ring.profiles[') == 2
     assert '"finish_Gz"' not in source
     assert source.count('"ring_spd", &app.ring.profiles[') == 2
     assert source.count('"adc_a_1", &app.ring.profiles[') == 3
+    assert source.count('"kp_Ang", &app.ring.profiles[0].kp_Angle') == 2
+    assert source.count('"kp_Ang", &app.ring.profiles[1].kp_Angle') == 1
+    assert source.count('"inner_g", &app.ring.profiles[0].diff_inner_gain') == 2
+    assert source.count('"inner_g", &app.ring.profiles[1].diff_inner_gain') == 1
     assert "#else" in source
     assert '"pre_r_T", &app.ring.pre_ring_Gyro_target' in source
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source

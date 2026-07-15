@@ -28,6 +28,8 @@ void run_time_1(void)
 {
     int8 start_state;
     CylinderState cylinder_state;
+    float diff_inner_gain;
+    float diff_outer_gain;
     steer_div_10++;
     a_run_apply_iap_guard();
     start_state = a_run_mode_get_start_state();
@@ -84,12 +86,21 @@ void run_time_1(void)
         }
         return;
     }
+    PID.angle.Kp = app.angle.kp_Angle;
+    PID.angle.Kd = app.angle.kd_Angle;
+    diff_inner_gain = app.speed.diff_inner_gain;
+    diff_outer_gain = app.speed.diff_outer_gain;
+    a_run_ring_apply_angle_diff_params(&PID.angle.Kp,
+                                       &PID.angle.Kd,
+                                       &diff_inner_gain,
+                                       &diff_outer_gain);
     pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
     if (app.speed.diff_enable != 0)
     {
         Pid_Differential(speed_active, PID.angle.output,
                          &left_target, &right_target,
-                         app.angle.limiting_Angle);
+                         app.angle.limiting_Angle,
+                         diff_inner_gain, diff_outer_gain);
     }
     else
     {

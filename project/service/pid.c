@@ -217,8 +217,12 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
  * @param left_target 输出：左轮目标速度
  * @param right_target 输出：右轮目标速度
  * @param scope 差速归一化范围，正式控制链传入角速度内环限幅
+ * @param inner_gain 内轮减速增益
+ * @param outer_gain 外轮增速增益
  */
-void Pid_Differential(float speed_run, float diff_output, float *left_target, float *right_target, float scope)
+void Pid_Differential(float speed_run, float diff_output,
+                      float *left_target, float *right_target,
+                      float scope, float inner_gain, float outer_gain)
 {
     float ratio;
     float inner_scale;
@@ -237,8 +241,8 @@ void Pid_Differential(float speed_run, float diff_output, float *left_target, fl
 
     /* 小弯保持柔和，大弯快速增强内外轮差速。 */
     ratio = ratio * (0.6f + 0.4f * ratio);
-    inner_scale = 1.0f - app.speed.diff_inner_gain * ratio;
-    outer_scale = 1.0f + app.speed.diff_outer_gain * ratio;
+    inner_scale = 1.0f - inner_gain * ratio;
+    outer_scale = 1.0f + outer_gain * ratio;
 
     if (diff_output >= 0.0f)
     {

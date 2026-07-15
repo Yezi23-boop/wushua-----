@@ -72,6 +72,27 @@ void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)
 }
 
 /**
+ * @brief 旧圆环有效阶段使用profile0的角速度环和差速参数。
+ * @param kp 角速度内环比例系数指针。
+ * @param kd 角速度内环微分系数指针。
+ * @param inner_gain 内轮减速增益指针。
+ * @param outer_gain 外轮增速增益指针。
+ */
+void a_run_ring_apply_angle_diff_params(float *kp,
+                                        float *kd,
+                                        float *inner_gain,
+                                        float *outer_gain)
+{
+    if (ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING)
+    {
+        *kp = app.ring.profiles[0].kp_Angle;
+        *kd = app.ring.profiles[0].kd_Angle;
+        *inner_gain = app.ring.profiles[0].diff_inner_gain;
+        *outer_gain = app.ring.profiles[0].diff_outer_gain;
+    }
+}
+
+/**
  * @brief 复位环岛状态机和环岛输出覆盖量。
  *
  * 菜单关闭圆环或元素切换时清掉阶段、计时和目标角速度覆盖，避免残留控制量影响主控链路。
@@ -360,14 +381,16 @@ RingState a_run_ring_get_state(void)
 }
 
 /**
- * @brief 新圆环进环和环内阶段使用独立ABC参数。
+ * @brief 新圆环进环、环内和出环阶段使用独立ABC参数。
  * @param a_value 横向主差分权重指针。
  * @param b_value 辅助电感差分权重指针。
  * @param c_value 分母补偿权重指针。
  */
 void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)
 {
-    if (ring_state == RING_STATE_PRE_RING || ring_state == RING_STATE_IN_RING)
+    if (ring_state == RING_STATE_PRE_RING ||
+        ring_state == RING_STATE_IN_RING ||
+        ring_state == RING_STATE_OUT_RING)
     {
         *a_value = RING_ACTIVE_PROFILE.adc_a_1;
         *b_value = RING_ACTIVE_PROFILE.adc_b_1;
@@ -376,18 +399,43 @@ void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)
 }
 
 /**
- * @brief 新圆环进环和环内阶段使用独立方向环参数。
+ * @brief 新圆环进环、环内和出环阶段使用独立方向环参数。
  * @param kp 方向环比例系数指针。
  * @param kd 方向环微分系数指针。
  * @param kp2 方向环非线性增强系数指针。
  */
 void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)
 {
-    if (ring_state == RING_STATE_PRE_RING || ring_state == RING_STATE_IN_RING)
+    if (ring_state == RING_STATE_PRE_RING ||
+        ring_state == RING_STATE_IN_RING ||
+        ring_state == RING_STATE_OUT_RING)
     {
         *kp = RING_ACTIVE_PROFILE.kp_Err;
         *kd = RING_ACTIVE_PROFILE.kd_Err;
         *kp2 = RING_ACTIVE_PROFILE.kp2_Err;
+    }
+}
+
+/**
+ * @brief 新圆环有效阶段使用锁存参数组的角速度环和差速参数。
+ * @param kp 角速度内环比例系数指针。
+ * @param kd 角速度内环微分系数指针。
+ * @param inner_gain 内轮减速增益指针。
+ * @param outer_gain 外轮增速增益指针。
+ */
+void a_run_ring_apply_angle_diff_params(float *kp,
+                                        float *kd,
+                                        float *inner_gain,
+                                        float *outer_gain)
+{
+    if (ring_state == RING_STATE_PRE_RING ||
+        ring_state == RING_STATE_IN_RING ||
+        ring_state == RING_STATE_OUT_RING)
+    {
+        *kp = RING_ACTIVE_PROFILE.kp_Angle;
+        *kd = RING_ACTIVE_PROFILE.kd_Angle;
+        *inner_gain = RING_ACTIVE_PROFILE.diff_inner_gain;
+        *outer_gain = RING_ACTIVE_PROFILE.diff_outer_gain;
     }
 }
 
@@ -406,7 +454,7 @@ void a_run_ring_apply_speed(float *speed)
 }
 
 /**
- * @brief 在进环引导阶段放大圆环外侧电感的局部解算值。
+ * @brief 进环时放大入环侧电感，出环时反向放大另一侧电感。
  * @param left_signal 左侧主电感ad1的局部浮点值。
  * @param left_middle_signal 左侧辅助电感ad2的局部浮点值。
  * @param right_middle_signal 右侧辅助电感ad3的局部浮点值。
@@ -417,20 +465,31 @@ void a_run_ring_apply_adc_bias(float *left_signal,
                                float *right_middle_signal,
                                float *right_signal)
 {
-    if (ring_state != RING_STATE_PRE_RING)
+    if (ring_state == RING_STATE_PRE_RING)
     {
-        return;
+        if (ring_data.flast_l != 0)
+        {
+            *left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+            *left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+        }
+        else if (ring_data.flast_r != 0)
+        {
+            *right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+            *right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+        }
     }
-
-    if (ring_data.flast_l != 0)
+    else if (ring_state == RING_STATE_OUT_RING)
     {
-        *left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
-        *left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
-    }
-    else if (ring_data.flast_r != 0)
-    {
-        *right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
-        *right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+        if (ring_data.flast_l != 0)
+        {
+            *right_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
+            *right_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
+        }
+        else if (ring_data.flast_r != 0)
+        {
+            *left_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
+            *left_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
+        }
     }
 }
 
