@@ -180,14 +180,14 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
     switch (expected_element)
     {
     case ELEMENT_LEFT_RING:
-        if (a_run_ring_update_5ms(1) != 0)
+        if (a_run_ring_update_2ms(1) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
     case ELEMENT_RIGHT_RING:
-        if (a_run_ring_update_5ms(-1) != 0)
+        if (a_run_ring_update_2ms(-1) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }

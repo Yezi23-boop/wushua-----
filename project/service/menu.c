@@ -72,6 +72,9 @@ typedef enum
     MENU_PAGE_YUANSHU,
     MENU_PAGE_SENSOR,
     MENU_PAGE_RING,
+    MENU_PAGE_RING_ENTRY,
+    MENU_PAGE_RING_IN,
+    MENU_PAGE_RING_OUT,
     MENU_PAGE_CYLINDER,
     MENU_PAGE_WALL,
     MENU_PAGE_FLY,
@@ -133,7 +136,7 @@ static const MenuItemDef menu_speed_items[] = {
     {"gyro_dmp", &app.speed.gyro_damp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001},
     {"speed_run", &app.speed.speed_run, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
     {"limit_Err", &app.speed.limiting_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_1},
-    {"kp2_Err", &app.speed.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001}};
+    {"kp2_Err", &app.speed.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
 
 static const MenuItemDef menu_model_items[] = {
     {"kp_Ang", &app.angle.kp_Angle, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
@@ -146,9 +149,9 @@ static const MenuItemDef menu_model_items[] = {
 static const MenuItemDef menu_diff_items[] = {
     {"diff_en", &app.speed.diff_enable, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
     {"inner_g", &app.speed.diff_inner_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
     {"outer_g", &app.speed.diff_outer_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
 
 static const MenuItemDef menu_yuanshu_items[] = {
     {"RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING},
@@ -158,12 +161,22 @@ static const MenuItemDef menu_yuanshu_items[] = {
     {"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS}};
 
 static const MenuItemDef menu_ring_items[] = {
+    {"ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_ENTRY},
+    {"IN_RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_IN},
+    {"OUT_RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_OUT}};
+
+static const MenuItemDef menu_ring_entry_items[] = {
     {"entry_E", &app.ring.ring_entry_encoder,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1}};
+
+static const MenuItemDef menu_ring_in_items[] = {
     {"pre_r_T", &app.ring.pre_ring_Gyro_target,
      MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
     {"pre_r_Gz", &app.ring.pre_ring_Gyroz, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
     {"in_r_Gz", &app.ring.in_ring_Gyroz, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
+    {"in_r_E", &app.ring.in_ring_encoder, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1}};
+
+static const MenuItemDef menu_ring_out_items[] = {
     {"pre_o_T", &app.ring.pre_out_ring_Gyro_target,
      MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
     {"pre_o_Gz", &app.ring.pre_out_ring_Gyroz, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
@@ -243,6 +256,12 @@ static const MenuPageDef menu_pages[] = {
     {"<<YUANSHU", menu_yuanshu_items, MENU_ITEM_COUNT(menu_yuanshu_items), MENU_PAGE_HOME},
     {"<<SENSOR", 0, 0, MENU_PAGE_HOME},
     {"<<RING", menu_ring_items, MENU_ITEM_COUNT(menu_ring_items), MENU_PAGE_YUANSHU},
+    {"<<ENTRY", menu_ring_entry_items,
+     MENU_ITEM_COUNT(menu_ring_entry_items), MENU_PAGE_RING},
+    {"<<IN_RING", menu_ring_in_items,
+     MENU_ITEM_COUNT(menu_ring_in_items), MENU_PAGE_RING},
+    {"<<OUT_RING", menu_ring_out_items,
+     MENU_ITEM_COUNT(menu_ring_out_items), MENU_PAGE_RING},
     {"<<CYLINDER", menu_cylinder_items,
      MENU_ITEM_COUNT(menu_cylinder_items), MENU_PAGE_YUANSHU},
     {"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU},
@@ -579,14 +598,6 @@ static void Menu_Draw_Page_Extras(void)
         Menu_Show_Int32(120, 4 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
         ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "R");
         Menu_Show_Int32(120, 5 * MENU_ROW_HEIGHT, a_run_cross_get_state(), 1);
-        break;
-    case MENU_PAGE_RING:
-        ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
-        Menu_Show_Int32(184, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
-        ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "Yd");
-        Menu_Show_Float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
-        ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
-        Menu_Show_Float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
         break;
     case MENU_PAGE_CYLINDER:
         ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "C");

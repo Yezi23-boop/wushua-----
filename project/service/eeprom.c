@@ -1,7 +1,7 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区覆盖逻辑槽位 0~63，每个槽位占 4 字节。 */
-uint8 date_buff[256];
+/* 数据缓冲区覆盖逻辑槽位 0~64，每个槽位占 4 字节。 */
+uint8 date_buff[260];
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 7L
+#define EEPROM_CONFIG_VERSION 8L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -38,8 +38,8 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.fuya_xili = 90.00f; /* 默认平地负压百分比 90 */
     config->start.encoder_stop_distance_cm = 3200.0f;
     config->start.element_len = 4;
-    config->start.element_seq[0] = TRACK_ELEMENT_CROSS;    // TRACK_ELEMENT_CROSS
-    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_WALL
+    config->start.element_seq[0] = TRACK_ELEMENT_RIGHT_RING; // TRACK_ELEMENT_CROSS
+    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;   // TRACK_ELEMENT_WALL
     config->start.element_seq[2] = TRACK_ELEMENT_WALL;
     config->start.element_seq[3] = TRACK_ELEMENT_SEESAW;
     config->start.element_seq[4] = TRACK_ELEMENT_RIGHT_RING;
@@ -51,33 +51,34 @@ static void eeprom_load_defaults(AppConfig *config)
     //    config->start.element_seq[4] = TRACK_ELEMENT_NONE;
     //    config->start.element_seq[5] = TRACK_ELEMENT_NONE;
     /* 转向差速环 PID 默认参数 */
-    config->speed.kp_Err = 9.40f;  // 3.50
-    config->speed.kd_Err = 12.80f; // 2ms 主环第一版保守微分
+    config->speed.kp_Err = 8.00f;  // 3.50
+    config->speed.kd_Err = 12.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
-    config->speed.speed_run = 75.00f;     /* 默认基础速度 60 */
+    config->speed.speed_run = 50.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
-    config->speed.kp2_Err = 0.01f;
+    config->speed.kp2_Err = 0.06f;
     config->speed.diff_enable = 1;
-    config->speed.diff_inner_gain = 0.80f;
-    config->speed.diff_outer_gain = 0.10f;
+    config->speed.diff_inner_gain = 0.60f;
+    config->speed.diff_outer_gain = 0.50f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.kp_Angle = 0.82f;
-    config->angle.kd_Angle = 0.70f; // 2ms 主环第一版保守微分
+    config->angle.kp_Angle = 0.92f;
+    config->angle.kd_Angle = 0.78f; // 2ms 主环第一版保守微分
     config->angle.gyro_feedback_scale = 1.50f;
-    config->angle.limiting_Angle = 70.00f; // 48
+    config->angle.limiting_Angle = 48.00f; // 48
     config->angle.A_1 = 1.00f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 5.0;          /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 25.00f;     /* pre_ring固定目标角速度 */
-    config->ring.pre_ring_Gyroz = 40.00f;           /* pre_ring->in_ring累计转角阈值 */
+    config->ring.ring_entry_encoder = 10.0;          /* ring->pre_ring编码器积分阈值 */
+    config->ring.pre_ring_Gyro_target = 60.00f;     /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 220.00f;           /* in_ring->pre_out_ring累计转角阈值 220 */
-    config->ring.pre_out_ring_Gyro_target = 40.00f; /* pre_out_ring固定目标角速度 25 */
-    config->ring.pre_out_ring_Gyroz = 340.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
-    config->ring.drive_out_ring_encoder = 5.0f;     /* 出环前直走距离（cm） */
+    config->ring.in_ring_encoder = 50.0f;           /* 从pre_ring开始累计的出环打角距离阈值 */
+    config->ring.pre_out_ring_Gyro_target = 30.00f; /* pre_out_ring固定目标角速度 25 */
+    config->ring.pre_out_ring_Gyroz = 300.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
+    config->ring.drive_out_ring_encoder = 5.0f;     /* 出环向外转向段最小距离（cm） */
 
     /* 飞坡策略默认参数 */
     /* 飞坡模式专用 */
@@ -89,21 +90,21 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 停止等待模式专用 */
     config->fly.seesaw_detect_count = 1;    /* IDLE 入口命中次数 */
     config->fly.seesaw_wait_count = 10;     /* 停车保持时间，10 * 2ms = 20ms */
-    config->fly.seesaw_speed = 15;          /* CREEP 阶段目标速度 */
+    config->fly.seesaw_speed = 20;          /* CREEP 阶段目标速度 */
     config->fly.seesaw_creep_cm = 10.00f;   /* 前挪距离，单位 cm */
     config->fly.seesaw_release_step = 0.6f; /* 停止等待 COOLDOWN 步长 */
     /* 共用 */
     config->fly.seesaw_mode = 1; /* 默认飞坡模式（0=飞坡，1=停止等待） */
 
     /* 圆桶策略默认参数，当前步骤只入 EEPROM，不切换运行逻辑。 */
-    config->cylinder.encoder_target = 250.0f;     /* 后续圆桶里程退出阈值 */
+    config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */
     config->cylinder.ad_both_high_threshold = 45; /* 圆桶双路强信号阈值 */
     config->cylinder.adc_a_1 = 1.20f;             /* 圆桶专用横向主差分权重 */
     config->cylinder.adc_b_1 = 1.00f;             /* 圆桶专用竖向差分权重 */
-    config->cylinder.adc_c_l = 1.00f;             /* 保持当前圆桶硬编码 C_l 默认值 */
+    config->cylinder.adc_c_l = 0.60f;             /* 保持当前圆桶硬编码 C_l 默认值 */
     config->cylinder.kp_Err = 1.00f;              /* 圆桶专用方向环比例系数 */
     config->cylinder.kd_Err = 1.00f;              /* 圆桶专用方向环微分系数 */
-    config->cylinder.exit_slow_speed = 40;        /* 圆桶确认后阶梯减速的最低目标速度 */
+    config->cylinder.exit_slow_speed = 60;        /* 圆桶确认后阶梯减速的最低目标速度 */
 
     /* 墙面策略默认参数，保持当前固定宏行为不变。 */
     config->wall.slow_speed = 75;         /* 墙面降速目标值 */
@@ -155,6 +156,7 @@ static void eeprom_read_config(AppConfig *config)
     config->ring.pre_ring_Gyro_target = read_float(17);
     config->ring.pre_ring_Gyroz = read_float(18);
     config->ring.in_ring_Gyroz = read_float(19);
+    config->ring.in_ring_encoder = read_float(64);
     config->ring.pre_out_ring_Gyro_target = read_float(20);
     config->ring.pre_out_ring_Gyroz = read_float(21);
     config->ring.drive_out_ring_encoder = read_float(51);
@@ -233,6 +235,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->ring.pre_ring_Gyro_target, 17);
     save_float(config->ring.pre_ring_Gyroz, 18);
     save_float(config->ring.in_ring_Gyroz, 19);
+    save_float(config->ring.in_ring_encoder, 64);
     save_float(config->ring.pre_out_ring_Gyro_target, 20);
     save_float(config->ring.pre_out_ring_Gyroz, 21);
     save_float(config->ring.drive_out_ring_encoder, 51);
@@ -339,7 +342,7 @@ void eeprom_flash(void)
 static void save_int(int32 input, uint8 value_bit)
 {
     uint8 i;
-    uint8 begin = value_bit * 4;
+    uint16 begin = value_bit * 4;
     uint8 *p = (uint8 *)&input;
 
     for (i = 0; i < 4; i++)
@@ -358,7 +361,7 @@ static void save_int(int32 input, uint8 value_bit)
 static int32 read_int(uint8 value_bit)
 {
     uint8 i;
-    uint8 begin = value_bit * 4;
+    uint16 begin = value_bit * 4;
     int32 output;
     uint8 *p = (uint8 *)&output;
 
@@ -377,7 +380,7 @@ static int32 read_int(uint8 value_bit)
 static void save_float(float input, uint8 value_bit)
 {
     uint8 i;
-    uint8 begin = value_bit * 4;
+    uint16 begin = value_bit * 4;
     uint8 *p = (uint8 *)&input;
 
     for (i = 0; i < 4; i++)
@@ -395,7 +398,7 @@ static void save_float(float input, uint8 value_bit)
 static float read_float(uint8 value_bit)
 {
     uint8 i;
-    uint8 begin = value_bit * 4;
+    uint16 begin = value_bit * 4;
     float output;
     uint8 *p = (uint8 *)&output;
 

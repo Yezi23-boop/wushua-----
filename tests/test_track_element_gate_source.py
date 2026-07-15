@@ -133,9 +133,6 @@ def test_differential_gains_are_persisted_with_menu_defaults():
     assert "save_float(config->speed.diff_inner_gain, 60);" in eeprom_source
     assert "save_float(config->speed.diff_outer_gain, 62);" in eeprom_source
     assert "save_int(config->speed.diff_enable, 27);" in eeprom_source
-    assert "uint8 date_buff[256];" in eeprom_source
-    assert "extern uint8 date_buff[256];" in eeprom_header
-    assert "#define EEPROM_CONFIG_VERSION 7L" in eeprom_source
 
 
 def test_track_element_sequence_supports_current_executable_elements():
@@ -164,8 +161,8 @@ def test_track_element_sequence_supports_current_executable_elements():
     assert "element == ELEMENT_SEESAW" in source
     assert "element == ELEMENT_CROSS" in source
 
-    assert "a_run_ring_update_5ms(1)" in source
-    assert "a_run_ring_update_5ms(-1)" in source
+    assert "a_run_ring_update_2ms(1)" in source
+    assert "a_run_ring_update_2ms(-1)" in source
     assert "a_run_cylinder_update_5ms()" in source
     assert "a_run_fly_update_speed(speed, 1)" in source
     assert "a_run_wall_update_5ms(speed)" in source
@@ -186,26 +183,30 @@ def test_ring_state_is_split_and_directional():
     assert "} RingStruct;" in ring_header
     assert "extern RingStruct ring_data;" in ring_header
     assert "RingStruct ring_data = {0};" in ring_source
-    assert "uint8 a_run_ring_update_5ms(int8 ring_dir)" in ring_source
+    assert "uint8 a_run_ring_update_2ms(int8 ring_dir)" in ring_source
+    assert "uint8 a_run_ring_update_2ms(int8 ring_dir);" in ring_header
+    assert "a_run_ring_update_5ms" not in ring_source
+    assert "a_run_ring_update_5ms" not in ring_header
     assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in ring_source
     assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in ring_source
-    assert "#define RING_ENTRY_CONFIRM_COUNT 8u" in ring_source
+    assert "#define RING_ENTRY_CONFIRM_COUNT 5u" in ring_source
     assert "#define RING_YAW_DT_SCALE 0.40f" in ring_source
     assert "ring_data.yaw_delta_sum += delta_angle * RING_YAW_DT_SCALE;" in ring_source
-    assert "ring_data.encoder += (speed_l + speed_r) * 0.002;" in ring_source
-    assert "a_run_ring_update_5ms(1)" in track_source
-    assert "a_run_ring_update_5ms(-1)" in track_source
+    assert "ring_data.encoder += (speed_l + speed_r) * 0.5f * 0.012f;" in ring_source
+    assert "a_run_ring_update_2ms(1)" in track_source
+    assert "a_run_ring_update_2ms(-1)" in track_source
+    assert "a_run_ring_update_5ms" not in track_source
 
 
 def test_ring_entry_hits_accumulate_inside_timeout_window():
     ring_source = _read(A_RUN_RING_C)
     update_body = _function_body(
         ring_source,
-        "uint8 a_run_ring_update_5ms(int8 ring_dir)",
+        "uint8 a_run_ring_update_2ms(int8 ring_dir)",
         "/**\n * @brief 更新环岛判定所需的里程与转角量。",
     )
     no_ring_body = update_body[
-        update_body.index("case no_ring:"):update_body.index("case ring:")
+        update_body.index("case RING_STATE_IDLE:"):update_body.index("case RING_STATE_ENTRY:")
     ]
 
     assert (
@@ -223,9 +224,83 @@ def test_ring_entry_hits_accumulate_inside_timeout_window():
         "            timedestroy(&ring_data.time_l);\n"
         "        }" not in no_ring_body
     )
-    assert "else if (timeadd(&ring_data.time_l, 1000))" in no_ring_body
+    assert "else if (timeadd(&ring_data.time_l, 300))" in no_ring_body
     assert "ring_entry_count = 0;" in no_ring_body
     assert "timedestroy(&ring_data.time_l);" in no_ring_body
+
+
+def test_ring_pre_out_waits_for_yaw_and_encoder_distance():
+    ring_source = _read(A_RUN_RING_C)
+    eeprom_header = _read(EEPROM_H)
+    eeprom_source = _read(EEPROM_C)
+    entry_body = ring_source[
+        ring_source.index("case RING_STATE_ENTRY:"):
+        ring_source.index("case RING_STATE_PRE_RING:")
+    ]
+    enter_pre_ring_body = entry_body[
+        entry_body.index("if (ring_data.encoder >= app.ring.ring_entry_encoder)"):
+    ]
+    in_ring_body = ring_source[
+        ring_source.index("case RING_STATE_IN_RING:"):
+        ring_source.index("case RING_STATE_PRE_OUT_RING:")
+    ]
+    transition_condition = (
+        "if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&\n"
+        "            ring_data.encoder >= app.ring.in_ring_encoder)"
+    )
+
+    assert enter_pre_ring_body.index("ring_data.encoder = 0;") < enter_pre_ring_body.index(
+        "ring_data.distance = 1;"
+    )
+    assert transition_condition in in_ring_body
+    assert "ring_data.distance = 0;" in in_ring_body
+    assert "float in_ring_encoder;" in eeprom_header
+    assert "config->ring.in_ring_encoder = 50.0f;" in eeprom_source
+    assert "config->ring.in_ring_encoder = read_float(64);" in eeprom_source
+    assert "save_float(config->ring.in_ring_encoder, 64);" in eeprom_source
+    assert eeprom_source.count("uint16 begin = value_bit * 4;") == 4
+    assert "uint8 date_buff[260];" in eeprom_source
+    assert "extern uint8 date_buff[260];" in eeprom_header
+    assert "#define EEPROM_CONFIG_VERSION 8L" in eeprom_source
+
+
+def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():
+    ring_source = _read(A_RUN_RING_C)
+    ring_header = _read(A_RUN_RING_H)
+    angle_body = _function_body(
+        ring_source,
+        "void a_run_ring_update_angle_target(float *angle_target)",
+        "/**\n * @brief 读取当前环岛状态机阶段。",
+    )
+    pre_out_body = ring_source[
+        ring_source.index("case RING_STATE_PRE_OUT_RING:"):
+        ring_source.index("case RING_STATE_DRIVE_OUT_RING:")
+    ]
+    drive_out_body = ring_source[
+        ring_source.index("case RING_STATE_DRIVE_OUT_RING:"):
+        ring_source.index("case RING_STATE_OUT_RING:")
+    ]
+
+    exit_condition = (
+        "if (ring_data.encoder >= app.ring.drive_out_ring_encoder &&\n"
+        "            ad5 < RING_DRIVE_OUT_AD_THRESHOLD &&\n"
+        "            ((ring_dir < 0 && ad1 < RING_DRIVE_OUT_AD_THRESHOLD) ||\n"
+        "             (ring_dir > 0 && ad4 < RING_DRIVE_OUT_AD_THRESHOLD)))"
+    )
+    assert "if (ring_data.diff_set != 0.0f)" in angle_body
+    assert "RING_STATE_DRIVE_OUT_RING" not in angle_body
+    assert "*angle_target = 0.0f;" not in angle_body
+    assert "#define RING_DRIVE_OUT_AD_THRESHOLD 5u" in ring_source
+    assert "ring_data.diff_set = -5 * ring_dir;" in pre_out_body
+    assert "ring_data.diff_set = -5 * ring_dir;" in drive_out_body
+    assert exit_condition in drive_out_body
+    assert drive_out_body.index("ring_data.diff_set = 0;") < drive_out_body.index(
+        "ring_state = RING_STATE_OUT_RING;"
+    )
+    assert "固定向外转向" in ring_header
+    assert "//                stop = 1;" not in ring_source
+    assert "最快约 10ms" in ring_source
+    assert "等效 2ms" in ring_source
 
 
 def test_cylinder_wall_and_fly_are_separate_simple_state_machines():
@@ -508,9 +583,9 @@ def test_track_mode_config_and_menu_reflect_current_debug_state():
     assert "a_run_ring_get_state()" in menu_source
     assert "a_run_cylinder_get_state()" in menu_source
     assert "a_run_wall_get_state()" in menu_source
-    assert "ring_data.yaw_delta_sum" in menu_source
-    assert "ring_data.encoder" in menu_source
-    assert "ring_data.diff_set" in menu_source
+    assert "ring_data.yaw_delta_sum" not in menu_source
+    assert "ring_data.encoder" not in menu_source
+    assert "ring_data.diff_set" not in menu_source
     assert '"trk_mode"' not in menu_source
 
 

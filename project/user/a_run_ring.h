@@ -13,7 +13,7 @@ typedef enum
     RING_STATE_PRE_RING = 2,       /**< 预入环阶段。 */
     RING_STATE_IN_RING = 3,        /**< 环内阶段。 */
     RING_STATE_PRE_OUT_RING = 4,   /**< 预出环阶段。 */
-    RING_STATE_DRIVE_OUT_RING = 5, /**< 出环前直走阶段。 */
+    RING_STATE_DRIVE_OUT_RING = 5, /**< 达到最小距离后按外侧电感和 ad5 确认的固定向外转向阶段。 */
     RING_STATE_OUT_RING = 6        /**< 出环确认阶段。 */
 } RingState;
 
@@ -46,11 +46,11 @@ extern RingStruct ring_data;
 void a_run_ring_reset(void);
 
 /**
- * @brief 按主控制环周期更新圆环状态机。
+ * @brief 按 2ms 主控制环周期更新圆环状态机。
  * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
  * @return uint8 1-当前圆环流程完成，0-未完成。
  */
-uint8 a_run_ring_update_5ms(int8 ring_dir);
+uint8 a_run_ring_update_2ms(int8 ring_dir);
 
 /**
  * @brief 根据圆环状态更新角速度目标。

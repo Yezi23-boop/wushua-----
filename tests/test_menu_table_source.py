@@ -56,7 +56,10 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_model_items": 6,
         "menu_diff_items": 3,
         "menu_yuanshu_items": 5,
-        "menu_ring_items": 7,
+        "menu_ring_items": 3,
+        "menu_ring_entry_items": 1,
+        "menu_ring_in_items": 4,
+        "menu_ring_out_items": 3,
         "menu_cylinder_items": 6,
         "menu_wall_items": 4,
         "menu_fly_items": 6,
@@ -74,6 +77,9 @@ def test_menu_page_counts_and_parent_links_are_complete():
     assert '{"<<WALL",menu_wall_items,MENU_ITEM_COUNT(menu_wall_items),MENU_PAGE_YUANSHU}' in compact_source
     assert '{"<<CROSS",menu_cross_items,MENU_ITEM_COUNT(menu_cross_items),MENU_PAGE_YUANSHU}' in compact_source
     assert '{"<<DIFF",menu_diff_items,MENU_ITEM_COUNT(menu_diff_items),MENU_PAGE_HOME}' in compact_source
+    assert '{"<<ENTRY",menu_ring_entry_items,MENU_ITEM_COUNT(menu_ring_entry_items),MENU_PAGE_RING}' in compact_source
+    assert '{"<<IN_RING",menu_ring_in_items,MENU_ITEM_COUNT(menu_ring_in_items),MENU_PAGE_RING}' in compact_source
+    assert '{"<<OUT_RING",menu_ring_out_items,MENU_ITEM_COUNT(menu_ring_out_items),MENU_PAGE_RING}' in compact_source
     assert '{"<<ELEM",menu_element_len_items,MENU_ITEM_COUNT(menu_element_len_items),MENU_PAGE_START}' in compact_source
     assert '{"<<ELEM",menu_element_items,MENU_ITEM_COUNT(menu_element_items),MENU_PAGE_ELEMENT_LEN}' in compact_source
 
@@ -133,6 +139,35 @@ def test_start_menu_exposes_encoder_stop_distance_in_centimeters():
 
     assert '"stop_cm", &app.start.encoder_stop_distance_cm' in start
     assert "MENU_META(MENU_ITEM_FLOAT, 4, 0), MENU_FLOAT_STEP_10" in start
+
+
+def test_ring_menu_uses_entry_in_and_out_subpages():
+    source = _read(MENU_C)
+    compact_source = _without_whitespace(source)
+    ring = _item_block(source, "menu_ring_items")
+    entry = _item_block(source, "menu_ring_entry_items")
+    ring_in = _item_block(source, "menu_ring_in_items")
+    ring_out = _item_block(source, "menu_ring_out_items")
+
+    assert '{"ENTRY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_ENTRY}' in compact_source
+    assert '{"IN_RING",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_IN}' in compact_source
+    assert '{"OUT_RING",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_OUT}' in compact_source
+    assert "&app.ring." not in ring
+    assert '"entry_E", &app.ring.ring_entry_encoder' in entry
+    assert '"pre_r_T", &app.ring.pre_ring_Gyro_target' in ring_in
+    assert '"pre_r_Gz", &app.ring.pre_ring_Gyroz' in ring_in
+    assert '"in_r_Gz", &app.ring.in_ring_Gyroz' in ring_in
+    assert '"in_r_E", &app.ring.in_ring_encoder' in ring_in
+    assert (
+        '"in_r_E",&app.ring.in_ring_encoder,'
+        "MENU_META(MENU_ITEM_FLOAT,3,2),MENU_FLOAT_STEP_1"
+    ) in _without_whitespace(ring_in)
+    assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in ring_out
+    assert '"pre_o_Gz", &app.ring.pre_out_ring_Gyroz' in ring_out
+    assert '"drv_o_E", &app.ring.drive_out_ring_encoder' in ring_out
+    assert source.count("&app.ring.") == 8
+    assert "ring_data.yaw_delta_sum" not in source
+    assert "ring_data.encoder" not in source
 
 
 def test_menu_integer_steps_are_named_and_source_is_consistently_wrapped():

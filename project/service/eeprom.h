@@ -59,9 +59,10 @@ typedef struct
     float pre_ring_Gyro_target;     /**< pre_ring阶段固定目标角速度 */
     float pre_ring_Gyroz;           /**< pre_ring阶段累计转角阈值，达到后进入in_ring */
     float in_ring_Gyroz;            /**< in_ring阶段累计转角阈值，达到后进入pre_out_ring */
+    float in_ring_encoder;          /**< 从pre_ring开始累计的出环打角距离阈值（cm） */
     float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
     float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入drive_out_ring */
-    float drive_out_ring_encoder;   /**< drive_out_ring直走段编码器阈值（cm），达到后进入out_ring */
+    float drive_out_ring_encoder;   /**< drive_out_ring向外转向段最小距离（cm） */
 } AppRingConfig;
 
 /**
@@ -139,7 +140,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[256]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 63。 */
+extern uint8 date_buff[260]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 64。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

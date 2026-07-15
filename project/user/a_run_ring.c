@@ -5,16 +5,16 @@
 #include "zf_common_headfile.h"
 #include "a_run_ring.h"
 
-#define RING_ENTRY_CONFIRM_COUNT 5u /* 圆环入口连续确认次数，2ms 调用下约 16ms。 */
-#define RING_YAW_DT_SCALE 0.40f     /* yaw 积分缩放系数 0.40f：圆环状态机以 5ms 周期运行， \
-                                     * gyro_z 每周期增量需乘 0.40（≈2ms/5ms）以保持与迁移前 2ms 周期等效的累计角度。 */
+#define RING_ENTRY_CONFIRM_COUNT 5u    /* 300ms 窗口累计命中次数，2ms 调用下最快约 10ms。 */
+#define RING_YAW_DT_SCALE 0.40f        /* gyro_z 已缩放 0.005，二者相乘等效 2ms 角度积分。 */
+#define RING_DRIVE_OUT_AD_THRESHOLD 5u /* 出环结束时外侧电感和 ad5 的共同阈值。 */
 
 static int8 ring_is_left_entry_signal(void);
 static int8 ring_is_right_entry_signal(void);
 
 static RingState ring_state = RING_STATE_IDLE; /**< 当前圆环状态机阶段，左右圆环共用。 */
 RingStruct ring_data = {0};                    /**< 环岛过程数据，菜单和调试界面允许直接读取。 */
-static uint8 ring_entry_count = 0;             /**< 圆环入口连续确认计数，由 2ms 状态机递增。 */
+static uint8 ring_entry_count = 0;             /**< 300ms 窗口内的圆环入口累计命中次数。 */
 
 /**
  * @brief 根据环岛状态更新角速度目标。
@@ -22,7 +22,7 @@ static uint8 ring_entry_count = 0;             /**< 圆环入口连续确认计�
  */
 void a_run_ring_update_angle_target(float *angle_target)
 {
-    if (ring_data.diff_set != 0)
+    if (ring_data.diff_set != 0.0f)
     {
         *angle_target = ring_data.diff_set;
     }
@@ -99,11 +99,11 @@ static int8 ring_is_right_entry_signal(void)
 }
 
 /**
- * @brief 圆环状态机更新。
+ * @brief 按 2ms 主控制周期更新圆环状态机。
  * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
  * @return uint8 1-当前圆环流程完成，0-未完成。
  */
-uint8 a_run_ring_update_5ms(int8 ring_dir)
+uint8 a_run_ring_update_2ms(int8 ring_dir)
 {
     int8 entry_signal;
 
@@ -138,7 +138,6 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
             /* 首次命中后开启窗口，窗口内累计命中次数，避免单拍电感抖动打断进环确认。 */
             if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
             {
-                //                stop = 1;
                 ring_entry_count = 0;
                 timedestroy(&ring_data.time_l);
                 if (ring_dir > 0)
@@ -167,8 +166,8 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         ring_data.yaw_delta_sum = 0;
         if (ring_data.encoder >= app.ring.ring_entry_encoder)
         {
-            ring_data.distance = 0;
             ring_data.encoder = 0;
+            ring_data.distance = 1;
             ring_data.last_yaw = 0;
             ring_data.gyro_flat = 1;
             ring_data.yaw_delta_sum = 0;
@@ -186,8 +185,10 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         break;
 
     case RING_STATE_IN_RING:
-        if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz)
+        if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&
+            ring_data.encoder >= app.ring.in_ring_encoder)
         {
+            ring_data.distance = 0;
             ring_state = RING_STATE_PRE_OUT_RING;
         }
         break;
@@ -196,7 +197,8 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_out_ring_Gyroz)
         {
-            ring_data.diff_set = 0;
+					            stop = 1;
+            ring_data.diff_set = -5 * ring_dir;
             ring_data.encoder = 0;
             ring_data.distance = 1;
             ring_state = RING_STATE_DRIVE_OUT_RING;
@@ -204,10 +206,13 @@ uint8 a_run_ring_update_5ms(int8 ring_dir)
         break;
 
     case RING_STATE_DRIVE_OUT_RING:
-        ring_data.diff_set = 0 * ring_dir;
-        if (ring_data.encoder >= app.ring.drive_out_ring_encoder)
+        ring_data.diff_set = -5 * ring_dir;
+        if (ring_data.encoder >= app.ring.drive_out_ring_encoder &&
+            ad5 < RING_DRIVE_OUT_AD_THRESHOLD &&
+            ((ring_dir < 0 && ad1 < RING_DRIVE_OUT_AD_THRESHOLD) ||
+             (ring_dir > 0 && ad4 < RING_DRIVE_OUT_AD_THRESHOLD)))
         {
-
+            ring_data.diff_set = 0;
             ring_data.distance = 0;
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;
