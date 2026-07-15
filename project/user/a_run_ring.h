@@ -17,7 +17,7 @@
 typedef enum
 {
     RING_STATE_IDLE = 0,           /**< 未进入圆环流程。 */
-    RING_STATE_ENTRY = 1,          /**< 已识别圆环入口，按里程推进。 */
+    RING_STATE_ENTRY = 1,          /**< 已识别圆环入口；新模式在该阶段零角速度直走。 */
     RING_STATE_PRE_RING = 2,       /**< 预入环阶段；新算法在该阶段放大外侧电感。 */
     RING_STATE_IN_RING = 3,        /**< 环内阶段。 */
     RING_STATE_PRE_OUT_RING = 4,   /**< 预出环阶段。 */

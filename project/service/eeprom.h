@@ -86,6 +86,7 @@ typedef struct
     float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
     float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入drive_out_ring */
     float drive_out_ring_encoder;   /**< drive_out_ring向外转向段最小距离（cm） */
+    float entry_straight_encoder;   /**< 新圆环识别后零角速度直走距离（cm） */
     int16 profile_select;           /**< 新算法参数组选择：0-profile0，1-profile1 */
     AppRingProfileConfig profiles[2]; /**< 两套可独立保存和调节的电感偏置圆环参数 */
 } AppRingConfig;
@@ -165,7 +166,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[392]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 97。 */
+extern uint8 date_buff[396]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 98。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**
