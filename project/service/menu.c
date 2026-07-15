@@ -163,21 +163,63 @@ static const MenuItemDef menu_yuanshu_items[] = {
 
 #if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
 static const MenuItemDef menu_ring_items[] = {
-    {"BIAS_ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_ENTRY},
-    {"FINISH", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_IN},
-    {"ADC", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_ADC}};
+    {"profile", &app.ring.profile_select, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
+    {"P0_ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_ENTRY},
+    {"P0_CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_IN},
+    {"P1_ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_OUT},
+    {"P1_CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_ADC}};
 
 static const MenuItemDef menu_ring_entry_items[] = {
-    {"gain", &app.ring.bias_entry_gain,
+    {"gain", &app.ring.profiles[0].bias_entry_gain,
      MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
-    {"entry_Gz", &app.ring.bias_entry_yaw,
+    {"entry_Gz", &app.ring.profiles[0].bias_entry_yaw,
      MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
-    {"entry_E", &app.ring.bias_entry_encoder,
+    {"entry_E", &app.ring.profiles[0].bias_entry_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"finish_E", &app.ring.profiles[0].bias_finish_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"ring_spd", &app.ring.profiles[0].target_speed,
      MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1}};
 
 static const MenuItemDef menu_ring_in_items[] = {
-    {"finish_E", &app.ring.bias_finish_encoder,
+    {"adc_a_1", &app.ring.profiles[0].adc_a_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.ring.profiles[0].adc_b_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.ring.profiles[0].adc_c_l,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.ring.profiles[0].kp_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.ring.profiles[0].kd_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.ring.profiles[0].kp2_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+static const MenuItemDef menu_ring_out_items[] = {
+    {"gain", &app.ring.profiles[1].bias_entry_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"entry_Gz", &app.ring.profiles[1].bias_entry_yaw,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"entry_E", &app.ring.profiles[1].bias_entry_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"finish_E", &app.ring.profiles[1].bias_finish_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"ring_spd", &app.ring.profiles[1].target_speed,
      MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1}};
+
+static const MenuItemDef menu_ring_adc_items[] = {
+    {"adc_a_1", &app.ring.profiles[1].adc_a_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.ring.profiles[1].adc_b_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.ring.profiles[1].adc_c_l,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.ring.profiles[1].kp_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.ring.profiles[1].kd_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.ring.profiles[1].kp2_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
 
 #else
 static const MenuItemDef menu_ring_items[] = {
@@ -204,16 +246,21 @@ static const MenuItemDef menu_ring_out_items[] = {
     {"drv_o_E", &app.ring.drive_out_ring_encoder,
      MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1}};
 
-#endif
-
 static const MenuItemDef menu_ring_adc_items[] = {
-    {"adc_a_1", &app.ring.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"adc_b_1", &app.ring.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"adc_c_l", &app.ring.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"kp_Err", &app.ring.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
-    {"kd_Err", &app.ring.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
-    {"kp2_Err", &app.ring.kp2_Err,
+    {"adc_a_1", &app.ring.profiles[0].adc_a_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.ring.profiles[0].adc_b_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.ring.profiles[0].adc_c_l,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.ring.profiles[0].kp_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.ring.profiles[0].kd_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.ring.profiles[0].kp2_Err,
      MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+#endif
 
 static const MenuItemDef menu_cylinder_items[] = {
     {"cyl_enc", &app.cylinder.encoder_target,
@@ -289,11 +336,14 @@ static const MenuPageDef menu_pages[] = {
     {"<<SENSOR", 0, 0, MENU_PAGE_HOME},
     {"<<RING", menu_ring_items, MENU_ITEM_COUNT(menu_ring_items), MENU_PAGE_YUANSHU},
 #if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
-    {"<<BIAS_ENTRY", menu_ring_entry_items,
+    {"<<P0_ENTRY", menu_ring_entry_items,
      MENU_ITEM_COUNT(menu_ring_entry_items), MENU_PAGE_RING},
-    {"<<FINISH", menu_ring_in_items,
+    {"<<P0_CTRL", menu_ring_in_items,
      MENU_ITEM_COUNT(menu_ring_in_items), MENU_PAGE_RING},
-    {"<<RING", 0, 0, MENU_PAGE_RING},
+    {"<<P1_ENTRY", menu_ring_out_items,
+     MENU_ITEM_COUNT(menu_ring_out_items), MENU_PAGE_RING},
+    {"<<P1_CTRL", menu_ring_adc_items,
+     MENU_ITEM_COUNT(menu_ring_adc_items), MENU_PAGE_RING},
 #else
     {"<<ENTRY", menu_ring_entry_items,
      MENU_ITEM_COUNT(menu_ring_entry_items), MENU_PAGE_RING},
@@ -301,9 +351,9 @@ static const MenuPageDef menu_pages[] = {
      MENU_ITEM_COUNT(menu_ring_in_items), MENU_PAGE_RING},
     {"<<OUT_RING", menu_ring_out_items,
      MENU_ITEM_COUNT(menu_ring_out_items), MENU_PAGE_RING},
-#endif
     {"<<ADC", menu_ring_adc_items,
      MENU_ITEM_COUNT(menu_ring_adc_items), MENU_PAGE_RING},
+#endif
     {"<<CYLINDER", menu_cylinder_items,
      MENU_ITEM_COUNT(menu_cylinder_items), MENU_PAGE_YUANSHU},
     {"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU},

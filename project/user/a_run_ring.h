@@ -95,6 +95,12 @@ void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2);
 
 #if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
 /**
+ * @brief 圆环运行阶段使用锁存参数组的目标速度。
+ * @param speed 当前控制链目标速度指针。
+ */
+void a_run_ring_apply_speed(float *speed);
+
+/**
  * @brief 在电感偏置进环阶段放大外侧电感的局部解算值。
  * @param left_signal 左侧主电感ad1的局部浮点值，左环时按菜单增益放大。
  * @param left_middle_signal 左侧辅助电感ad2的局部浮点值，左环时按菜单增益放大。

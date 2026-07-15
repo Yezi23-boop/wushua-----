@@ -237,5 +237,8 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
     }
 
     a_run_fly_update_release_speed(speed);
+#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
+    a_run_ring_apply_speed(speed);
+#endif
     a_run_ring_update_angle_target(angle_target);
 }

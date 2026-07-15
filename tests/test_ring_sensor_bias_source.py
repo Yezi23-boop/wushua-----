@@ -7,6 +7,7 @@ RING_H = ROOT / "project" / "user" / "a_run_ring.h"
 RING_LEGACY_C = ROOT / "project" / "user" / "a_run_ring.c"
 ADC_C = ROOT / "project" / "user" / "ADC.c"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
+A_RUN_TRACK_ELEMENT_C = ROOT / "project" / "user" / "a_run_track_element.c"
 EEPROM_H = ROOT / "project" / "service" / "eeprom.h"
 EEPROM_C = ROOT / "project" / "service" / "eeprom.c"
 MENU_C = ROOT / "project" / "service" / "menu.c"
@@ -57,12 +58,12 @@ def test_sensor_bias_uses_outer_virtual_signal_only_during_pre_ring():
     assert "a_run_ring_apply_adc_bias(&left_signal," in adc
     assert "void a_run_ring_apply_adc_bias(float *left_signal," in header
     assert "ring_state != RING_STATE_PRE_RING" in ring
-    assert "*left_signal *= app.ring.bias_entry_gain;" in left_ring_branch
-    assert "*left_middle_signal *= app.ring.bias_entry_gain;" in left_ring_branch
+    assert "*left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in left_ring_branch
+    assert "*left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in left_ring_branch
     assert "*right_signal" not in left_ring_branch
     assert "*right_middle_signal" not in left_ring_branch
-    assert "*right_middle_signal *= app.ring.bias_entry_gain;" in right_ring_branch
-    assert "*right_signal *= app.ring.bias_entry_gain;" in right_ring_branch
+    assert "*right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in right_ring_branch
+    assert "*right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in right_ring_branch
     assert "ad1 *= app.ring.bias_entry_gain" not in adc
     assert "ad4 *= app.ring.bias_entry_gain" not in adc
     assert "a_value * (left_signal - right_signal)" in adc
@@ -83,10 +84,12 @@ def test_ring_uses_independent_adc_weights_until_out_ring():
     assert "a_run_ring_apply_adc_params(&a_value, &b_value, &c_value);" in adc
     assert "ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING" in legacy
     assert "ring_state == RING_STATE_PRE_RING || ring_state == RING_STATE_IN_RING" in bias
-    for source in (legacy, bias):
-        assert "*a_value = app.ring.adc_a_1;" in source
-        assert "*b_value = app.ring.adc_b_1;" in source
-        assert "*c_value = app.ring.adc_c_l;" in source
+    assert "*a_value = app.ring.profiles[0].adc_a_1;" in legacy
+    assert "*b_value = app.ring.profiles[0].adc_b_1;" in legacy
+    assert "*c_value = app.ring.profiles[0].adc_c_l;" in legacy
+    assert "*a_value = RING_ACTIVE_PROFILE.adc_a_1;" in bias
+    assert "*b_value = RING_ACTIVE_PROFILE.adc_b_1;" in bias
+    assert "*c_value = RING_ACTIVE_PROFILE.adc_c_l;" in bias
 
 
 def test_ring_uses_independent_steer_parameters_until_out_ring():
@@ -102,10 +105,12 @@ def test_ring_uses_independent_steer_parameters_until_out_ring():
     assert "PID.steer.Kd = app.speed.kd_Err;" in runner
     assert "PID.steer.Kp2 = app.speed.kp2_Err;" in runner
     assert "a_run_ring_apply_steer_params(&PID.steer.Kp," in runner
-    for source in (legacy, bias):
-        assert "*kp = app.ring.kp_Err;" in source
-        assert "*kd = app.ring.kd_Err;" in source
-        assert "*kp2 = app.ring.kp2_Err;" in source
+    assert "*kp = app.ring.profiles[0].kp_Err;" in legacy
+    assert "*kd = app.ring.profiles[0].kd_Err;" in legacy
+    assert "*kp2 = app.ring.profiles[0].kp2_Err;" in legacy
+    assert "*kp = RING_ACTIVE_PROFILE.kp_Err;" in bias
+    assert "*kd = RING_ACTIVE_PROFILE.kd_Err;" in bias
+    assert "*kp2 = RING_ACTIVE_PROFILE.kp2_Err;" in bias
 
 
 def test_sensor_bias_ring_uses_yaw_for_entry_and_encoder_only_for_finish():
@@ -115,74 +120,101 @@ def test_sensor_bias_ring_uses_yaw_for_entry_and_encoder_only_for_finish():
     assert "else if (timeadd(&ring_data.time_l, 300))" in source
     assert "ring_state = RING_STATE_PRE_RING;" in source
     assert (
-        "ring_data.yaw_delta_sum >= app.ring.bias_entry_yaw &&\n"
-        "            ring_data.encoder >= app.ring.bias_entry_encoder"
+        "ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&\n"
+        "            ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder"
     ) in source
     assert "ring_data.gyro_flat = 0;" in source
-    assert "if (ring_data.encoder >= app.ring.bias_finish_encoder)" in source
+    assert "if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder)" in source
     assert "bias_finish_yaw" not in source
     assert "timeadd(&ring_data.out_ring_time, 200)" in source
     assert "ring_data.diff_set = app.ring" not in source
     assert "ring_data.encoder += (speed_l + speed_r) * 0.5f * 0.012f;" in source
 
 
-def test_sensor_bias_parameters_are_independent_and_persisted():
+def test_profile_is_latched_at_entry_and_speed_covers_full_ring():
+    _, source = _ring_mode_sources()
+    track = _read(A_RUN_TRACK_ELEMENT_C)
+
+    assert "static uint8 ring_profile_active = 0;" in source
+    assert "ring_profile_active = (uint8)app.ring.profile_select;" in source
+    assert "#define RING_ACTIVE_PROFILE (app.ring.profiles[ring_profile_active])" in source
+    assert "void a_run_ring_apply_speed(float *speed)" in source
+    assert "ring_state == RING_STATE_PRE_RING" in source
+    assert "ring_state == RING_STATE_IN_RING" in source
+    assert "ring_state == RING_STATE_OUT_RING" in source
+    assert "*speed = RING_ACTIVE_PROFILE.target_speed;" in source
+    assert "stop=1" not in source
+    assert "stop = 1" not in source
+    assert "a_run_ring_apply_speed(speed);" in track
+    assert track.index("a_run_fly_update_release_speed(speed);") < track.index(
+        "a_run_ring_apply_speed(speed);"
+    )
+
+
+def test_sensor_bias_profiles_are_independent_and_persisted():
     header = _read(EEPROM_H)
     source = _read(EEPROM_C)
 
-    for field in (
-        "bias_entry_gain",
-        "bias_entry_yaw",
-        "bias_entry_encoder",
-        "bias_finish_encoder",
-    ):
-        assert f"float {field};" in header
+    assert "} AppRingProfileConfig;" in header
+    assert "int16 profile_select;" in header
+    assert "AppRingProfileConfig profiles[2];" in header
 
     defaults = {
-        "bias_entry_gain": ("4.00f", 65),
-        "bias_entry_yaw": ("30.00f", 66),
-        "bias_entry_encoder": ("200.00f", 67),
-        "bias_finish_encoder": ("1.00f", 69),
-        "adc_a_1": ("1.00f", 70),
-        "adc_b_1": ("1.20f", 71),
-        "adc_c_l": ("0.60f", 72),
-        "kp_Err": ("8.00f", 68),
-        "kd_Err": ("12.00f", 73),
-        "kp2_Err": ("0.06f", 74),
+        (0, "bias_entry_gain"): ("4.00f", 65),
+        (0, "bias_entry_yaw"): ("30.00f", 66),
+        (0, "bias_entry_encoder"): ("200.00f", 67),
+        (0, "kp_Err"): ("8.00f", 68),
+        (0, "bias_finish_encoder"): ("1.00f", 69),
+        (0, "adc_a_1"): ("1.00f", 70),
+        (0, "adc_b_1"): ("1.20f", 71),
+        (0, "adc_c_l"): ("0.60f", 72),
+        (0, "kd_Err"): ("12.00f", 73),
+        (0, "kp2_Err"): ("0.06f", 74),
+        (0, "target_speed"): ("50.00f", 75),
+        (1, "bias_entry_gain"): ("2.00f", 76),
+        (1, "bias_entry_yaw"): ("30.00f", 77),
+        (1, "bias_entry_encoder"): ("1.00f", 78),
+        (1, "bias_finish_encoder"): ("200.00f", 79),
+        (1, "adc_a_1"): ("1.20f", 80),
+        (1, "adc_b_1"): ("1.00f", 81),
+        (1, "adc_c_l"): ("0.60f", 82),
+        (1, "kp_Err"): ("8.00f", 83),
+        (1, "kd_Err"): ("12.00f", 84),
+        (1, "kp2_Err"): ("0.01f", 85),
+        (1, "target_speed"): ("50.00f", 86),
     }
-    for field, (value, slot) in defaults.items():
+    for (profile, field), (value, slot) in defaults.items():
         assert re.search(
-            rf"config->ring\.{field}\s*=\s*{re.escape(value)};",
+            rf"config->ring\.profiles\[{profile}\]\.{field}\s*=\s*{re.escape(value)};",
             source,
         )
-        assert f"config->ring.{field} = read_float({slot});" in source
-        assert f"save_float(config->ring.{field}, {slot});" in source
+        assert f"config->ring.profiles[{profile}].{field} = read_float({slot});" in source
+        assert f"save_float(config->ring.profiles[{profile}].{field}, {slot});" in source
+    assert "config->ring.profile_select = 0;" in source
+    assert "config->ring.profile_select = (int16)read_int(87);" in source
+    assert "save_int(config->ring.profile_select, 87);" in source
     assert "bias_finish_yaw" not in header
     assert "bias_finish_yaw" not in source
 
-    assert "uint8 date_buff[300];" in source
-    assert "extern uint8 date_buff[300];" in header
-    assert "#define EEPROM_CONFIG_VERSION 11L" in source
+    assert "uint8 date_buff[352];" in source
+    assert "extern uint8 date_buff[352];" in header
+    assert "#define EEPROM_CONFIG_VERSION 12L" in source
 
 
 def test_ring_menu_only_exposes_parameters_for_selected_mode():
     source = _read(MENU_C)
 
     assert "#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS" in source
-    assert '"BIAS_ENTRY"' in source
-    assert '"FINISH"' in source
-    assert '"gain", &app.ring.bias_entry_gain' in source
-    assert '"entry_Gz", &app.ring.bias_entry_yaw' in source
-    assert '"entry_E", &app.ring.bias_entry_encoder' in source
+    assert '"profile", &app.ring.profile_select' in source
+    assert '"P0_ENTRY"' in source
+    assert '"P0_CTRL"' in source
+    assert '"P1_ENTRY"' in source
+    assert '"P1_CTRL"' in source
+    assert '"gain", &app.ring.profiles[0].bias_entry_gain' in source
+    assert '"gain", &app.ring.profiles[1].bias_entry_gain' in source
     assert '"finish_Gz"' not in source
-    assert '"finish_E", &app.ring.bias_finish_encoder' in source
-    assert '"ADC"' in source
-    assert '"adc_a_1", &app.ring.adc_a_1' in source
-    assert '"adc_b_1", &app.ring.adc_b_1' in source
-    assert '"adc_c_l", &app.ring.adc_c_l' in source
-    assert '"kp_Err", &app.ring.kp_Err' in source
-    assert '"kd_Err", &app.ring.kd_Err' in source
-    assert '"kp2_Err", &app.ring.kp2_Err' in source
+    assert source.count('"ring_spd", &app.ring.profiles[') == 2
+    assert source.count('"adc_a_1", &app.ring.profiles[') == 3
     assert "#else" in source
     assert '"pre_r_T", &app.ring.pre_ring_Gyro_target' in source
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source

@@ -49,9 +49,9 @@ void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)
 {
     if (ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING)
     {
-        *a_value = app.ring.adc_a_1;
-        *b_value = app.ring.adc_b_1;
-        *c_value = app.ring.adc_c_l;
+        *a_value = app.ring.profiles[0].adc_a_1;
+        *b_value = app.ring.profiles[0].adc_b_1;
+        *c_value = app.ring.profiles[0].adc_c_l;
     }
 }
 
@@ -65,9 +65,9 @@ void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)
 {
     if (ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING)
     {
-        *kp = app.ring.kp_Err;
-        *kd = app.ring.kd_Err;
-        *kp2 = app.ring.kp2_Err;
+        *kp = app.ring.profiles[0].kp_Err;
+        *kd = app.ring.profiles[0].kd_Err;
+        *kp2 = app.ring.profiles[0].kp2_Err;
     }
 }
 
@@ -316,6 +316,9 @@ static int8 ring_is_entry_signal(void);
 static RingState ring_state = RING_STATE_IDLE; /**< 当前电感偏置圆环阶段。 */
 RingStruct ring_data = {0};                    /**< 圆环方向、积分量和软定时器。 */
 static uint8 ring_entry_count = 0;             /**< 300ms窗口内累计入口命中次数。 */
+static uint8 ring_profile_active = 0;           /**< 本圈入口确认时锁存的参数组下标。 */
+
+#define RING_ACTIVE_PROFILE (app.ring.profiles[ring_profile_active])
 
 /**
  * @brief 判断圆环入口电感特征是否命中。
@@ -366,9 +369,9 @@ void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)
 {
     if (ring_state == RING_STATE_PRE_RING || ring_state == RING_STATE_IN_RING)
     {
-        *a_value = app.ring.adc_a_1;
-        *b_value = app.ring.adc_b_1;
-        *c_value = app.ring.adc_c_l;
+        *a_value = RING_ACTIVE_PROFILE.adc_a_1;
+        *b_value = RING_ACTIVE_PROFILE.adc_b_1;
+        *c_value = RING_ACTIVE_PROFILE.adc_c_l;
     }
 }
 
@@ -382,9 +385,23 @@ void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)
 {
     if (ring_state == RING_STATE_PRE_RING || ring_state == RING_STATE_IN_RING)
     {
-        *kp = app.ring.kp_Err;
-        *kd = app.ring.kd_Err;
-        *kp2 = app.ring.kp2_Err;
+        *kp = RING_ACTIVE_PROFILE.kp_Err;
+        *kd = RING_ACTIVE_PROFILE.kd_Err;
+        *kp2 = RING_ACTIVE_PROFILE.kp2_Err;
+    }
+}
+
+/**
+ * @brief 圆环进环、环内和出环阶段使用锁存参数组的目标速度。
+ * @param speed 当前控制链目标速度指针。
+ */
+void a_run_ring_apply_speed(float *speed)
+{
+    if (ring_state == RING_STATE_PRE_RING ||
+        ring_state == RING_STATE_IN_RING ||
+        ring_state == RING_STATE_OUT_RING)
+    {
+        *speed = RING_ACTIVE_PROFILE.target_speed;
     }
 }
 
@@ -407,13 +424,13 @@ void a_run_ring_apply_adc_bias(float *left_signal,
 
     if (ring_data.flast_l != 0)
     {
-        *left_signal *= app.ring.bias_entry_gain;
-        *left_middle_signal *= app.ring.bias_entry_gain;
+        *left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+        *left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
     }
     else if (ring_data.flast_r != 0)
     {
-        *right_middle_signal *= app.ring.bias_entry_gain;
-        *right_signal *= app.ring.bias_entry_gain;
+        *right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+        *right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
     }
 }
 
@@ -436,6 +453,7 @@ void a_run_ring_reset(void)
     ring_data.gyro_flat = 0;
     ring_data.yaw_delta_sum = 0;
     ring_entry_count = 0;
+    ring_profile_active = 0;
     ring_state = RING_STATE_IDLE;
 }
 
@@ -470,6 +488,7 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
             {
                 ring_entry_count = 0;
                 timedestroy(&ring_data.time_l);
+                ring_profile_active = (uint8)app.ring.profile_select;
                 ring_data.flast_l = (ring_dir > 0) ? 1 : 0;
                 ring_data.flast_r = (ring_dir < 0) ? 1 : 0;
                 ring_data.diff_set = 0;
@@ -488,8 +507,8 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
         break;
 
     case RING_STATE_PRE_RING:
-        if (ring_data.yaw_delta_sum >= app.ring.bias_entry_yaw &&
-            ring_data.encoder >= app.ring.bias_entry_encoder)
+        if (ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&
+            ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder)
         {
             ring_data.gyro_flat = 0;
             ring_state = RING_STATE_IN_RING;
@@ -497,9 +516,8 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
         break;
 
     case RING_STATE_IN_RING:
-        if (ring_data.encoder >= app.ring.bias_finish_encoder)
+        if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder)
         {
-						stop=1;
             ring_data.distance = 0;
             timedestroy(&ring_data.out_ring_time);
             ring_state = RING_STATE_OUT_RING;
