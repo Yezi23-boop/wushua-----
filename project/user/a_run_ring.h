@@ -3,13 +3,14 @@
 
 #include "a_run_track_element.h"
 
-#define RING_MODE_LEGACY 0
-#define RING_MODE_SENSOR_BIAS 1
-
-/** 圆环控制算法：默认使用外侧电感偏置进环，定义为 RING_MODE_LEGACY 可切回旧算法。 */
-#ifndef RING_CONTROL_MODE
-#define RING_CONTROL_MODE RING_MODE_SENSOR_BIAS
-#endif
+/**
+ * @brief 圆环控制算法。
+ */
+typedef enum
+{
+    RING_CONTROL_LEGACY = 0,     /**< 旧固定角速度圆环。 */
+    RING_CONTROL_SENSOR_BIAS = 1 /**< 电感偏置圆环。 */
+} RingControlMode;
 
 /**
  * @brief 圆环状态机阶段。
@@ -105,7 +106,6 @@ void a_run_ring_apply_angle_diff_params(float *kp,
                                         float *inner_gain,
                                         float *outer_gain);
 
-#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
 /**
  * @brief 圆环运行阶段使用锁存参数组的目标速度。
  * @param speed 当前控制链目标速度指针。
@@ -123,6 +123,5 @@ void a_run_ring_apply_adc_bias(float *left_signal,
                                float *left_middle_signal,
                                float *right_middle_signal,
                                float *right_signal);
-#endif
 
 #endif /* __A_RUN_RING_H__ */

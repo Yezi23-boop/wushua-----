@@ -56,9 +56,15 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_model_items": 6,
         "menu_diff_items": 3,
         "menu_yuanshu_items": 5,
-        "menu_ring_items": 4,
-        "menu_ring_p0_items": 3,
-        "menu_ring_p1_items": 3,
+        "menu_ring_items": 5,
+        "menu_ring_p0_items": 4,
+        "menu_ring_p1_items": 4,
+        "menu_ring_legacy_items": 5,
+        "menu_ring_legacy_entry_items": 1,
+        "menu_ring_legacy_in_items": 4,
+        "menu_ring_legacy_out_items": 3,
+        "menu_ring_legacy_adc_items": 6,
+        "menu_ring_legacy_drive_items": 4,
         "menu_ring_entry_items": 6,
         "menu_ring_in_items": 6,
         "menu_ring_out_items": 6,
@@ -108,9 +114,18 @@ def test_menu_page_counts_and_parent_links_are_complete():
         '{"<<P1_DRIVE",menu_ring_p1_drive_items,'
         'MENU_ITEM_COUNT(menu_ring_p1_drive_items),MENU_PAGE_RING_P1}' in compact_source
     )
-    assert '{"<<ENTRY",menu_ring_entry_items,MENU_ITEM_COUNT(menu_ring_entry_items),MENU_PAGE_RING}' in compact_source
-    assert '{"<<IN_RING",menu_ring_in_items,MENU_ITEM_COUNT(menu_ring_in_items),MENU_PAGE_RING}' in compact_source
-    assert '{"<<OUT_RING",menu_ring_out_items,MENU_ITEM_COUNT(menu_ring_out_items),MENU_PAGE_RING}' in compact_source
+    assert (
+        '{"<<LEGACY",menu_ring_legacy_items,'
+        'MENU_ITEM_COUNT(menu_ring_legacy_items),MENU_PAGE_RING}' in compact_source
+    )
+    assert (
+        '{"<<ENTRY",menu_ring_legacy_entry_items,'
+        'MENU_ITEM_COUNT(menu_ring_legacy_entry_items),MENU_PAGE_RING_LEGACY}' in compact_source
+    )
+    assert (
+        '{"<<DRIVE",menu_ring_legacy_drive_items,'
+        'MENU_ITEM_COUNT(menu_ring_legacy_drive_items),MENU_PAGE_RING_LEGACY}' in compact_source
+    )
     assert '{"<<ELEM",menu_element_len_items,MENU_ITEM_COUNT(menu_element_len_items),MENU_PAGE_START}' in compact_source
     assert '{"<<ELEM",menu_element_items,MENU_ITEM_COUNT(menu_element_items),MENU_PAGE_ELEMENT_LEN}' in compact_source
 
@@ -172,19 +187,24 @@ def test_start_menu_exposes_encoder_stop_distance_in_centimeters():
     assert "MENU_META(MENU_ITEM_FLOAT, 4, 0), MENU_FLOAT_STEP_10" in start
 
 
-def test_ring_menu_selects_sensor_bias_or_legacy_subpages_at_compile_time():
+def test_ring_menu_exposes_runtime_mode_and_both_subpage_groups():
     source = _read(MENU_C)
     compact_source = _without_whitespace(source)
     ring = _item_block(source, "menu_ring_items")
     entry = _item_block(source, "menu_ring_entry_items")
     ring_in = _item_block(source, "menu_ring_in_items")
     ring_out = _item_block(source, "menu_ring_out_items")
+    p0 = _item_block(source, "menu_ring_p0_items")
+    p1 = _item_block(source, "menu_ring_p1_items")
 
-    assert "#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS" in source
+    assert "RING_CONTROL_MODE" not in source
+    assert '"mode",&app.ring.control_mode,MENU_META(MENU_ITEM_BOOL,1,0),0' in compact_source
     assert '"profile",&app.ring.profile_select,MENU_META(MENU_ITEM_BOOL,1,0),0' in compact_source
-    assert '"straight_E",&app.ring.entry_straight_encoder' in compact_source
+    assert '"straight_E", &app.ring.profiles[0].entry_straight_encoder' in p0
+    assert '"straight_E", &app.ring.profiles[1].entry_straight_encoder' in p1
     assert '{"P0",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_P0}' in compact_source
     assert '{"P1",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_P1}' in compact_source
+    assert '{"LEGACY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LEGACY}' in compact_source
     assert '{"DRIVE",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_DRIVE}' in compact_source
     assert '"gain", &app.ring.profiles[0].bias_entry_gain' in entry
     assert '"exit_gain", &app.ring.profiles[0].bias_exit_gain' in entry
@@ -198,8 +218,8 @@ def test_ring_menu_selects_sensor_bias_or_legacy_subpages_at_compile_time():
     assert '"kp_Ang", &app.ring.profiles[1].kp_Angle' in source
 
     assert '{"ENTRY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_ENTRY}' in compact_source
-    assert '{"IN_RING",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_IN}' in compact_source
-    assert '{"OUT_RING",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_OUT}' in compact_source
+    assert '{"IN_RING",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LEGACY_IN}' in compact_source
+    assert '{"OUT_RING",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LEGACY_OUT}' in compact_source
     assert '"entry_E", &app.ring.ring_entry_encoder' in source
     assert '"pre_r_T", &app.ring.pre_ring_Gyro_target' in source
     assert '"pre_r_Gz", &app.ring.pre_ring_Gyroz' in source
@@ -208,7 +228,7 @@ def test_ring_menu_selects_sensor_bias_or_legacy_subpages_at_compile_time():
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
     assert '"pre_o_Gz", &app.ring.pre_out_ring_Gyroz' in source
     assert '"drv_o_E", &app.ring.drive_out_ring_encoder' in source
-    assert source.count("&app.ring.") == 52
+    assert source.count("&app.ring.") == 54
     assert "ring_data.yaw_delta_sum" not in source
     assert "ring_data.encoder" not in source
 

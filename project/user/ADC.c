@@ -111,13 +111,11 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     left_middle_signal = (float)ad22;
     right_middle_signal = (float)ad33;
     right_signal = (float)ad44;
-#if RING_CONTROL_MODE == RING_MODE_SENSOR_BIAS
     /* 圆环模块只修改局部解算值，真实ad1~ad4继续供识别和菜单显示。 */
     a_run_ring_apply_adc_bias(&left_signal,
                               &left_middle_signal,
                               &right_middle_signal,
                               &right_signal);
-#endif
 
     /* 1) 先计算竖向差分，供分母修正项复用 */
     middle_diff = left_middle_signal - right_middle_signal;

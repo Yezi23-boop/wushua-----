@@ -1,7 +1,7 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区覆盖逻辑槽位0~98，每个槽位占4字节。 */
-uint8 date_buff[396];
+/* 数据缓冲区覆盖逻辑槽位0~100，每个槽位占4字节。 */
+uint8 date_buff[404];
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 15L
+#define EEPROM_CONFIG_VERSION 16L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -79,10 +79,11 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.pre_out_ring_Gyro_target = 30.00f; /* pre_out_ring固定目标角速度 25 */
     config->ring.pre_out_ring_Gyroz = 300.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
     config->ring.drive_out_ring_encoder = 5.0f;     /* 出环向外转向段最小距离（cm） */
-    config->ring.entry_straight_encoder = 5.0f;     /* 新圆环识别后零角速度直走距离（cm） */
+    config->ring.control_mode = 1;
     config->ring.profile_select = 0;
     config->ring.profiles[0].bias_entry_gain = 4.00f;
     config->ring.profiles[0].bias_exit_gain = 4.00f;
+    config->ring.profiles[0].entry_straight_encoder = 5.0f;
     config->ring.profiles[0].bias_entry_yaw = 30.00f;
     config->ring.profiles[0].bias_entry_encoder = 200.00f;
     config->ring.profiles[0].bias_finish_encoder = 1.00f;
@@ -99,6 +100,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.profiles[0].diff_outer_gain = 0.50f;
     config->ring.profiles[1].bias_entry_gain = 2.00f;
     config->ring.profiles[1].bias_exit_gain = 2.00f;
+    config->ring.profiles[1].entry_straight_encoder = 5.0f;
     config->ring.profiles[1].bias_entry_yaw = 30.00f;
     config->ring.profiles[1].bias_entry_encoder = 1.00f;
     config->ring.profiles[1].bias_finish_encoder = 200.00f;
@@ -194,9 +196,10 @@ static void eeprom_read_config(AppConfig *config)
     config->ring.pre_out_ring_Gyro_target = read_float(20);
     config->ring.pre_out_ring_Gyroz = read_float(21);
     config->ring.drive_out_ring_encoder = read_float(51);
-    config->ring.entry_straight_encoder = read_float(98);
+    config->ring.control_mode = (int16)read_int(100);
     config->ring.profiles[0].bias_entry_gain = read_float(65);
     config->ring.profiles[0].bias_exit_gain = read_float(88);
+    config->ring.profiles[0].entry_straight_encoder = read_float(98);
     config->ring.profiles[0].bias_entry_yaw = read_float(66);
     config->ring.profiles[0].bias_entry_encoder = read_float(67);
     config->ring.profiles[0].kp_Err = read_float(68);
@@ -213,6 +216,7 @@ static void eeprom_read_config(AppConfig *config)
     config->ring.profiles[0].diff_outer_gain = read_float(93);
     config->ring.profiles[1].bias_entry_gain = read_float(76);
     config->ring.profiles[1].bias_exit_gain = read_float(89);
+    config->ring.profiles[1].entry_straight_encoder = read_float(99);
     config->ring.profiles[1].bias_entry_yaw = read_float(77);
     config->ring.profiles[1].bias_entry_encoder = read_float(78);
     config->ring.profiles[1].bias_finish_encoder = read_float(79);
@@ -307,9 +311,10 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->ring.pre_out_ring_Gyro_target, 20);
     save_float(config->ring.pre_out_ring_Gyroz, 21);
     save_float(config->ring.drive_out_ring_encoder, 51);
-    save_float(config->ring.entry_straight_encoder, 98);
+    save_int(config->ring.control_mode, 100);
     save_float(config->ring.profiles[0].bias_entry_gain, 65);
     save_float(config->ring.profiles[0].bias_exit_gain, 88);
+    save_float(config->ring.profiles[0].entry_straight_encoder, 98);
     save_float(config->ring.profiles[0].bias_entry_yaw, 66);
     save_float(config->ring.profiles[0].bias_entry_encoder, 67);
     save_float(config->ring.profiles[0].kp_Err, 68);
@@ -326,6 +331,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->ring.profiles[0].diff_outer_gain, 93);
     save_float(config->ring.profiles[1].bias_entry_gain, 76);
     save_float(config->ring.profiles[1].bias_exit_gain, 89);
+    save_float(config->ring.profiles[1].entry_straight_encoder, 99);
     save_float(config->ring.profiles[1].bias_entry_yaw, 77);
     save_float(config->ring.profiles[1].bias_entry_encoder, 78);
     save_float(config->ring.profiles[1].bias_finish_encoder, 79);
