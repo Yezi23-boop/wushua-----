@@ -206,14 +206,14 @@ def test_ring_entry_hits_accumulate_inside_timeout_window():
     update_body = _function_body(
         ring_source,
         "uint8 a_run_ring_update_2ms(int8 ring_dir)",
-        "/**\n * @brief 更新环岛判定所需的里程与转角量。",
+        "/**\n * @brief 更新圆环编码器里程与gyro_z绝对转角积分。",
     )
     no_ring_body = update_body[
-        update_body.index("case RING_STATE_IDLE:"):update_body.index("case RING_STATE_ENTRY:")
+        update_body.index("if (ring_state == RING_STATE_IDLE)"):update_body.index("switch (ring_state)")
     ]
 
     assert (
-        "if (entry_signal != 0)\n"
+        "if (ring_is_entry_signal() != 0)\n"
         "        {\n"
         "            ring_entry_count++;\n"
         "        }\n"
@@ -249,7 +249,7 @@ def test_ring_pre_out_waits_for_yaw_and_encoder_distance():
     ]
     transition_condition = (
         "if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&\n"
-        "            ring_data.encoder >= app.ring.in_ring_encoder)"
+        "                ring_data.encoder >= app.ring.in_ring_encoder)"
     )
 
     assert enter_pre_ring_body.index("ring_data.encoder = 0;") < enter_pre_ring_body.index(
@@ -262,9 +262,9 @@ def test_ring_pre_out_waits_for_yaw_and_encoder_distance():
     assert "config->ring.in_ring_encoder = read_float(64);" in eeprom_source
     assert "save_float(config->ring.in_ring_encoder, 64);" in eeprom_source
     assert eeprom_source.count("uint16 begin = value_bit * 4;") == 4
-    assert "uint8 date_buff[260];" in eeprom_source
-    assert "extern uint8 date_buff[260];" in eeprom_header
-    assert "#define EEPROM_CONFIG_VERSION 8L" in eeprom_source
+    assert "uint8 date_buff[404];" in eeprom_source
+    assert "extern uint8 date_buff[404];" in eeprom_header
+    assert "#define EEPROM_CONFIG_VERSION 16L" in eeprom_source
 
 
 def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():
@@ -273,7 +273,7 @@ def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():
     angle_body = _function_body(
         ring_source,
         "void a_run_ring_update_angle_target(float *angle_target)",
-        "/**\n * @brief 读取当前环岛状态机阶段。",
+        "/**\n * @brief 读取当前圆环状态机阶段。",
     )
     pre_out_body = ring_source[
         ring_source.index("case RING_STATE_PRE_OUT_RING:"):
@@ -291,7 +291,9 @@ def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():
     )
     assert "if (ring_data.diff_set != 0.0f)" in angle_body
     assert "RING_STATE_DRIVE_OUT_RING" not in angle_body
-    assert "*angle_target = 0.0f;" not in angle_body
+    assert "ring_mode_active == RING_CONTROL_SENSOR_BIAS" in angle_body
+    assert "ring_state == RING_STATE_ENTRY" in angle_body
+    assert "*angle_target = 0.0f;" in angle_body
     assert "#define RING_DRIVE_OUT_AD_THRESHOLD 5u" in ring_source
     assert "ring_data.diff_set = -5 * ring_dir;" in pre_out_body
     assert "ring_data.diff_set = -5 * ring_dir;" in drive_out_body
