@@ -247,12 +247,13 @@ def test_ring_pre_out_waits_for_yaw_and_encoder_distance():
     ]
     transition_condition = (
         "if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&\n"
-        "                ring_data.encoder >= app.ring.in_ring_encoder)"
+        "            ring_data.encoder >= app.ring.in_ring_encoder)"
     )
 
-    assert enter_pre_ring_body.index("ring_data.encoder = 0;") < enter_pre_ring_body.index(
-        "ring_data.distance = 1;"
+    assert entry_body.index("ring_data.distance = 1;") < entry_body.index(
+        "if (ring_data.encoder >= app.ring.ring_entry_encoder)"
     )
+    assert "ring_data.encoder = 0;" in enter_pre_ring_body
     assert transition_condition in in_ring_body
     assert "ring_data.distance = 0;" in in_ring_body
     assert "float in_ring_encoder;" in eeprom_header

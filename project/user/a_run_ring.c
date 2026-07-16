@@ -10,6 +10,8 @@
 #define RING_DRIVE_OUT_AD_THRESHOLD 5u /* 旧圆环出环时外侧电感和ad5的共同阈值。 */
 
 static int8 ring_is_entry_signal(void);
+static uint8 ring_update_legacy_2ms(int8 ring_dir);
+static uint8 ring_update_sensor_bias_2ms(void);
 
 static RingState ring_state = RING_STATE_IDLE; /**< 当前圆环状态机阶段，左右圆环共用。 */
 RingStruct ring_data = {0};                    /**< 圆环方向、积分量和软定时器。 */
@@ -285,76 +287,56 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
         return 0;
     }
 
+    if (ring_mode_active == RING_CONTROL_LEGACY)
+    {
+        return ring_update_legacy_2ms(ring_dir);
+    }
+
+    return ring_update_sensor_bias_2ms();
+}
+
+/**
+ * @brief 推进旧固定角速度圆环状态机。
+ * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
+ * @return uint8 1-圆环流程完成，0-未完成。
+ */
+static uint8 ring_update_legacy_2ms(int8 ring_dir)
+{
     switch (ring_state)
     {
     case RING_STATE_ENTRY:
         ring_data.diff_set = 0;
-        if (ring_mode_active == RING_CONTROL_LEGACY)
+        ring_data.distance = 1;
+        ring_data.yaw_delta_sum = 0;
+        if (ring_data.encoder >= app.ring.ring_entry_encoder)
         {
-            ring_data.distance = 1;
-            ring_data.yaw_delta_sum = 0;
-            if (ring_data.encoder >= app.ring.ring_entry_encoder)
-            {
-                ring_data.encoder = 0;
-                ring_data.last_yaw = 0;
-                ring_data.gyro_flat = 1;
-                ring_data.yaw_delta_sum = 0;
-                ring_state = RING_STATE_PRE_RING;
-            }
-        }
-        else if (ring_data.encoder >= RING_ACTIVE_PROFILE.entry_straight_encoder)
-        {
-            /* 直走距离不计入进环和结束判定，PRE_RING从独立零点开始积分。 */
             ring_data.encoder = 0;
-            ring_data.yaw_delta_sum = 0;
-            ring_data.distance = 1;
+            ring_data.last_yaw = 0;
             ring_data.gyro_flat = 1;
+            ring_data.yaw_delta_sum = 0;
             ring_state = RING_STATE_PRE_RING;
         }
         break;
 
     case RING_STATE_PRE_RING:
-        if (ring_mode_active == RING_CONTROL_LEGACY)
+        ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;
+        if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz)
         {
-            ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;
-            if (ring_data.yaw_delta_sum >= app.ring.pre_ring_Gyroz)
-            {
-                ring_data.diff_set = 0;
-                ring_state = RING_STATE_IN_RING;
-            }
-        }
-        else if (ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&
-                 ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder)
-        {
-            ring_data.gyro_flat = 0;
+            ring_data.diff_set = 0;
             ring_state = RING_STATE_IN_RING;
         }
         break;
 
     case RING_STATE_IN_RING:
-        if (ring_mode_active == RING_CONTROL_LEGACY)
-        {
-            if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&
-                ring_data.encoder >= app.ring.in_ring_encoder)
-            {
-                ring_data.distance = 0;
-                ring_state = RING_STATE_PRE_OUT_RING;
-            }
-        }
-        else if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder)
+        if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&
+            ring_data.encoder >= app.ring.in_ring_encoder)
         {
             ring_data.distance = 0;
-            timedestroy(&ring_data.out_ring_time);
-            ring_state = RING_STATE_OUT_RING;
+            ring_state = RING_STATE_PRE_OUT_RING;
         }
         break;
 
     case RING_STATE_PRE_OUT_RING:
-        if (ring_mode_active != RING_CONTROL_LEGACY)
-        {
-            a_run_ring_reset();
-            break;
-        }
         ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;
         if (ring_data.yaw_delta_sum >= app.ring.pre_out_ring_Gyroz)
         {
@@ -366,11 +348,6 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
         break;
 
     case RING_STATE_DRIVE_OUT_RING:
-        if (ring_mode_active != RING_CONTROL_LEGACY)
-        {
-            a_run_ring_reset();
-            break;
-        }
         ring_data.diff_set = -5 * ring_dir;
         if (ring_data.encoder >= app.ring.drive_out_ring_encoder &&
             ad5 < RING_DRIVE_OUT_AD_THRESHOLD &&
@@ -381,6 +358,61 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
             ring_data.distance = 0;
             ring_data.gyro_flat = 0;
             ring_data.yaw_delta_sum = 0;
+            timedestroy(&ring_data.out_ring_time);
+            ring_state = RING_STATE_OUT_RING;
+        }
+        break;
+
+    case RING_STATE_OUT_RING:
+        if (timeadd(&ring_data.out_ring_time, 200))
+        {
+            a_run_ring_reset();
+            return 1;
+        }
+        break;
+
+    default:
+        a_run_ring_reset();
+        break;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 推进新电感偏置圆环状态机。
+ * @return uint8 1-圆环流程完成，0-未完成。
+ */
+static uint8 ring_update_sensor_bias_2ms(void)
+{
+    switch (ring_state)
+    {
+    case RING_STATE_ENTRY:
+        ring_data.diff_set = 0;
+        if (ring_data.encoder >= RING_ACTIVE_PROFILE.entry_straight_encoder)
+        {
+            /* 直走距离不计入进环和结束判定，PRE_RING从独立零点开始积分。 */
+            ring_data.encoder = 0;
+            ring_data.yaw_delta_sum = 0;
+            ring_data.distance = 1;
+            ring_data.gyro_flat = 1;
+            ring_state = RING_STATE_PRE_RING;
+        }
+        break;
+
+    case RING_STATE_PRE_RING:
+        if (ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&
+            ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder)
+        {
+            ring_data.gyro_flat = 0;
+            ring_state = RING_STATE_IN_RING;
+        }
+        break;
+
+    case RING_STATE_IN_RING:
+        if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder)
+        {
+            ring_data.distance = 0;
             timedestroy(&ring_data.out_ring_time);
             ring_state = RING_STATE_OUT_RING;
         }
