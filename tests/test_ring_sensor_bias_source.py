@@ -87,6 +87,15 @@ def test_sensor_bias_reverses_virtual_signal_side_during_out_ring():
     assert "c_value * middle_diff_abs" in adc
 
 
+def test_ad3_ad4_use_correct_global_hardware_mapping():
+    adc = _read(ADC_C)
+
+    assert "raw_buffer[2] = adc_convert(ADC_CH9_P01);" in adc
+    assert "raw_buffer[3] = adc_convert(ADC_CH8_P00);" in adc
+    assert "ad3 = AD_ONE[2];" in adc
+    assert "ad4 = AD_ONE[3];" in adc
+
+
 def test_ring_uses_independent_adc_weights_through_out_ring():
     adc = _read(ADC_C)
     header = _read(RING_H)

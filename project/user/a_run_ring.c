@@ -352,7 +352,6 @@ static uint8 ring_update_legacy_2ms(int8 ring_dir)
             ((ring_dir < 0 && ad1 < RING_DRIVE_OUT_AD_THRESHOLD) ||
              (ring_dir > 0 && ad4 < RING_DRIVE_OUT_AD_THRESHOLD)))
         {
-            stop = 1;
             ring_data.diff_set = 0;
             ring_data.distance = 0;
             ring_data.gyro_flat = 0;

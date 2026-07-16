@@ -199,12 +199,12 @@ void motor_output(int32 lpwm, int32 rpwm)
         /* --- 右电机控制逻辑（rpwm_limited → P52/P53） --- */
         if (rpwm_limited > 0)
         {
-            P53 = 0; /* 设置方向：正转 */
+            P53 = 1; /* 设置方向：正转 */
             pwm_set_duty(PWMB_CH3_P52, rpwm_limited);
         }
         else if (rpwm_limited < 0)
         {
-            P53 = 1; /* 设置方向：反转 */
+            P53 = 0; /* 设置方向：反转 */
             pwm_set_duty(PWMB_CH3_P52, -rpwm_limited);
         }
         else

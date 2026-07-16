@@ -36,7 +36,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.element_enable = 1; /* 默认开启整体赛道元素识别 */
     config->start.track_mode = 0;     /* 默认左圆环->圆筒循环 */
     config->start.fuya_xili = 90.00f; /* 默认平地负压百分比 90 */
-    config->start.encoder_stop_distance_cm = 3200.0f;
+    config->start.encoder_stop_distance_cm = 4600.0f;
     config->start.element_len = 4;
     config->start.element_seq[0] = TRACK_ELEMENT_RIGHT_RING; // TRACK_ELEMENT_CROSS
     config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;   // TRACK_ELEMENT_WALL
@@ -51,49 +51,49 @@ static void eeprom_load_defaults(AppConfig *config)
     //    config->start.element_seq[4] = TRACK_ELEMENT_NONE;
     //    config->start.element_seq[5] = TRACK_ELEMENT_NONE;
     /* 转向差速环 PID 默认参数 */
-    config->speed.kp_Err = 8.00f;  // 3.50
-    config->speed.kd_Err = 12.00f; // 2ms 主环第一版保守微分
+    config->speed.kp_Err = 5.50f; // 3.50
+    config->speed.kd_Err = 9.00f; // 2ms 主环第一版保守微分
     config->speed.gyro_damp_Err = 0.00f;
     config->speed.speed_run = 50.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
-    config->speed.kp2_Err = 0.06f;
+    config->speed.kp2_Err = 0.02f;
     config->speed.diff_enable = 1;
     config->speed.diff_inner_gain = 0.60f;
     config->speed.diff_outer_gain = 0.50f;
 
     /* 电感偏差解算默认参数 */
-    config->angle.kp_Angle = 0.92f;
-    config->angle.kd_Angle = 0.78f; // 2ms 主环第一版保守微分
-    config->angle.gyro_feedback_scale = 1.50f;
+    config->angle.kp_Angle = 1.30f;
+    config->angle.kd_Angle = 1.50f; // 2ms 主环第一版保守微分
+    config->angle.gyro_feedback_scale = 1.80f;
     config->angle.limiting_Angle = 48.00f; // 48
     config->angle.A_1 = 1.00f;
     config->angle.B_1 = 1.20f;
     config->angle.C_l = 0.60f;
 
     /* 圆环策略默认参数 */
-    config->ring.ring_entry_encoder = 10.0;         /* ring->pre_ring编码器积分阈值 */
-    config->ring.pre_ring_Gyro_target = 60.00f;     /* pre_ring固定目标角速度 */
-    config->ring.pre_ring_Gyroz = 30.00f;           /* pre_ring->in_ring累计转角阈值 */
+    config->ring.ring_entry_encoder = 15.0;         /* ring->pre_ring编码器积分阈值 */
+    config->ring.pre_ring_Gyro_target = 40.00f;     /* pre_ring固定目标角速度 */
+    config->ring.pre_ring_Gyroz = 60.00f;           /* pre_ring->in_ring累计转角阈值 */
     config->ring.in_ring_Gyroz = 200.00f;           /* in_ring->pre_out_ring累计转角阈值 220 */
     config->ring.in_ring_encoder = 30.0f;           /* 从pre_ring开始累计的出环打角距离阈值 */
-    config->ring.pre_out_ring_Gyro_target = 30.00f; /* pre_out_ring固定目标角速度 25 */
-    config->ring.pre_out_ring_Gyroz = 300.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
+    config->ring.pre_out_ring_Gyro_target = 50.00f; /* pre_out_ring固定目标角速度 25 */
+    config->ring.pre_out_ring_Gyroz = 350.00f;      /* pre_out_ring->drive_out_ring累计转角阈值 310 */
     config->ring.drive_out_ring_encoder = 5.0f;     /* 出环向外转向段最小距离（cm） */
     config->ring.control_mode = 1;
     config->ring.profile_select = 0;
-    config->ring.profiles[0].bias_entry_gain = 2.00f;
-    config->ring.profiles[0].bias_exit_gain = 0.50f;
-    config->ring.profiles[0].entry_straight_encoder = 5.0f;
+    config->ring.profiles[0].bias_entry_gain = 2.50f;
+    config->ring.profiles[0].bias_exit_gain = 1.00f;
+    config->ring.profiles[0].entry_straight_encoder = 10.0f;
     config->ring.profiles[0].bias_entry_yaw = 30.00f;
     config->ring.profiles[0].bias_entry_encoder = 1.00f;
-    config->ring.profiles[0].bias_finish_encoder = 200.00f;
+    config->ring.profiles[0].bias_finish_encoder = 340.00f;
     config->ring.profiles[0].target_speed = 50.00f;
     config->ring.profiles[0].adc_a_1 = 1.00f;
-    config->ring.profiles[0].adc_b_1 = 1.20f;
+    config->ring.profiles[0].adc_b_1 = 1.50f;
     config->ring.profiles[0].adc_c_l = 0.60f;
-    config->ring.profiles[0].kp_Err = 9.00f;
+    config->ring.profiles[0].kp_Err = 7.50f;
     config->ring.profiles[0].kd_Err = 12.00f;
-    config->ring.profiles[0].kp2_Err = 0.06f;
+    config->ring.profiles[0].kp2_Err = 0.02f;
     config->ring.profiles[0].kp_Angle = 0.92f;
     config->ring.profiles[0].kd_Angle = 0.78f;
     config->ring.profiles[0].diff_inner_gain = 0.60f;
@@ -126,9 +126,9 @@ static void eeprom_load_defaults(AppConfig *config)
     /* 停止等待模式专用 */
     config->fly.seesaw_detect_count = 5;    /* IDLE 入口命中次数 */
     config->fly.seesaw_wait_count = 10;     /* 停车保持时间，10 * 2ms = 20ms */
-    config->fly.seesaw_speed = 20;          /* CREEP 阶段目标速度 */
-    config->fly.seesaw_creep_cm = 10.00f;   /* 前挪距离，单位 cm */
-    config->fly.seesaw_release_step = 0.6f; /* 停止等待 COOLDOWN 步长 */
+    config->fly.seesaw_speed = 20.0f;       /* CREEP 阶段目标速度 */
+    config->fly.seesaw_creep_cm = 15;       /* 前挪距离，单位 cm */
+    config->fly.seesaw_release_step = 0.3f; /* 停止等待 COOLDOWN 步长 */
     /* 共用 */
     config->fly.seesaw_mode = 1; /* 默认飞坡模式（0=飞坡，1=停止等待） */
 
@@ -136,7 +136,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->cylinder.encoder_target = 300.0f;     /* 后续圆桶里程退出阈值 */
     config->cylinder.ad_both_high_threshold = 45; /* 圆桶双路强信号阈值 */
     config->cylinder.adc_a_1 = 1.20f;             /* 圆桶专用横向主差分权重 */
-    config->cylinder.adc_b_1 = 1.00f;             /* 圆桶专用竖向差分权重 */
+    config->cylinder.adc_b_1 = 10.00f;            /* 圆桶专用竖向差分权重 */
     config->cylinder.adc_c_l = 0.60f;             /* 保持当前圆桶硬编码 C_l 默认值 */
     config->cylinder.kp_Err = 1.00f;              /* 圆桶专用方向环比例系数 */
     config->cylinder.kd_Err = 1.00f;              /* 圆桶专用方向环微分系数 */

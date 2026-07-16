@@ -720,11 +720,6 @@
               <FilePath>..\user\int_user.c</FilePath>
             </File>
             <File>
-              <FileName>eeprom.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\service\eeprom.c</FilePath>
-            </File>
-            <File>
               <FileName>int_user.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\int_user.h</FilePath>
@@ -758,6 +753,11 @@
               <FileName>debug_view.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\service\debug_view.h</FilePath>
+            </File>
+            <File>
+              <FileName>eeprom.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\eeprom.c</FilePath>
             </File>
             <File>
               <FileName>eeprom.h</FileName>
