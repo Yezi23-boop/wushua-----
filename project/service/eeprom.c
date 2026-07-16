@@ -38,9 +38,9 @@ static void eeprom_load_defaults(AppConfig *config)
     config->start.fuya_xili = 90.00f; /* 默认平地负压百分比 90 */
     config->start.encoder_stop_distance_cm = 4600.0f;
     config->start.element_len = 4;
-    config->start.element_seq[0] = TRACK_ELEMENT_RIGHT_RING; // TRACK_ELEMENT_CROSS
-    config->start.element_seq[1] = TRACK_ELEMENT_CYLINDER;   // TRACK_ELEMENT_WALL
-    config->start.element_seq[2] = TRACK_ELEMENT_RIGHT_RING;
+    config->start.element_seq[0] = TRACK_ELEMENT_CYLINDER; // TRACK_ELEMENT_CROSS
+    config->start.element_seq[1] = TRACK_ELEMENT_RIGHT_RING;   // TRACK_ELEMENT_WALL
+    config->start.element_seq[2] = TRACK_ELEMENT_NONE;
     config->start.element_seq[3] = TRACK_ELEMENT_NONE;
     config->start.element_seq[4] = TRACK_ELEMENT_NONE;
     config->start.element_seq[5] = TRACK_ELEMENT_NONE;
@@ -57,7 +57,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->speed.speed_run = 50.00f;     /* 默认基础速度 60 */
     config->speed.limiting_Err = 800.00f; /* 转向限幅 */
     config->speed.kp2_Err = 0.02f;
-    config->speed.diff_enable = 1;
+    config->speed.diff_enable = 0;
     config->speed.diff_inner_gain = 0.60f;
     config->speed.diff_outer_gain = 0.50f;
 
