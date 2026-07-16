@@ -31,6 +31,10 @@ def test_ring_implementations_are_selected_at_runtime():
     assert "static RingControlMode ring_mode_active" in source
     assert "ring_mode_active = (RingControlMode)app.ring.control_mode;" in source
     assert "if (ring_mode_active == RING_CONTROL_LEGACY)" in source
+    assert "static uint8 ring_update_legacy_2ms(int8 ring_dir)" in source
+    assert "static uint8 ring_update_sensor_bias_2ms(void)" in source
+    assert "return ring_update_legacy_2ms(ring_dir);" in source
+    assert "return ring_update_sensor_bias_2ms();" in source
     assert "a_run_ring_sensor_bias.c" not in project
 
 
@@ -134,7 +138,7 @@ def test_sensor_bias_ring_uses_yaw_for_entry_and_encoder_only_for_finish():
     assert "ring_state = RING_STATE_PRE_RING;" in source
     assert (
         "ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&\n"
-        "                 ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder"
+        "            ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder"
     ) in source
     assert "ring_data.gyro_flat = 0;" in source
     assert "if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder)" in source
@@ -147,6 +151,10 @@ def test_sensor_bias_ring_uses_yaw_for_entry_and_encoder_only_for_finish():
 def test_profile_is_latched_at_entry_and_speed_covers_full_ring():
     source = _read(RING_LEGACY_C)
     track = _read(A_RUN_TRACK_ELEMENT_C)
+    sensor_update = source[
+        source.rindex("static uint8 ring_update_sensor_bias_2ms(void)"):
+        source.index("void a_run_ring_update_integrals(void)")
+    ]
 
     assert "static uint8 ring_profile_active = 0;" in source
     assert "ring_profile_active = (uint8)app.ring.profile_select;" in source
@@ -156,8 +164,8 @@ def test_profile_is_latched_at_entry_and_speed_covers_full_ring():
     assert "ring_state == RING_STATE_IN_RING" in source
     assert "ring_state == RING_STATE_OUT_RING" in source
     assert "*speed = RING_ACTIVE_PROFILE.target_speed;" in source
-    assert "stop=1" not in source
-    assert "stop = 1" not in source
+    assert "stop=1" not in sensor_update
+    assert "stop = 1" not in sensor_update
     assert "a_run_ring_apply_speed(speed);" in track
     assert track.index("a_run_fly_update_release_speed(speed);") < track.index(
         "a_run_ring_apply_speed(speed);"
@@ -286,9 +294,13 @@ def test_ring_menu_exposes_runtime_mode_and_both_parameter_sets():
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
 
 
-def test_legacy_ring_no_longer_sets_unreleased_stop():
+def test_legacy_ring_keeps_current_drive_out_stop_behavior():
     source = _read(RING_LEGACY_C)
+    legacy_update = source[
+        source.rindex("static uint8 ring_update_legacy_2ms(int8 ring_dir)"):
+        source.rindex("static uint8 ring_update_sensor_bias_2ms(void)")
+    ]
 
-    assert "stop = 1;" not in source
-    assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in source
-    assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in source
+    assert "stop = 1;" in legacy_update
+    assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in legacy_update
+    assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in legacy_update
