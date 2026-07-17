@@ -6,6 +6,7 @@
 #include "a_run_ring.h"
 
 #define RING_ENTRY_CONFIRM_COUNT 5u    /* 300ms窗口累计命中次数，2ms调用下最快约 10ms。 */
+#define RING_SPECIAL_STOP_PASS_COUNT 3u /* 同一方向第3次圆环进入环内时永久停车。 */
 #define RING_YAW_DT_SCALE 0.40f        /* gyro_z已缩放0.005，二者相乘等效 2ms 角度积分。 */
 #define RING_DRIVE_OUT_AD_THRESHOLD 5u /* 贝尔分支旧圆环出环时外侧电感阈值。 */
 
@@ -18,6 +19,9 @@ RingStruct ring_data = {0};                                         /**< 圆环�
 static uint8 ring_entry_count = 0;                                  /**< 300ms窗口内累计入口命中次数。 */
 static RingControlMode ring_mode_active = RING_CONTROL_SENSOR_BIAS; /**< 本圈入口确认时锁存的算法。 */
 static uint8 ring_profile_active = 0;                               /**< 本圈入口确认时锁存的新算法参数组。 */
+static uint8 ring_left_pass_count = 0;                              /**< 左圆环入口累计确认次数。 */
+static uint8 ring_right_pass_count = 0;                             /**< 右圆环入口累计确认次数。 */
+static uint8 ring_third_stop_active = 0;                            /**< 本圈是否为当前方向第3次圆环。 */
 
 #define RING_ACTIVE_PROFILE (app.ring.profiles[ring_profile_active])
 
@@ -231,7 +235,19 @@ void a_run_ring_reset(void)
     ring_data.yaw_delta_sum = 0;
     ring_entry_count = 0;
     ring_profile_active = 0;
+    ring_third_stop_active = 0;
     ring_state = RING_STATE_IDLE;
+}
+
+/**
+ * @brief 清零左右圆环经过次数。
+ * @details 仅由赛道元素系统整体复位调用，不修改其他保护来源设置的stop。
+ */
+void a_run_ring_pass_count_reset(void)
+{
+    ring_left_pass_count = 0;
+    ring_right_pass_count = 0;
+    ring_third_stop_active = 0;
 }
 
 /**
@@ -267,6 +283,23 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
                 timedestroy(&ring_data.time_l);
                 ring_mode_active = (RingControlMode)app.ring.control_mode;
                 ring_profile_active = (uint8)app.ring.profile_select;
+                ring_third_stop_active = 0;
+                if (ring_dir > 0)
+                {
+                    ring_left_pass_count++;
+                    if (ring_left_pass_count == RING_SPECIAL_STOP_PASS_COUNT)
+                    {
+                        ring_third_stop_active = 1;
+                    }
+                }
+                else
+                {
+                    ring_right_pass_count++;
+                    if (ring_right_pass_count == RING_SPECIAL_STOP_PASS_COUNT)
+                    {
+                        ring_third_stop_active = 1;
+                    }
+                }
                 ring_data.flast_l = (ring_dir > 0) ? 1 : 0;
                 ring_data.flast_r = (ring_dir < 0) ? 1 : 0;
                 ring_data.diff_set = 0;
@@ -323,10 +356,20 @@ static uint8 ring_update_legacy_2ms(int8 ring_dir)
         {
             ring_data.diff_set = 0;
             ring_state = RING_STATE_IN_RING;
+            if (ring_third_stop_active != 0)
+            {
+                ring_data.distance = 0;
+                ring_data.gyro_flat = 0;
+                stop = 1;
+            }
         }
         break;
 
     case RING_STATE_IN_RING:
+        if (ring_third_stop_active != 0)
+        {
+            break;
+        }
         if (ring_data.yaw_delta_sum >= app.ring.in_ring_Gyroz &&
             ring_data.encoder >= app.ring.in_ring_encoder)
         {
@@ -404,10 +447,20 @@ static uint8 ring_update_sensor_bias_2ms(void)
         {
             ring_data.gyro_flat = 0;
             ring_state = RING_STATE_IN_RING;
+            if (ring_third_stop_active != 0)
+            {
+                ring_data.distance = 0;
+                ring_data.gyro_flat = 0;
+                stop = 1;
+            }
         }
         break;
 
     case RING_STATE_IN_RING:
+        if (ring_third_stop_active != 0)
+        {
+            break;
+        }
         if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder)
         {
             ring_data.distance = 0;

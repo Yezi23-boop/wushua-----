@@ -147,6 +147,7 @@ static void track_element_enter_from_index(uint8 start_index)
  */
 static void track_element_reset_state(void)
 {
+    a_run_ring_pass_count_reset();
     element_sequence_started = 0;
     track_element_enter(ELEMENT_NONE);
 }

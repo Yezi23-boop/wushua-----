@@ -55,6 +55,12 @@ extern RingStruct ring_data;
 void a_run_ring_reset(void);
 
 /**
+ * @brief 清零左右圆环经过次数。
+ * @details 不修改全局stop，仅在赛道元素系统整体复位时调用。
+ */
+void a_run_ring_pass_count_reset(void);
+
+/**
  * @brief 按 2ms 主控制环周期更新圆环状态机。
  * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
  * @return uint8 1-当前圆环流程完成，0-未完成。
