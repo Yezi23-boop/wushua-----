@@ -165,7 +165,8 @@ def test_profile_is_latched_at_entry_and_speed_covers_full_ring():
     assert "ring_state == RING_STATE_OUT_RING" in source
     assert "*speed = RING_ACTIVE_PROFILE.target_speed;" in source
     assert "stop=1" not in sensor_update
-    assert "stop = 1" not in sensor_update
+    assert sensor_update.count("stop = 1;") == 1
+    assert "if (ring_third_stop_active != 0)" in sensor_update
     assert "a_run_ring_apply_speed(speed);" in track
     assert track.index("a_run_fly_update_release_speed(speed);") < track.index(
         "a_run_ring_apply_speed(speed);"
@@ -294,9 +295,58 @@ def test_ring_menu_exposes_runtime_mode_and_both_parameter_sets():
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
 
 
-def test_legacy_ring_no_longer_sets_unreleased_stop():
+def test_third_same_direction_ring_stops_only_after_entering_in_ring():
     source = _read(RING_LEGACY_C)
+    header = _read(RING_H)
+    track = _read(A_RUN_TRACK_ELEMENT_C)
+    legacy_update = source[
+        source.rindex("static uint8 ring_update_legacy_2ms(int8 ring_dir)"):
+        source.rindex("static uint8 ring_update_sensor_bias_2ms(void)")
+    ]
+    sensor_update = source[
+        source.rindex("static uint8 ring_update_sensor_bias_2ms(void)"):
+        source.index("void a_run_ring_update_integrals(void)")
+    ]
+    legacy_in_ring = legacy_update[
+        legacy_update.index("case RING_STATE_IN_RING:"):
+        legacy_update.index("case RING_STATE_PRE_OUT_RING:")
+    ]
+    sensor_in_ring = sensor_update[
+        sensor_update.index("case RING_STATE_IN_RING:"):
+        sensor_update.index("case RING_STATE_OUT_RING:")
+    ]
+    normal_reset = source[
+        source.index("void a_run_ring_reset(void)"):
+        source.index("void a_run_ring_pass_count_reset(void)")
+    ]
+    pass_reset = source[
+        source.index("void a_run_ring_pass_count_reset(void)"):
+        source.index("uint8 a_run_ring_update_2ms(int8 ring_dir)")
+    ]
 
-    assert "stop = 1;" not in source
-    assert "ring_data.diff_set = app.ring.pre_ring_Gyro_target * ring_dir;" in source
-    assert "ring_data.diff_set = app.ring.pre_out_ring_Gyro_target * ring_dir;" in source
+    assert "#define RING_SPECIAL_STOP_PASS_COUNT 3u" in source
+    assert "ring_left_pass_count++;" in source
+    assert "ring_right_pass_count++;" in source
+    assert source.index("if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)") < source.index(
+        "ring_left_pass_count++;"
+    )
+    assert "ring_left_pass_count == RING_SPECIAL_STOP_PASS_COUNT" in source
+    assert "ring_right_pass_count == RING_SPECIAL_STOP_PASS_COUNT" in source
+    assert ">= RING_SPECIAL_STOP_PASS_COUNT" not in source
+    assert legacy_update.count("stop = 1;") == 1
+    assert "if (ring_third_stop_active != 0)" in legacy_update
+    assert source.count("stop = 1;") == 2
+    assert "if (ring_third_stop_active != 0)" in legacy_in_ring
+    assert "if (ring_third_stop_active != 0)" in sensor_in_ring
+    assert "break;" in legacy_in_ring
+    assert "break;" in sensor_in_ring
+    assert source.count("ring_data.distance = 0;\n                ring_data.gyro_flat = 0;\n                stop = 1;") == 2
+    assert "ring_left_pass_count = 0;" not in normal_reset
+    assert "ring_right_pass_count = 0;" not in normal_reset
+    assert "ring_third_stop_active = 0;" in normal_reset
+    assert "ring_left_pass_count = 0;" in pass_reset
+    assert "ring_right_pass_count = 0;" in pass_reset
+    assert "stop =" not in pass_reset
+    assert "void a_run_ring_pass_count_reset(void);" in header
+    assert "a_run_ring_pass_count_reset();" in track
+    assert track.count("a_run_ring_pass_count_reset();") == 1
