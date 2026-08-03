@@ -261,9 +261,9 @@ def test_ring_pre_out_waits_for_yaw_and_encoder_distance():
     assert "config->ring.in_ring_encoder = read_float(64);" in eeprom_source
     assert "save_float(config->ring.in_ring_encoder, 64);" in eeprom_source
     assert eeprom_source.count("uint16 begin = value_bit * 4;") == 4
-    assert "uint8 date_buff[404];" in eeprom_source
-    assert "extern uint8 date_buff[404];" in eeprom_header
-    assert "#define EEPROM_CONFIG_VERSION 16L" in eeprom_source
+    assert "uint8 date_buff[408];" in eeprom_source
+    assert "extern uint8 date_buff[408];" in eeprom_header
+    assert "#define EEPROM_CONFIG_VERSION 17L" in eeprom_source
 
 
 def test_ring_drive_out_turns_outward_until_distance_and_signal_confirm():

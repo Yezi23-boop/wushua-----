@@ -89,6 +89,7 @@ typedef struct
     float drive_out_ring_encoder;   /**< drive_out_ring向外转向段最小距离（cm） */
     int16 control_mode;             /**< 圆环算法：0-旧圆环，1-电感偏置圆环 */
     int16 profile_select;           /**< 新算法参数组选择：0-profile0，1-profile1 */
+    float profile0_gain_speed_slope; /**< P0目标速度每增加1时进环增益的增加量 */
     AppRingProfileConfig profiles[2]; /**< 两套可独立保存和调节的电感偏置圆环参数 */
 } AppRingConfig;
 
@@ -167,7 +168,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[404]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 100。 */
+extern uint8 date_buff[408]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 101。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

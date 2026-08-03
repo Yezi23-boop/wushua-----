@@ -1,7 +1,7 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区覆盖逻辑槽位0~100，每个槽位占4字节。 */
-uint8 date_buff[404];
+/* 数据缓冲区覆盖逻辑槽位0~101，每个槽位占4字节。 */
+uint8 date_buff[408];
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
@@ -11,7 +11,7 @@ AppConfig app;
  * EEPROM_CONFIG_VERSION_SLOT 使用扩展区末尾槽位，避开 0~50 的现有和新增参数。
  * 旧车上只写过 init_flag=1 时，版本不匹配会强制刷新默认值，避免按新布局乱读旧数据。
  */
-#define EEPROM_CONFIG_VERSION 16L
+#define EEPROM_CONFIG_VERSION 17L
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
@@ -81,6 +81,7 @@ static void eeprom_load_defaults(AppConfig *config)
     config->ring.drive_out_ring_encoder = 5.0f;     /* 出环向外转向段最小距离（cm） */
     config->ring.control_mode = 1;
     config->ring.profile_select = 0;
+    config->ring.profile0_gain_speed_slope = 0.05f;
     config->ring.profiles[0].bias_entry_gain = 4.00f;
     config->ring.profiles[0].bias_exit_gain = 4.00f;
     config->ring.profiles[0].entry_straight_encoder = 5.0f;
@@ -197,6 +198,7 @@ static void eeprom_read_config(AppConfig *config)
     config->ring.pre_out_ring_Gyroz = read_float(21);
     config->ring.drive_out_ring_encoder = read_float(51);
     config->ring.control_mode = (int16)read_int(100);
+    config->ring.profile0_gain_speed_slope = read_float(101);
     config->ring.profiles[0].bias_entry_gain = read_float(65);
     config->ring.profiles[0].bias_exit_gain = read_float(88);
     config->ring.profiles[0].entry_straight_encoder = read_float(98);
@@ -312,6 +314,7 @@ static void eeprom_write_config(const AppConfig *config)
     save_float(config->ring.pre_out_ring_Gyroz, 21);
     save_float(config->ring.drive_out_ring_encoder, 51);
     save_int(config->ring.control_mode, 100);
+    save_float(config->ring.profile0_gain_speed_slope, 101);
     save_float(config->ring.profiles[0].bias_entry_gain, 65);
     save_float(config->ring.profiles[0].bias_exit_gain, 88);
     save_float(config->ring.profiles[0].entry_straight_encoder, 98);

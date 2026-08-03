@@ -181,6 +181,8 @@ static const MenuItemDef menu_ring_items[] = {
 static const MenuItemDef menu_ring_p0_items[] = {
     {"straight_E", &app.ring.profiles[0].entry_straight_encoder,
      MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"gain_k", &app.ring.profile0_gain_speed_slope,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
     {"ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_ENTRY},
     {"CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_IN},
     {"DRIVE", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_DRIVE}};

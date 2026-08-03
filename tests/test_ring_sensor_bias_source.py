@@ -68,10 +68,10 @@ def test_sensor_bias_reverses_virtual_signal_side_during_out_ring():
     assert "right_signal = (float)ad44;" in adc
     assert "a_run_ring_apply_adc_bias(&left_signal," in adc
     assert "void a_run_ring_apply_adc_bias(float *left_signal," in header
-    assert "*left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_left
-    assert "*left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_left
-    assert "*right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_right
-    assert "*right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;" in pre_right
+    assert "*left_signal *= ring_entry_gain_active;" in pre_left
+    assert "*left_middle_signal *= ring_entry_gain_active;" in pre_left
+    assert "*right_middle_signal *= ring_entry_gain_active;" in pre_right
+    assert "*right_signal *= ring_entry_gain_active;" in pre_right
     assert "*right_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_left
     assert "*right_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_left
     assert "*left_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;" in out_right
@@ -256,9 +256,13 @@ def test_sensor_bias_profiles_are_independent_and_persisted():
     assert "config->ring.control_mode = 1;" in source
     assert "config->ring.control_mode = (int16)read_int(100);" in source
     assert "save_int(config->ring.control_mode, 100);" in source
-    assert "uint8 date_buff[404];" in source
-    assert "extern uint8 date_buff[404];" in header
-    assert "#define EEPROM_CONFIG_VERSION 16L" in source
+    assert "float profile0_gain_speed_slope;" in header
+    assert "config->ring.profile0_gain_speed_slope = 0.05f;" in source
+    assert "config->ring.profile0_gain_speed_slope = read_float(101);" in source
+    assert "save_float(config->ring.profile0_gain_speed_slope, 101);" in source
+    assert "uint8 date_buff[408];" in source
+    assert "extern uint8 date_buff[408];" in header
+    assert "#define EEPROM_CONFIG_VERSION 17L" in source
 
 
 def test_ring_menu_exposes_runtime_mode_and_both_parameter_sets():
@@ -282,6 +286,7 @@ def test_ring_menu_exposes_runtime_mode_and_both_parameter_sets():
     assert "static const MenuItemDef menu_ring_legacy_adc_items[]" in source
     assert "static const MenuItemDef menu_ring_legacy_drive_items[]" in source
     assert '"gain", &app.ring.profiles[0].bias_entry_gain' in source
+    assert '"gain_k", &app.ring.profile0_gain_speed_slope' in source
     assert '"gain", &app.ring.profiles[1].bias_entry_gain' in source
     assert source.count('"exit_gain", &app.ring.profiles[') == 2
     assert '"finish_Gz"' not in source
@@ -293,6 +298,20 @@ def test_ring_menu_exposes_runtime_mode_and_both_parameter_sets():
     assert source.count('"inner_g", &app.ring.profiles[1].diff_inner_gain') == 1
     assert '"pre_r_T", &app.ring.pre_ring_Gyro_target' in source
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
+
+
+def test_profile0_entry_gain_adapts_linearly_to_target_speed():
+    source = _read(RING_LEGACY_C)
+
+    assert "#define RING_GAIN_REFERENCE_SPEED 50.0f" in source
+    assert "static float ring_entry_gain_active = 0.0f;" in source
+    assert "ring_entry_gain_active = RING_ACTIVE_PROFILE.bias_entry_gain;" in source
+    assert "ring_profile_active == 0" in source
+    assert (
+        "(RING_ACTIVE_PROFILE.target_speed - RING_GAIN_REFERENCE_SPEED) *"
+        in source
+    )
+    assert "app.ring.profile0_gain_speed_slope;" in source
 
 
 def test_third_same_direction_ring_stops_only_after_entering_in_ring():

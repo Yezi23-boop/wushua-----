@@ -7,6 +7,7 @@
 
 #define RING_ENTRY_CONFIRM_COUNT 5u    /* 300ms窗口累计命中次数，2ms调用下最快约 10ms。 */
 #define RING_SPECIAL_STOP_PASS_COUNT 3u /* 同一方向第3次圆环进入环内时永久停车。 */
+#define RING_GAIN_REFERENCE_SPEED 50.0f /* P0基础进环增益对应的目标速度。 */
 #define RING_YAW_DT_SCALE 0.40f        /* gyro_z已缩放0.005，二者相乘等效 2ms 角度积分。 */
 #define RING_DRIVE_OUT_AD_THRESHOLD 5u /* 旧圆环出环时外侧电感和ad5的共同阈值。 */
 
@@ -22,6 +23,7 @@ static uint8 ring_profile_active = 0;           /**< 本圈入口确认时锁存
 static uint8 ring_left_pass_count = 0;          /**< 左圆环入口累计确认次数。 */
 static uint8 ring_right_pass_count = 0;         /**< 右圆环入口累计确认次数。 */
 static uint8 ring_third_stop_active = 0;        /**< 本圈是否为当前方向第3次圆环。 */
+static float ring_entry_gain_active = 0.0f;     /**< 本圈入口确认时锁存的实际进环增益。 */
 
 #define RING_ACTIVE_PROFILE (app.ring.profiles[ring_profile_active])
 
@@ -192,13 +194,13 @@ void a_run_ring_apply_adc_bias(float *left_signal,
     {
         if (ring_data.flast_l != 0)
         {
-            *left_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
-            *left_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+            *left_signal *= ring_entry_gain_active;
+            *left_middle_signal *= ring_entry_gain_active;
         }
         else if (ring_data.flast_r != 0)
         {
-            *right_middle_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
-            *right_signal *= RING_ACTIVE_PROFILE.bias_entry_gain;
+            *right_middle_signal *= ring_entry_gain_active;
+            *right_signal *= ring_entry_gain_active;
         }
     }
     else if (ring_state == RING_STATE_OUT_RING)
@@ -236,6 +238,7 @@ void a_run_ring_reset(void)
     ring_data.yaw_delta_sum = 0;
     ring_entry_count = 0;
     ring_profile_active = 0;
+    ring_entry_gain_active = 0.0f;
     ring_third_stop_active = 0;
     ring_state = RING_STATE_IDLE;
 }
@@ -284,6 +287,15 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
                 timedestroy(&ring_data.time_l);
                 ring_mode_active = (RingControlMode)app.ring.control_mode;
                 ring_profile_active = (uint8)app.ring.profile_select;
+                ring_entry_gain_active = RING_ACTIVE_PROFILE.bias_entry_gain;
+                if (ring_mode_active == RING_CONTROL_SENSOR_BIAS &&
+                    ring_profile_active == 0)
+                {
+                    /* P0以速度50为基准，斜率由菜单调节并在本圈入口锁存。 */
+                    ring_entry_gain_active +=
+                        (RING_ACTIVE_PROFILE.target_speed - RING_GAIN_REFERENCE_SPEED) *
+                        app.ring.profile0_gain_speed_slope;
+                }
                 ring_third_stop_active = 0;
                 if (ring_dir > 0)
                 {

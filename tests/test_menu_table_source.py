@@ -57,7 +57,7 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_diff_items": 3,
         "menu_yuanshu_items": 5,
         "menu_ring_items": 5,
-        "menu_ring_p0_items": 4,
+        "menu_ring_p0_items": 5,
         "menu_ring_p1_items": 4,
         "menu_ring_legacy_items": 5,
         "menu_ring_legacy_entry_items": 1,
@@ -202,6 +202,7 @@ def test_ring_menu_exposes_runtime_mode_and_both_subpage_groups():
     assert '"profile",&app.ring.profile_select,MENU_META(MENU_ITEM_BOOL,1,0),0' in compact_source
     assert '"straight_E", &app.ring.profiles[0].entry_straight_encoder' in p0
     assert '"straight_E", &app.ring.profiles[1].entry_straight_encoder' in p1
+    assert '"gain_k", &app.ring.profile0_gain_speed_slope' in p0
     assert '{"P0",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_P0}' in compact_source
     assert '{"P1",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_P1}' in compact_source
     assert '{"LEGACY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LEGACY}' in compact_source
@@ -228,7 +229,7 @@ def test_ring_menu_exposes_runtime_mode_and_both_subpage_groups():
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
     assert '"pre_o_Gz", &app.ring.pre_out_ring_Gyroz' in source
     assert '"drv_o_E", &app.ring.drive_out_ring_encoder' in source
-    assert source.count("&app.ring.") == 54
+    assert source.count("&app.ring.") == 55
     assert "ring_data.yaw_delta_sum" not in source
     assert "ring_data.encoder" not in source
 
