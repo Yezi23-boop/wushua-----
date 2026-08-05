@@ -62,6 +62,10 @@ static void hardware_init(void)
     motor_Init();         /* 电机驱动 PWM 输出 */
     fuya_init();          /* 负压风扇 PWM */
     wireless_uart_init(); /* 无线串口（用于调试/上位机） */
+
+    /* TPL0102 使用 P3.4/P3.5 软件 I2C，驱动内部会恢复按键口模式。 */
+    tpl0102_init(TPL0102_DEVICE_54);
+    tpl0102_init(TPL0102_DEVICE_56);
 }
 
 static void timer1_service_10ms(void)
@@ -137,6 +141,8 @@ void config_save(void)
 {
     control_apply_config();
     eeprom_flash();
+    tpl0102_save(TPL0102_DEVICE_54);
+    tpl0102_save(TPL0102_DEVICE_56);
 }
 
 /**

@@ -15,14 +15,140 @@ AppConfig app;
 #define EEPROM_CONFIG_VERSION_SLOT 61
 
 /* 内部私有函数声明 */
-static void eeprom_load_defaults(AppConfig *config);
-static void eeprom_read_config(AppConfig *config);
-static void eeprom_write_config(const AppConfig *config);
-static void save_int(int32 input, uint8 value_bit);
-static int32 read_int(uint8 value_bit);
-static void save_float(float input, uint8 value_bit);
-static float read_float(uint8 value_bit);
+typedef enum
+{
+    EEPROM_VALUE_INT16 = 0,
+    EEPROM_VALUE_FLOAT
+} EepromValueType;
 
+typedef struct
+{
+    void *target;
+    uint8 slot;
+    uint8 type;
+    float default_float;
+    int16 default_int;
+} EepromConfigItem;
+
+#define EEPROM_INT(member, index, value) \
+    {&app.member, index, EEPROM_VALUE_INT16, 0.0f, value}
+#define EEPROM_FLOAT(member, index, value) \
+    {&app.member, index, EEPROM_VALUE_FLOAT, value, 0}
+
+static const EepromConfigItem eeprom_config_items[] = {
+    EEPROM_INT(start.start_flag, 1, 1),
+    EEPROM_INT(start.element_enable, 2, 1),
+    EEPROM_FLOAT(start.encoder_stop_distance_cm, 63, 3200.0f),
+    EEPROM_FLOAT(angle.limiting_Angle, 3, 48.0f),
+    EEPROM_FLOAT(speed.kp_Err, 4, 8.0f),
+    EEPROM_FLOAT(start.fuya_xili, 5, 70.0f),
+    EEPROM_FLOAT(speed.kd_Err, 6, 12.0f),
+    EEPROM_FLOAT(speed.kp2_Err, 7, 0.06f),
+    EEPROM_FLOAT(speed.speed_run, 8, 50.0f),
+    EEPROM_FLOAT(speed.limiting_Err, 9, 800.0f),
+    EEPROM_FLOAT(speed.gyro_damp_Err, 10, 0.0f),
+    EEPROM_INT(speed.diff_enable, 27, 1),
+    EEPROM_FLOAT(speed.diff_inner_gain, 60, 0.60f),
+    EEPROM_FLOAT(speed.diff_outer_gain, 62, 0.50f),
+    EEPROM_FLOAT(angle.kp_Angle, 11, 0.92f),
+    EEPROM_FLOAT(angle.kd_Angle, 12, 0.78f),
+    EEPROM_FLOAT(angle.B_1, 13, 1.20f),
+    EEPROM_FLOAT(angle.C_l, 14, 0.60f),
+    EEPROM_FLOAT(angle.A_1, 15, 1.00f),
+    EEPROM_FLOAT(angle.gyro_feedback_scale, 28, 1.50f),
+    EEPROM_FLOAT(ring.ring_entry_encoder, 16, 10.0f),
+    EEPROM_FLOAT(ring.pre_ring_Gyro_target, 17, 60.0f),
+    EEPROM_FLOAT(ring.pre_ring_Gyroz, 18, 30.0f),
+    EEPROM_FLOAT(ring.in_ring_Gyroz, 19, 220.0f),
+    EEPROM_FLOAT(ring.in_ring_encoder, 64, 50.0f),
+    EEPROM_FLOAT(ring.pre_out_ring_Gyro_target, 20, 30.0f),
+    EEPROM_FLOAT(ring.pre_out_ring_Gyroz, 21, 300.0f),
+    EEPROM_FLOAT(ring.drive_out_ring_encoder, 51, 5.0f),
+    EEPROM_INT(ring.control_mode, 100, 1),
+    EEPROM_FLOAT(ring.profile0_gain_speed_slope, 101, 0.05f),
+    EEPROM_FLOAT(ring.profiles[0].bias_entry_gain, 65, 4.0f),
+    EEPROM_FLOAT(ring.profiles[0].bias_exit_gain, 88, 4.0f),
+    EEPROM_FLOAT(ring.profiles[0].entry_straight_encoder, 98, 5.0f),
+    EEPROM_FLOAT(ring.profiles[0].bias_entry_yaw, 66, 30.0f),
+    EEPROM_FLOAT(ring.profiles[0].bias_entry_encoder, 67, 200.0f),
+    EEPROM_FLOAT(ring.profiles[0].bias_finish_encoder, 69, 1.0f),
+    EEPROM_FLOAT(ring.profiles[0].adc_a_1, 70, 1.0f),
+    EEPROM_FLOAT(ring.profiles[0].adc_b_1, 71, 1.20f),
+    EEPROM_FLOAT(ring.profiles[0].adc_c_l, 72, 0.60f),
+    EEPROM_FLOAT(ring.profiles[0].kp_Err, 68, 8.0f),
+    EEPROM_FLOAT(ring.profiles[0].kd_Err, 73, 12.0f),
+    EEPROM_FLOAT(ring.profiles[0].kp2_Err, 74, 0.06f),
+    EEPROM_FLOAT(ring.profiles[0].target_speed, 75, 50.0f),
+    EEPROM_FLOAT(ring.profiles[0].kp_Angle, 90, 0.92f),
+    EEPROM_FLOAT(ring.profiles[0].kd_Angle, 91, 0.78f),
+    EEPROM_FLOAT(ring.profiles[0].diff_inner_gain, 92, 0.60f),
+    EEPROM_FLOAT(ring.profiles[0].diff_outer_gain, 93, 0.50f),
+    EEPROM_FLOAT(ring.profiles[1].bias_entry_gain, 76, 2.0f),
+    EEPROM_FLOAT(ring.profiles[1].bias_exit_gain, 89, 2.0f),
+    EEPROM_FLOAT(ring.profiles[1].entry_straight_encoder, 99, 5.0f),
+    EEPROM_FLOAT(ring.profiles[1].bias_entry_yaw, 77, 30.0f),
+    EEPROM_FLOAT(ring.profiles[1].bias_entry_encoder, 78, 1.0f),
+    EEPROM_FLOAT(ring.profiles[1].bias_finish_encoder, 79, 200.0f),
+    EEPROM_FLOAT(ring.profiles[1].adc_a_1, 80, 1.20f),
+    EEPROM_FLOAT(ring.profiles[1].adc_b_1, 81, 1.0f),
+    EEPROM_FLOAT(ring.profiles[1].adc_c_l, 82, 0.60f),
+    EEPROM_FLOAT(ring.profiles[1].kp_Err, 83, 8.0f),
+    EEPROM_FLOAT(ring.profiles[1].kd_Err, 84, 12.0f),
+    EEPROM_FLOAT(ring.profiles[1].kp2_Err, 85, 0.01f),
+    EEPROM_FLOAT(ring.profiles[1].target_speed, 86, 50.0f),
+    EEPROM_FLOAT(ring.profiles[1].kp_Angle, 94, 0.92f),
+    EEPROM_FLOAT(ring.profiles[1].kd_Angle, 95, 0.78f),
+    EEPROM_FLOAT(ring.profiles[1].diff_inner_gain, 96, 0.60f),
+    EEPROM_FLOAT(ring.profiles[1].diff_outer_gain, 97, 0.50f),
+    EEPROM_INT(ring.profile_select, 87, 0),
+    EEPROM_INT(fly.fly_speed, 22, 30),
+    EEPROM_INT(fly.fly_detect_count, 23, 5),
+    EEPROM_INT(fly.seesaw_detect_count, 24, 5),
+    EEPROM_INT(fly.seesaw_mode, 25, 1),
+    EEPROM_INT(fly.seesaw_wait_count, 37, 10),
+    EEPROM_INT(fly.fly_recover_speed, 38, 10),
+    EEPROM_FLOAT(fly.fly_release_step, 39, 0.3f),
+    EEPROM_FLOAT(fly.seesaw_creep_cm, 40, 10.0f),
+    EEPROM_INT(fly.seesaw_speed, 53, 20),
+    EEPROM_INT(fly.fly_land_confirm_count, 54, 10),
+    EEPROM_FLOAT(fly.seesaw_release_step, 55, 0.6f),
+    EEPROM_INT(start.track_mode, 29, 0),
+    EEPROM_INT(start.element_len, 30, 4),
+    EEPROM_INT(start.element_seq[0], 31, TRACK_ELEMENT_SEESAW),
+    EEPROM_INT(start.element_seq[1], 32, TRACK_ELEMENT_CYLINDER),
+    EEPROM_INT(start.element_seq[2], 33, TRACK_ELEMENT_RIGHT_RING),
+    EEPROM_INT(start.element_seq[3], 34, TRACK_ELEMENT_NONE),
+    EEPROM_INT(start.element_seq[4], 35, TRACK_ELEMENT_NONE),
+    EEPROM_INT(start.element_seq[5], 36, TRACK_ELEMENT_NONE),
+    EEPROM_FLOAT(cylinder.encoder_target, 41, 300.0f),
+    EEPROM_INT(cylinder.ad_both_high_threshold, 42, 45),
+    EEPROM_FLOAT(cylinder.adc_a_1, 43, 1.20f),
+    EEPROM_FLOAT(cylinder.adc_b_1, 44, 1.0f),
+    EEPROM_FLOAT(cylinder.adc_c_l, 45, 0.60f),
+    EEPROM_FLOAT(cylinder.kp_Err, 46, 1.0f),
+    EEPROM_FLOAT(cylinder.kd_Err, 47, 1.0f),
+    EEPROM_INT(cylinder.exit_slow_speed, 26, 60),
+    EEPROM_INT(wall.slow_speed, 48, 75),
+    EEPROM_INT(wall.slow_time, 49, 150),
+    EEPROM_INT(wall.timing_count, 50, 500),
+    EEPROM_FLOAT(wall.encoder_target, 52, 250.0f),
+    EEPROM_FLOAT(cross.encoder_target, 56, 300.0f),
+    EEPROM_FLOAT(cross.adc_a_1, 57, 1.0f),
+    EEPROM_FLOAT(cross.adc_b_1, 58, 1.20f),
+    EEPROM_FLOAT(cross.adc_c_l, 59, 0.60f)};
+
+#define EEPROM_CONFIG_ITEM_COUNT \
+    ((uint8)(sizeof(eeprom_config_items) / sizeof(eeprom_config_items[0])))
+
+static void eeprom_load_defaults(void);
+static void eeprom_read_config(void);
+static void eeprom_write_config(void);
+static void eeprom_store_int(int32 input, uint8 value_bit);
+static int32 eeprom_load_int(uint8 value_bit);
+static void eeprom_store_float(float input, uint8 value_bit);
+static float eeprom_load_float(uint8 value_bit);
+
+#if 0
 /**
  * @brief 加载系统默认参数
  * @details 当检测到 EEPROM 中无有效数据（首次运行）时，使用此函数将硬编码的默认参数填充到 config 结构体中。
@@ -392,6 +518,57 @@ static void eeprom_write_config(const AppConfig *config)
 
     save_int(EEPROM_CONFIG_VERSION, EEPROM_CONFIG_VERSION_SLOT);
 }
+#endif
+
+/** @brief 将描述表中的默认值加载到全局配置。 */
+static void eeprom_load_defaults(void)
+{
+    const EepromConfigItem *item;
+    uint8 i;
+
+    for (i = 0; i < EEPROM_CONFIG_ITEM_COUNT; i++)
+    {
+        item = &eeprom_config_items[i];
+        if (item->type == EEPROM_VALUE_FLOAT)
+            *((float *)item->target) = item->default_float;
+        else
+            *((int16 *)item->target) = item->default_int;
+    }
+}
+
+/** @brief 将 EEPROM 缓冲区按描述表恢复到全局配置。 */
+static void eeprom_read_config(void)
+{
+    const EepromConfigItem *item;
+    uint8 i;
+
+    for (i = 0; i < EEPROM_CONFIG_ITEM_COUNT; i++)
+    {
+        item = &eeprom_config_items[i];
+        if (item->type == EEPROM_VALUE_FLOAT)
+            *((float *)item->target) = eeprom_load_float(item->slot);
+        else
+            *((int16 *)item->target) = (int16)eeprom_load_int(item->slot);
+    }
+}
+
+/** @brief 将全局配置按描述表更新缓冲区后仅刷写一次 Flash。 */
+static void eeprom_write_config(void)
+{
+    const EepromConfigItem *item;
+    uint8 i;
+
+    for (i = 0; i < EEPROM_CONFIG_ITEM_COUNT; i++)
+    {
+        item = &eeprom_config_items[i];
+        if (item->type == EEPROM_VALUE_FLOAT)
+            eeprom_store_float(*((float *)item->target), item->slot);
+        else
+            eeprom_store_int(*((int16 *)item->target), item->slot);
+    }
+    eeprom_store_int(EEPROM_CONFIG_VERSION, EEPROM_CONFIG_VERSION_SLOT);
+    extern_iap_write_buff(0x00, date_buff, sizeof(date_buff));
+}
 
 /**
  * @brief EEPROM 初始化主函数
@@ -412,23 +589,23 @@ void eeprom_init(void)
     iap_read_buff(0x00, date_buff, sizeof(date_buff));
 
     /* 预加载默认值到内存结构体（防止读取失败时无初值） */
-    eeprom_load_defaults(&app);
+    eeprom_load_defaults();
 
     /* 检查索引 0 的标志位，判断是否为有效配置 */
-    eeprom_init_time = (uint8)read_int(0);
-    config_version = read_int(EEPROM_CONFIG_VERSION_SLOT);
+    eeprom_init_time = (uint8)eeprom_load_int(0);
+    config_version = eeprom_load_int(EEPROM_CONFIG_VERSION_SLOT);
 
     if (eeprom_init_time != 1 || config_version != EEPROM_CONFIG_VERSION)
     {
         /* 旧布局只保存了 init_flag，新版本必须整体刷新，避免新增槽位读到错位参数。 */
         eeprom_init_time = 1;
-        save_int(eeprom_init_time, 0);
+        eeprom_store_int(eeprom_init_time, 0);
         eeprom_flash();
     }
     else
     {
         /* 若已初始化，则加载 EEPROM 中的真实数据覆盖内存结构体 */
-        eeprom_read_config(&app);
+        eeprom_read_config();
     }
 }
 
@@ -440,11 +617,12 @@ void eeprom_init(void)
  */
 void eeprom_flash(void)
 {
-    eeprom_write_config(&app);
+    eeprom_write_config();
 }
 
 /* --- 底层读写辅助函数 --- */
 
+#if 0
 /**
  * @brief 将 int32 类型数据保存到缓冲区指定位置并同步到 Flash
  * @param input 要保存的 32 位整型数据
@@ -517,5 +695,62 @@ static float read_float(uint8 value_bit)
     {
         *(p + i) = date_buff[begin++];
     }
+    return output;
+}
+#endif
+
+/** @brief 将 32 位整数编码到指定 EEPROM 槽位的 RAM 缓冲区。 */
+static void eeprom_store_int(int32 input, uint8 value_bit)
+{
+    uint8 i;
+    uint8 *source;
+    uint16 begin;
+
+    source = (uint8 *)&input;
+    begin = (uint16)value_bit * 4u;
+    for (i = 0; i < 4; i++)
+        date_buff[begin++] = source[i];
+}
+
+/** @brief 从指定 EEPROM 槽位的 RAM 缓冲区解码 32 位整数。 */
+static int32 eeprom_load_int(uint8 value_bit)
+{
+    uint8 i;
+    uint8 *target;
+    uint16 begin;
+    int32 output;
+
+    target = (uint8 *)&output;
+    begin = (uint16)value_bit * 4u;
+    for (i = 0; i < 4; i++)
+        target[i] = date_buff[begin++];
+    return output;
+}
+
+/** @brief 将浮点数编码到指定 EEPROM 槽位的 RAM 缓冲区。 */
+static void eeprom_store_float(float input, uint8 value_bit)
+{
+    uint8 i;
+    uint8 *source;
+    uint16 begin;
+
+    source = (uint8 *)&input;
+    begin = (uint16)value_bit * 4u;
+    for (i = 0; i < 4; i++)
+        date_buff[begin++] = source[i];
+}
+
+/** @brief 从指定 EEPROM 槽位的 RAM 缓冲区解码浮点数。 */
+static float eeprom_load_float(uint8 value_bit)
+{
+    uint8 i;
+    uint8 *target;
+    uint16 begin;
+    float output;
+
+    target = (uint8 *)&output;
+    begin = (uint16)value_bit * 4u;
+    for (i = 0; i < 4; i++)
+        target[i] = date_buff[begin++];
     return output;
 }

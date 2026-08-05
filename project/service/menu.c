@@ -39,7 +39,9 @@ typedef enum
     MENU_ITEM_INT16,
     MENU_ITEM_BOOL,
     MENU_ITEM_LINK,
-    MENU_ITEM_LENGTH
+    MENU_ITEM_LENGTH,
+    MENU_ITEM_TPL_CHANNEL,
+    MENU_ITEM_TPL_SAVE
 } MenuItemType;
 
 /** @brief 浮点参数步长索引。 */
@@ -92,8 +94,18 @@ typedef enum
     MENU_PAGE_CROSS,
     MENU_PAGE_ELEMENT_LEN,
     MENU_PAGE_ELEMENT,
+    MENU_PAGE_TPL,
     MENU_PAGE_COUNT
 } MenuPageId;
+
+/** @brief 扁平 TPL 页面通道编号。 */
+typedef enum
+{
+    MENU_TPL_CHANNEL_AD1 = 0,
+    MENU_TPL_CHANNEL_AD2,
+    MENU_TPL_CHANNEL_AD3,
+    MENU_TPL_CHANNEL_AD4
+} MenuTplChannel;
 
 /**
  * @brief 菜单行描述。
@@ -381,6 +393,13 @@ static const MenuItemDef menu_element_items[] = {
     {"E5", &app.start.element_seq[4], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E6", &app.start.element_seq[5], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1}};
 
+static const MenuItemDef menu_tpl_items[] = {
+    {"AD1", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD1},
+    {"AD2", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD2},
+    {"AD3", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD3},
+    {"AD4", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD4},
+    {"SAVE", 0, MENU_META(MENU_ITEM_TPL_SAVE, 0, 0), 0}};
+
 #define MENU_ITEM_COUNT(items) ((uint8)(sizeof(items) / sizeof((items)[0])))
 
 static const MenuPageDef menu_pages[] = {
@@ -427,7 +446,8 @@ static const MenuPageDef menu_pages[] = {
     {"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU},
     {"<<ELEM", menu_element_len_items, MENU_ITEM_COUNT(menu_element_len_items), MENU_PAGE_START},
     {"<<ELEM", menu_element_items,
-     MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_ELEMENT_LEN}};
+     MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_ELEMENT_LEN},
+    {"<<TPL", menu_tpl_items, MENU_ITEM_COUNT(menu_tpl_items), MENU_PAGE_SENSOR}};
 
 static uint8 menu_service_enabled = 0;
 static uint8 menu_page = MENU_PAGE_HOME;
@@ -441,6 +461,8 @@ static void Menu_Clear_Page(void);
 static uint8 Menu_Read_Key_Event(void);
 static const MenuItemDef *Menu_Get_Items(void);
 static uint8 Menu_Get_Item_Type(const MenuItemDef *item);
+static uint8 Menu_Get_Tpl_Channel_Device(uint8 channel);
+static uint16 Menu_Get_Tpl_Channel_Ad(uint8 channel);
 static void Menu_Show_Int32(uint16 x, uint16 y, int16 dat, uint8 num);
 static void Menu_Show_Float(uint16 x, uint16 y, float dat, uint8 num, uint8 pointnum);
 static void Menu_Draw_Item_Value(const MenuItemDef *item, uint16 y);
@@ -450,9 +472,11 @@ static void Menu_Draw_Edit_Step(const MenuItemDef *item);
 static void Menu_Render_Page(void);
 static void Menu_Change_Page(uint8 page);
 static void Menu_Apply_Item_Change(const MenuItemDef *item, uint8 increase);
+static void Menu_Apply_Tpl_Channel_Change(const MenuItemDef *item, uint8 increase);
 static void Menu_Handle_Edit(uint8 event_code);
 static void Menu_Handle_Navigation(uint8 event_code);
 static void Menu_Show_Save_Prompt(void);
+static void Menu_Show_Tpl_Save_Result(uint8 success);
 
 /**
  * @brief 设置菜单服务使能状态并复位菜单会话。
@@ -542,6 +566,37 @@ static const MenuItemDef *Menu_Get_Items(void)
 static uint8 Menu_Get_Item_Type(const MenuItemDef *item)
 {
     return (uint8)((item->meta & MENU_TYPE_MASK) >> MENU_TYPE_SHIFT);
+}
+
+/**
+ * @brief 根据扁平 TPL 通道取得对应器件索引。
+ * @param channel AD1 至 AD4 通道编号。
+ * @return TPL0102_DEVICE_54 或 TPL0102_DEVICE_56。
+ */
+static uint8 Menu_Get_Tpl_Channel_Device(uint8 channel)
+{
+    return (channel < MENU_TPL_CHANNEL_AD3) ? TPL0102_DEVICE_54 :
+                                               TPL0102_DEVICE_56;
+}
+
+/**
+ * @brief 读取一个扁平 TPL 通道对应的归一化电感值。
+ * @param channel AD1 至 AD4 通道编号。
+ * @return 当前归一化电感值。
+ */
+static uint16 Menu_Get_Tpl_Channel_Ad(uint8 channel)
+{
+    switch (channel)
+    {
+    case MENU_TPL_CHANNEL_AD1:
+        return ad1;
+    case MENU_TPL_CHANNEL_AD2:
+        return ad2;
+    case MENU_TPL_CHANNEL_AD3:
+        return ad3;
+    default:
+        return ad4;
+    }
 }
 
 /**
@@ -680,6 +735,22 @@ static void Menu_Draw_Item_Value(const MenuItemDef *item, uint16 y)
     if (type == MENU_ITEM_LINK)
         return;
 
+    if (type == MENU_ITEM_TPL_CHANNEL)
+    {
+        if (!tpl0102_online(Menu_Get_Tpl_Channel_Device(item->action)))
+            ips114_show_string(112, y, " -- ");
+        else if ((item->action & 1u) == 0)
+            Menu_Show_Int32(112, y,
+                            tpl0102_get_a(Menu_Get_Tpl_Channel_Device(item->action)), 3);
+        else
+            Menu_Show_Int32(112, y,
+                            tpl0102_get_b(Menu_Get_Tpl_Channel_Device(item->action)), 3);
+        Menu_Show_Int32(160, y, (int16)Menu_Get_Tpl_Channel_Ad(item->action), 3);
+        return;
+    }
+    if (type == MENU_ITEM_TPL_SAVE)
+        return;
+
     width = (uint8)((item->meta & MENU_WIDTH_MASK) >> MENU_WIDTH_SHIFT);
     decimal = item->meta & MENU_DECIMAL_MASK;
     if (type == MENU_ITEM_FLOAT)
@@ -796,6 +867,14 @@ static void Menu_Draw_Edit_Step(const MenuItemDef *item)
         int_unit = (int16)item->action * (int16)menu_change_multiplier;
         Menu_Show_Int32(MENU_STEP_INT_X, 0, int_unit, 4);
     }
+    else if (type == MENU_ITEM_TPL_CHANNEL)
+    {
+        Menu_Show_Int32(MENU_STEP_INT_X, 0, (int16)menu_change_multiplier, 4);
+    }
+    else if (type == MENU_ITEM_TPL_SAVE)
+    {
+        ips114_show_string(MENU_STEP_X, 0, "K3");
+    }
 }
 
 /**
@@ -855,6 +934,11 @@ static void Menu_Change_Page(uint8 page)
     menu_page = page;
     menu_editing = (page == MENU_PAGE_ELEMENT_LEN) ? 1u : 0u;
     menu_previous_row = -1;
+    if (page == MENU_PAGE_TPL)
+    {
+        tpl0102_refresh(TPL0102_DEVICE_54);
+        tpl0102_refresh(TPL0102_DEVICE_56);
+    }
     Menu_Clear_Page();
     Menu_Render_Page();
     Menu_Clear_Pending_Key_Events();
@@ -916,6 +1000,55 @@ static void Menu_Apply_Item_Change(const MenuItemDef *item, uint8 increase)
 }
 
 /**
+ * @brief 按当前菜单倍率写入 TPL0102 的一个易失通道。
+ * @param item 当前 TPL 通道行。
+ * @param increase 1 表示增加，0 表示减少。
+ * @return 无。
+ * @note 写入仅发生在菜单服务路径，不进入 2ms 控制链路。
+ */
+static void Menu_Apply_Tpl_Channel_Change(const MenuItemDef *item, uint8 increase)
+{
+    uint8 device;
+    uint8 value;
+    int16 next_value;
+
+    device = Menu_Get_Tpl_Channel_Device(item->action);
+    if (!tpl0102_online(device))
+    {
+        return;
+    }
+
+    value = ((item->action & 1u) == 0) ? tpl0102_get_a(device) :
+                                          tpl0102_get_b(device);
+    next_value = value;
+    if (increase)
+    {
+        next_value += (int16)menu_change_multiplier;
+        if (next_value > 255)
+        {
+            next_value = 255;
+        }
+    }
+    else
+    {
+        next_value -= (int16)menu_change_multiplier;
+        if (next_value < 0)
+        {
+            next_value = 0;
+        }
+    }
+
+    if ((item->action & 1u) == 0)
+    {
+        tpl0102_set_a(device, (uint8)next_value);
+    }
+    else
+    {
+        tpl0102_set_b(device, (uint8)next_value);
+    }
+}
+
+/**
  * @brief 处理参数编辑状态下的按键。
  * @param event_code 按键事件编码。
  * @return 无。
@@ -925,6 +1058,8 @@ static void Menu_Handle_Edit(uint8 event_code)
     const MenuItemDef *items;
     const MenuItemDef *item;
     uint8 type;
+    uint8 save_54;
+    uint8 save_56;
 
     items = Menu_Get_Items();
     item = &items[menu_selected[menu_page]];
@@ -934,13 +1069,19 @@ static void Menu_Handle_Edit(uint8 event_code)
     {
     case KEYSTROKE_ONE:
     case KEYSTROKE_ONE_LONG:
-        Menu_Apply_Item_Change(item, 1);
+        if (type == MENU_ITEM_TPL_CHANNEL)
+            Menu_Apply_Tpl_Channel_Change(item, 1);
+        else if (type != MENU_ITEM_TPL_SAVE)
+            Menu_Apply_Item_Change(item, 1);
         if (menu_page == MENU_PAGE_FLY && menu_selected[menu_page] == 0)
             Menu_Clear_Page();
         break;
     case KEYSTROKE_TWO:
     case KEYSTROKE_TWO_LONG:
-        Menu_Apply_Item_Change(item, 0);
+        if (type == MENU_ITEM_TPL_CHANNEL)
+            Menu_Apply_Tpl_Channel_Change(item, 0);
+        else if (type != MENU_ITEM_TPL_SAVE)
+            Menu_Apply_Item_Change(item, 0);
         if (menu_page == MENU_PAGE_FLY && menu_selected[menu_page] == 0)
             Menu_Clear_Page();
         break;
@@ -950,7 +1091,17 @@ static void Menu_Handle_Edit(uint8 event_code)
             Menu_Change_Page(item->action);
             return;
         }
-        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u : ((menu_change_multiplier == 10) ? 100u : 1u);
+        if (type == MENU_ITEM_TPL_SAVE)
+        {
+            menu_editing = 0;
+            save_54 = tpl0102_save(TPL0102_DEVICE_54);
+            save_56 = tpl0102_save(TPL0102_DEVICE_56);
+            Menu_Show_Tpl_Save_Result(save_54 && save_56);
+            Menu_Render_Page();
+            return;
+        }
+        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u :
+                                  ((menu_change_multiplier == 10) ? 100u : 1u);
         break;
     case KEYSTROKE_FOUR:
     case KEYSTROKE_FOUR_LONG:
@@ -983,6 +1134,11 @@ static void Menu_Handle_Navigation(uint8 event_code)
 
     page = &menu_pages[menu_page];
     row = menu_selected[menu_page];
+    if (menu_page == MENU_PAGE_SENSOR && event_code == KEYSTROKE_THREE)
+    {
+        Menu_Change_Page(MENU_PAGE_TPL);
+        return;
+    }
     if (page->item_count == 0 &&
         event_code != KEYSTROKE_FOUR &&
         event_code != KEYSTROKE_FOUR_LONG)
@@ -1008,6 +1164,11 @@ static void Menu_Handle_Navigation(uint8 event_code)
         if (Menu_Get_Item_Type(item) == MENU_ITEM_LINK)
         {
             Menu_Change_Page(item->action);
+            return;
+        }
+        if (Menu_Get_Item_Type(item) == MENU_ITEM_TPL_CHANNEL &&
+            !tpl0102_online(Menu_Get_Tpl_Channel_Device(item->action)))
+        {
             return;
         }
         menu_editing = 1;
@@ -1039,6 +1200,22 @@ static void Menu_Show_Save_Prompt(void)
 {
     Menu_Clear_Page();
     ips114_show_string(MENU_CENTER_X - 16, 3 * MENU_ROW_HEIGHT, "save");
+    Menu_Clear_Pending_Key_Events();
+    system_delay_ms(MENU_SAVE_PROMPT_DELAY_MS);
+    Menu_Clear_Page();
+    Menu_Clear_Pending_Key_Events();
+}
+
+/**
+ * @brief 显示一次 TPL0102 芯片 EEPROM 保存结果。
+ * @param success 非零表示芯片写入完成。
+ * @return 无。
+ */
+static void Menu_Show_Tpl_Save_Result(uint8 success)
+{
+    Menu_Clear_Page();
+    ips114_show_string(MENU_CENTER_X - 16, 3 * MENU_ROW_HEIGHT,
+                       success ? "save" : "FAIL");
     Menu_Clear_Pending_Key_Events();
     system_delay_ms(MENU_SAVE_PROMPT_DELAY_MS);
     Menu_Clear_Page();

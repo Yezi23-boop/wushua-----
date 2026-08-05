@@ -13,6 +13,7 @@
 #define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 
+#define MAIN_ENABLE_ISR_PWM 0       /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_ISR_TEST_DIFF_FUNC 0  /* 1: 在 TM0 中断中运行 test_diff_func() */
 #define MAIN_ENABLE_ISR_TEST_SPEED_FUNC 0    /* 1: 在 TM0 中断中运行 test_speed_func() */
 #define MAIN_ENABLE_ISR_RUN_TIME_1 1      /* 1: 在 TM0 中断中运行主控制环 run_time_1() */

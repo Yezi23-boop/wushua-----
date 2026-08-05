@@ -56,6 +56,7 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_model_items": 6,
         "menu_diff_items": 3,
         "menu_yuanshu_items": 5,
+        "menu_tpl_items": 5,
         "menu_ring_items": 5,
         "menu_ring_p0_items": 5,
         "menu_ring_p1_items": 4,
@@ -84,10 +85,12 @@ def test_menu_page_counts_and_parent_links_are_complete():
 
     assert '{"WALL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_WALL}' in compact_source
     assert '{"CROSS",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_CROSS}' in compact_source
+    assert '{"TPL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_TPL}' not in compact_source
     assert '{"DIFF",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_DIFF}' in compact_source
     assert '{"<<WALL",menu_wall_items,MENU_ITEM_COUNT(menu_wall_items),MENU_PAGE_YUANSHU}' in compact_source
     assert '{"<<CROSS",menu_cross_items,MENU_ITEM_COUNT(menu_cross_items),MENU_PAGE_YUANSHU}' in compact_source
     assert '{"<<DIFF",menu_diff_items,MENU_ITEM_COUNT(menu_diff_items),MENU_PAGE_HOME}' in compact_source
+    assert '{"<<TPL",menu_tpl_items,MENU_ITEM_COUNT(menu_tpl_items),MENU_PAGE_SENSOR}' in compact_source
     assert (
         '{"<<P0_ENTRY",menu_ring_entry_items,'
         'MENU_ITEM_COUNT(menu_ring_entry_items),MENU_PAGE_RING_P0}' in compact_source

@@ -122,10 +122,13 @@ void INT1_IRQHandler(void) interrupt 2
 void TM0_IRQHandler() interrupt 1
 {
     TIM0_CLEAR_FLAG;
-// a_run_apply_iap_guard();
-///* 1. 获取编码器实时速度反馈 */
-// Encoder_get(&PID.left_speed, &PID.right_speed);
-// motor_output(3000, 4000);
+#if MAIN_ENABLE_ISR_PWM
+a_run_apply_iap_guard();
+//imu_update_gyro_z_from_imu660rc();  
+/* 1. 获取编码器实时速度反馈 */
+ Encoder_get(&PID.left_speed, &PID.right_speed);
+ motor_output(3000, 3000);
+#endif
 #if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
     test_diff_func();
 #endif

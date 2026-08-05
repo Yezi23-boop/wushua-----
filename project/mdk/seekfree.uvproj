@@ -720,11 +720,6 @@
               <FilePath>..\user\int_user.c</FilePath>
             </File>
             <File>
-              <FileName>eeprom.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\service\eeprom.c</FilePath>
-            </File>
-            <File>
               <FileName>int_user.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\user\int_user.h</FilePath>
@@ -760,6 +755,11 @@
               <FilePath>..\service\debug_view.h</FilePath>
             </File>
             <File>
+              <FileName>eeprom.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\eeprom.c</FilePath>
+            </File>
+            <File>
               <FileName>eeprom.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\service\eeprom.h</FilePath>
@@ -773,6 +773,16 @@
               <FileName>menu.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\service\menu.h</FilePath>
+            </File>
+            <File>
+              <FileName>tpl0102.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\tpl0102.c</FilePath>
+            </File>
+            <File>
+              <FileName>tpl0102.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\tpl0102.h</FilePath>
             </File>
             <File>
               <FileName>filter.c</FileName>

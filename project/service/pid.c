@@ -85,8 +85,8 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     static float encoder_sum = 0.0f; /* 上电后左右轮平均累计里程，单位沿用项目标尺 cm。 */
     /* 编码器脉冲→速度转换系数 0.175f：轮周长(cm) / 编码器线数 / 减速比 / 采样周期(s)，
      * 需根据实际硬件标定。右轮取反是因为编码器安装方向与左轮相反。 */
-    speed_r_signed = -(int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
-    speed_l_signed = (int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
+    speed_r_signed = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
+    speed_l_signed = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
     speed_r = speed_r_signed;
     speed_l = speed_l_signed;
     if (speed_l < 0)
@@ -102,11 +102,11 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);
     low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);
 
-    encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
-    if (encoder_sum >= app.start.encoder_stop_distance_cm)
-    {
-        stop = 1;
-    }
+//    encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
+//    if (encoder_sum >= app.start.encoder_stop_distance_cm)
+//    {
+//        stop = 1;
+//    }
 
     left->speed = speed_l;
     right->speed = speed_r;
