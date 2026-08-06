@@ -54,17 +54,17 @@ static const EepromConfigItem eeprom_config_items[] = {
     EEPROM_FLOAT(start.encoder_stop_distance_cm, 11, 22000.0f), // 上电累计里程达到后停车
     /* --- CTRL 页面 --- */
     EEPROM_FLOAT(speed.kp_Err, 12, 5.55f),        // 转向环比例系数Kp
-    EEPROM_FLOAT(speed.kd_Err, 13, 9.0f),         // 转向环微分系数Kd
+    EEPROM_FLOAT(speed.kd_Err, 13, 12.0f),         // 转向环微分系数Kd
     EEPROM_FLOAT(speed.gyro_damp_Err, 14, 0.0f),  // 转向环陀螺仪阻尼，抑制高速摆振
     EEPROM_FLOAT(speed.speed_run, 15, 70.0f),     // 赛道基础运行速度
     EEPROM_FLOAT(speed.limiting_Err, 16, 800.0f), // 转向输出限幅
-    EEPROM_FLOAT(speed.kp2_Err, 17, 0.012f),      // 转向环二次项非线性增强系数
+    EEPROM_FLOAT(speed.kp2_Err, 17, 0.020f),      // 转向环二次项非线性增强系数
     /* --- MODEL 页面 --- */
-    EEPROM_FLOAT(angle.kp_Angle, 18, 1.30f),       // 角速度内环比例系数Kp
-    EEPROM_FLOAT(angle.kd_Angle, 19, 1.50f),       // 角速度内环微分系数Kd
+    EEPROM_FLOAT(angle.kp_Angle, 18, 0.90f),       // 角速度内环比例系数Kp
+    EEPROM_FLOAT(angle.kd_Angle, 19, 0.78f),       // 角速度内环微分系数Kd
     EEPROM_FLOAT(angle.limiting_Angle, 20, 60.0f), // 角速度内环输出限幅
     EEPROM_FLOAT(angle.A_1, 21, 1.00f),            // 横向主差分权重
-    EEPROM_FLOAT(angle.B_1, 22, 1.20f),            // 竖向差分权重，斜入/斜出姿态修正
+    EEPROM_FLOAT(angle.B_1, 22, 1.40f),            // 竖向差分权重，斜入/斜出姿态修正
     EEPROM_FLOAT(angle.C_l, 23, 0.60f),            // 分母补偿权重，弱信号时抑制偏差放大
     /* --- DIFF 页面 --- */
     EEPROM_INT(speed.diff_enable, 24, 0),           // 非线性内外轮差速开关
@@ -72,7 +72,7 @@ static const EepromConfigItem eeprom_config_items[] = {
     EEPROM_FLOAT(speed.diff_outer_gain, 26, 0.50f), // 差速分配外轮增速增益
     /* --- RING 页面 --- */
     EEPROM_FLOAT(ring.profile.entry_straight_encoder, 27, 5.0f), // 入口识别后零角速度直走距离
-    EEPROM_FLOAT(ring.gain_speed_slope, 28, 0.08f),              // 进环增益随目标速度的补偿斜率
+    EEPROM_FLOAT(ring.gain_speed_slope, 28, 0.085f),              // 进环增益随目标速度的补偿斜率
     /* --- RING ENTRY 子页面 --- */
     EEPROM_FLOAT(ring.profile.bias_entry_gain, 29, 2.10f),       // 进环阶段同侧两路电感放大倍数
     EEPROM_FLOAT(ring.profile.bias_exit_gain, 30, 1.00f),        // 出环阶段对侧两路电感放大倍数
