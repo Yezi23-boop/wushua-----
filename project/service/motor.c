@@ -172,9 +172,9 @@ void motor_output(int32 lpwm, int32 rpwm)
     if (stop == 0)
     {
         motor_limit_start_pwm_pair(&lpwm_limited, &rpwm_limited);
-        if (fly_pwm_output_limit > 0)
+        if (seesaw_pwm_output_limit > 0)
         {
-            motor_limit_pwm_pair_to(&lpwm_limited, &rpwm_limited, fly_pwm_output_limit);
+            motor_limit_pwm_pair_to(&lpwm_limited, &rpwm_limited, seesaw_pwm_output_limit);
         }
         motor_update_start_pwm_ramp(lpwm_limited, rpwm_limited);
         motor_last_lpwm_limited = lpwm_limited;
@@ -234,10 +234,10 @@ void lost_lines(void)
     static int8 count = 0; /* 丢线确认计数器 */
 
     /*
-     * 跷跷板 HOLD/RECOVER 前段会主动屏蔽丢线；若 RECOVER 超过 1s 仍未恢复，
-     * 飞坡状态机会释放该屏蔽，让真实丢线重新触发停车保护。
+     * 跷跷板高风险窗口会主动屏蔽丢线；若释放期超时仍未恢复，
+     * 状态机复位时会释放该屏蔽，让真实丢线重新触发停车保护。
      */
-    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && fly_lost_line_blocked == 0)
+    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && seesaw_lost_line_blocked == 0)
     {
         count++;
     }

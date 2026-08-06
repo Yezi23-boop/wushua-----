@@ -2,7 +2,7 @@
  * @file a_run_track_element.c
  * @brief 环岛、圆桶、跷跷板与墙面赛道元素仲裁状态机。
  * @details
- * 本文件只负责按 app.start.element_len 和 app.start.element_seq[] 串行开放元素识别，
+ * 本文件只负责按 app.start.element_seq[] 串行开放元素识别，
  * 具体左圆环、圆桶和墙面状态机分别放在对应模块中，避免单文件过长。
  */
 #include "zf_common_headfile.h"
@@ -75,19 +75,12 @@ static void track_element_enter(enum TrackElement element)
     a_run_wall_reset();
     a_run_cross_reset();
     /*
-     * 跷跷板完成事件只推进元素序列，COOLDOWN 还要继续释放速度。
-     * 切到任意后续元素时都不能清掉 fly_release_speed，否则会一拍回到巡线速度。
+     * 跷跷板完成事件只推进元素序列，RELEASE 还要继续释放速度。
+     * 切到任意后续元素时都不能清掉 seesaw_release_speed，否则会一拍回到巡线速度。
      */
-    if (element == ELEMENT_NONE || a_run_fly_get_state() != FLY_STATE_COOLDOWN)
+    if (element == ELEMENT_NONE || a_run_seesaw_get_state() != SEESAW_STATE_RELEASE)
     {
-        if (app.fly.seesaw_mode == 0)
-        {
-            a_run_fly_reset();
-        }
-        else
-        {
-            a_run_seesaw_reset();
-        }
+        a_run_seesaw_reset();
     }
 
     expected_element = element;
@@ -100,9 +93,9 @@ static void track_element_enter(enum TrackElement element)
 
 /**
  * @brief 从指定序列下标开始寻找并进入第一个可执行元素。
- * @param start_index 起始扫描下标，超过有效长度时会从 0 折回。
+ * @param start_index 起始扫描下标，超过有效范围时会从 0 折回。
  *
- * 扫描范围受 element_len 限制，长度非法或全空时进入无元素状态。
+ * 有效长度由 element_seq 中首个 NONE(0) 终止符动态确定。
  */
 static void track_element_enter_from_index(uint8 start_index)
 {
@@ -111,13 +104,19 @@ static void track_element_enter_from_index(uint8 start_index)
     uint8 element_len;
     int element;
 
-    if (app.start.element_len < 1 || app.start.element_len > TRACK_ELEMENT_SEQUENCE_MAX)
+    // 动态扫描有效长度：遇到第一个 NONE 终止
+    element_len = 0;
+    while (element_len < TRACK_ELEMENT_SEQUENCE_MAX && app.start.element_seq[element_len] != TRACK_ELEMENT_NONE)
+    {
+        element_len++;
+    }
+
+    if (element_len == 0)
     {
         track_element_enter(ELEMENT_NONE);
         return;
     }
 
-    element_len = (uint8)app.start.element_len;
     index = start_index;
     for (scan_count = 0; scan_count < element_len; scan_count++)
     {
@@ -147,7 +146,6 @@ static void track_element_enter_from_index(uint8 start_index)
  */
 static void track_element_reset_state(void)
 {
-    a_run_ring_pass_count_reset();
     element_sequence_started = 0;
     track_element_enter(ELEMENT_NONE);
 }
@@ -156,7 +154,7 @@ static void track_element_reset_state(void)
  * @brief 更新赛道元素仲裁状态机。
  *
  * `app.start.element_enable` 作为整体元素识别开关；开启后按 `expected_element` 开放当前元素流程。
- * 元素顺序由 `app.start.element_len` 和 `app.start.element_seq[]` 决定，0/不可执行槽位会跳过。
+ * 元素顺序由 `app.start.element_seq[]` 决定，遇到首个 NONE 截止；0/不可执行槽位会跳过。
  *
  * @param speed 2ms 主控制链路当前目标速度，保留小数速度设定；跷跷板和完成后释放阶段可能覆盖该值。
  * @param angle_target 转向外环输出的目标角速度，圆环和跷跷板阶段可能覆盖该值。
@@ -212,7 +210,7 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
             /* 停止等待模式 */
             a_run_seesaw_update_speed(speed, 1);
         }
-        if (a_run_fly_take_finish_event() != 0)
+        if (a_run_seesaw_take_finish_event() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
@@ -237,7 +235,7 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         break;
     }
 
-    a_run_fly_update_release_speed(speed);
+    a_run_seesaw_update_release_speed(speed);
     a_run_ring_apply_speed(speed);
     a_run_ring_update_angle_target(angle_target);
 }

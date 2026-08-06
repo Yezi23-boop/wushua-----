@@ -4,26 +4,15 @@
 #include "a_run_track_element.h"
 
 /**
- * @brief 圆环控制算法。
- */
-typedef enum
-{
-    RING_CONTROL_LEGACY = 0,     /**< 旧固定角速度圆环。 */
-    RING_CONTROL_SENSOR_BIAS = 1 /**< 电感偏置圆环。 */
-} RingControlMode;
-
-/**
  * @brief 圆环状态机阶段。
  */
 typedef enum
 {
-    RING_STATE_IDLE = 0,           /**< 未进入圆环流程。 */
-    RING_STATE_ENTRY = 1,          /**< 已识别圆环入口；新模式在该阶段零角速度直走。 */
-    RING_STATE_PRE_RING = 2,       /**< 预入环阶段；新算法在该阶段放大外侧电感。 */
-    RING_STATE_IN_RING = 3,        /**< 环内阶段。 */
-    RING_STATE_PRE_OUT_RING = 4,   /**< 预出环阶段。 */
-    RING_STATE_DRIVE_OUT_RING = 5, /**< 达到最小距离后按外侧电感和 ad5 确认的固定向外转向阶段。 */
-    RING_STATE_OUT_RING = 6        /**< 出环确认阶段。 */
+    RING_STATE_IDLE = 0,     /**< 未进入圆环流程。 */
+    RING_STATE_ENTRY = 1,    /**< 已识别圆环入口，该阶段零角速度直走。 */
+    RING_STATE_PRE_RING = 2, /**< 预入环阶段，该阶段放大外侧电感。 */
+    RING_STATE_IN_RING = 3,  /**< 环内阶段。 */
+    RING_STATE_OUT_RING = 4  /**< 出环确认阶段。 */
 } RingState;
 
 /**
@@ -53,12 +42,6 @@ extern RingStruct ring_data;
  * @brief 复位圆环状态机。
  */
 void a_run_ring_reset(void);
-
-/**
- * @brief 清零左右圆环经过次数。
- * @details 不修改全局stop，仅在赛道元素系统整体复位时调用。
- */
-void a_run_ring_pass_count_reset(void);
 
 /**
  * @brief 按 2ms 主控制环周期更新圆环状态机。

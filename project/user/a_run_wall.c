@@ -5,14 +5,14 @@
 #include "zf_common_headfile.h"
 #include "a_run_wall.h"
 
-#define WALL_AD_SUM_THRESHOLD 100u     /* 墙面入口四路归一化电感和阈值，超过后才允许推进墙面确认。 */
-#define WALL_SIGNAL_CONFIRM_COUNT 2u   /* 电感和连续命中次数，2ms * 2 = 4ms，用于过滤单拍毛刺。 */
+#define WALL_AD_SUM_THRESHOLD 100u   /* 墙面入口四路归一化电感和阈值，超过后才允许推进墙面确认。 */
+#define WALL_SIGNAL_CONFIRM_COUNT 2u /* 电感和连续命中次数，2ms * 2 = 4ms，用于过滤单拍毛刺。 */
 
 static WallState wall_state = WALL_STATE_IDLE; /**< 墙面状态机阶段，圆桶/跷跷板完成后由 2ms 主环推进。 */
-static uint16 wall_timer_count = 0;          /**< 墙面完整波形确认后的下墙计时，单位：2ms。 */
-static uint16 wall_slow_count = 0;           /**< 降速阶段计时，单位：2ms。 */
-static uint16 wall_signal_count = 0;         /**< 宽松电感条件连续命中次数，断开即清零，避免离散毛刺累计。 */
-static float wall_encoder_sum = 0.0f;        /**< 进入墙面后的编码器积分累计，达到阈值可提前结束墙面。 */
+static uint16 wall_timer_count = 0;            /**< 墙面完整波形确认后的下墙计时，单位：2ms。 */
+static uint16 wall_slow_count = 0;             /**< 降速阶段计时，单位：2ms。 */
+static uint16 wall_signal_count = 0;           /**< 宽松电感条件连续命中次数，断开即清零，避免离散毛刺累计。 */
+static float wall_encoder_sum = 0.0f;          /**< 进入墙面后的编码器积分累计，达到阈值可提前结束墙面。 */
 
 /**
  * @brief 读取当前墙面状态机阶段。
@@ -82,7 +82,8 @@ uint8 a_run_wall_update_5ms(float *speed)
         wall_state = WALL_STATE_WAIT_SIGNAL;
         break;
     case WALL_STATE_WAIT_SIGNAL:
-        if (ad_sum > WALL_AD_SUM_THRESHOLD)
+        // ad5 为墙面专用传感器，>50 才确认墙面信号存在
+        if (ad_sum > WALL_AD_SUM_THRESHOLD && ad5 > 50)
         {
             wall_signal_count++;
             if (wall_signal_count >= WALL_SIGNAL_CONFIRM_COUNT)

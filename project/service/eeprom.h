@@ -11,10 +11,8 @@ typedef struct
 {
     int16 start_flag;        /**< 启动标志位：1-启动运行，0-停止待机 */
     int16 element_enable;    /**< 整体赛道元素识别开关：1-开启，0-关闭 */
-    int16 track_mode;        /**< 赛道元素模式：0-左圆环到圆筒循环，其余模式预留 */
     float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
     float encoder_stop_distance_cm; /**< 上电累计里程达到该值后停车，单位 cm */
-    int element_len;                            /**< 元素序列有效长度，运行期超出 1~6 时进入无元素状态。 */
     int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板、6双十字；其他值运行期跳过。 */
 } AppStartConfig;
 
@@ -61,6 +59,7 @@ typedef struct
     float bias_entry_yaw;      /**< 结束进环偏置的累计转角阈值（度） */
     float bias_entry_encoder;  /**< 结束进环偏置的编码器距离阈值（cm） */
     float bias_finish_encoder; /**< 圆环完成的编码器距离阈值（cm） */
+    float bias_finish_yaw;     /**< 出环满圈角度积分阈值（度），与里程双条件确认 */
     float target_speed;        /**< 圆环进环、环内和出环阶段目标速度 */
     float adc_a_1;             /**< 圆环阶段横向主差分权重 */
     float adc_b_1;             /**< 圆环阶段辅助电感差分权重 */
@@ -79,18 +78,8 @@ typedef struct
  */
 typedef struct
 {
-    float ring_entry_encoder;       /**< ring阶段编码器积分阈值，达到后进入pre_ring */
-    float pre_ring_Gyro_target;     /**< pre_ring阶段固定目标角速度 */
-    float pre_ring_Gyroz;           /**< pre_ring阶段累计转角阈值，达到后进入in_ring */
-    float in_ring_Gyroz;            /**< in_ring阶段累计转角阈值，达到后进入pre_out_ring */
-    float in_ring_encoder;          /**< 从pre_ring开始累计的出环打角距离阈值（cm） */
-    float pre_out_ring_Gyro_target; /**< pre_out_ring阶段固定目标角速度 */
-    float pre_out_ring_Gyroz;       /**< pre_out_ring阶段累计转角阈值，达到后进入drive_out_ring */
-    float drive_out_ring_encoder;   /**< drive_out_ring向外转向段最小距离（cm） */
-    int16 control_mode;             /**< 圆环算法：0-旧圆环，1-电感偏置圆环 */
-    int16 profile_select;           /**< 新算法参数组选择：0-profile0，1-profile1 */
-    float profile0_gain_speed_slope; /**< P0目标速度每增加1时进环增益的增加量 */
-    AppRingProfileConfig profiles[2]; /**< 两套可独立保存和调节的电感偏置圆环参数 */
+    float gain_speed_slope;       /**< 目标速度每增加1时进环增益的增加量 */
+    AppRingProfileConfig profile; /**< 可独立保存和调节的电感偏置圆环参数 */
 } AppRingConfig;
 
 /**
