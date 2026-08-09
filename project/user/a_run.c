@@ -16,8 +16,8 @@ volatile float left_target = 0.0f;  /* 当前左轮目标速度（用于菜单/�
 volatile float right_target = 0.0f; /* 当前右轮目标速度（用于菜单/调试显示） */
 
 /* --- 周期任务内部变量 --- */
-static int steer_div_10 = 0;        /* 2ms 主环分频：每 3 拍约 6ms 更新一次转向环 */
-static float speed_active = 0.0f;   /* 当前参与速度环计算的目标速度，保留 speed_run 的小数调参精度。 */
+static int steer_div_10 = 0;      /* 2ms 主环分频：每 3 拍约 6ms 更新一次转向环 */
+static float speed_active = 0.0f; /* 当前参与速度环计算的目标速度，保留 speed_run 的小数调参精度。 */
 /**
  * @brief 主控制核心任务 (运行于 TM0 2ms 中断)
  * @details 串行执行传感器采集 -> 姿态获取 -> 转向偏差融合 -> 速度设定 -> 电机执行链路。
@@ -54,6 +54,13 @@ void run_time_1(void)
             a_run_ring_apply_steer_params(&PID.steer.Kp,
                                           &PID.steer.Kd,
                                           &PID.steer.Kp2);
+        }
+        if (a_run_cross_get_state() == CROSS_STATE_TIMING)
+        {
+            /* 双十字确认后使用独立转向环参数，离开TIMING自动恢复全局值。 */
+            PID.steer.Kp = app.cross.kp_Err;
+            PID.steer.Kd = app.cross.kd_Err;
+            PID.steer.Kp2 = app.cross.kp2_Err;
         }
         /* 方向外环根据电感偏差生成差速目标，后续再结合 gyro 阻尼输出最终差速。 */
         pid_steer_update(&PID.steer, Err, 0.0f);

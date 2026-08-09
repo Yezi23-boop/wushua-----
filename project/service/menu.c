@@ -268,7 +268,10 @@ static const MenuItemDef menu_cross_items[] = {
     {"enc_target", &app.cross.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
     {"adc_a_1", &app.cross.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
     {"adc_b_1", &app.cross.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"adc_c_l", &app.cross.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
+    {"adc_c_l", &app.cross.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.cross.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.cross.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.cross.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
 
 static const MenuItemDef menu_element_items[] = {
     {"E1", &app.start.element_seq[0], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
@@ -437,8 +440,7 @@ static uint8 Menu_Get_Item_Type(const MenuItemDef *item)
  */
 static uint8 Menu_Get_Tpl_Channel_Device(uint8 channel)
 {
-    return (channel < MENU_TPL_CHANNEL_AD3) ? TPL0102_DEVICE_54 :
-                                               TPL0102_DEVICE_56;
+    return (channel < MENU_TPL_CHANNEL_AD3) ? TPL0102_DEVICE_54 : TPL0102_DEVICE_56;
 }
 
 /**
@@ -870,8 +872,7 @@ static void Menu_Apply_Tpl_Channel_Change(const MenuItemDef *item, uint8 increas
         return;
     }
 
-    value = ((item->action & 1u) == 0) ? tpl0102_get_a(device) :
-                                          tpl0102_get_b(device);
+    value = ((item->action & 1u) == 0) ? tpl0102_get_a(device) : tpl0102_get_b(device);
     next_value = value;
     if (increase)
     {
@@ -947,8 +948,7 @@ static void Menu_Handle_Edit(uint8 event_code)
             Menu_Render_Page();
             return;
         }
-        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u :
-                                  ((menu_change_multiplier == 10) ? 100u : 1u);
+        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u : ((menu_change_multiplier == 10) ? 100u : 1u);
         break;
     case KEYSTROKE_FOUR:
     case KEYSTROKE_FOUR_LONG:

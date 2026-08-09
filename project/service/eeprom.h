@@ -9,10 +9,10 @@
  */
 typedef struct
 {
-    int16 start_flag;        /**< 启动标志位：1-启动运行，0-停止待机 */
-    int16 element_enable;    /**< 整体赛道元素识别开关：1-开启，0-关闭 */
-    float fuya_xili;         /**< 平地负压百分比，范围 0~100 */
-    float encoder_stop_distance_cm; /**< 上电累计里程达到该值后停车，单位 cm */
+    int16 start_flag;                            /**< 启动标志位：1-启动运行，0-停止待机 */
+    int16 element_enable;                        /**< 整体赛道元素识别开关：1-开启，0-关闭 */
+    float fuya_xili;                             /**< 平地负压百分比，范围 0~100 */
+    float encoder_stop_distance_cm;              /**< 上电累计里程达到该值后停车，单位 cm */
     int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板、6双十字；其他值运行期跳过。 */
 } AppStartConfig;
 
@@ -22,13 +22,13 @@ typedef struct
  */
 typedef struct
 {
-    float kp_Err;        /**< 转向误差比例系数 Kp（响应电感偏差的力度） */
-    float kd_Err;        /**< 转向误差微分系数 Kd（抑制电感偏差变化的速率） */
-    float gyro_damp_Err; /**< 转向环陀螺仪阻尼系数（抑制高速摆振） */
-    float speed_run;     /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
-    float limiting_Err;  /**< 转向输出限幅值（防止舵机/电机过载） */
-    float kp2_Err;       /**< 二次项系数（用于处理大角度弯道的非线性增强） */
-    int16 diff_enable;   /**< 非线性内外轮差速开关：1-开启，0-使用线性差速 */
+    float kp_Err;          /**< 转向误差比例系数 Kp（响应电感偏差的力度） */
+    float kd_Err;          /**< 转向误差微分系数 Kd（抑制电感偏差变化的速率） */
+    float gyro_damp_Err;   /**< 转向环陀螺仪阻尼系数（抑制高速摆振） */
+    float speed_run;       /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
+    float limiting_Err;    /**< 转向输出限幅值（防止舵机/电机过载） */
+    float kp2_Err;         /**< 二次项系数（用于处理大角度弯道的非线性增强） */
+    int16 diff_enable;     /**< 非线性内外轮差速开关：1-开启，0-使用线性差速 */
     float diff_inner_gain; /**< 差速分配内轮减速增益 */
     float diff_outer_gain; /**< 差速分配外轮增速增益 */
 } AppSpeedConfig;
@@ -53,24 +53,24 @@ typedef struct
  */
 typedef struct
 {
-    float bias_entry_gain;     /**< 进环阶段同侧两路电感放大倍数 */
-    float bias_exit_gain;      /**< 出环阶段对侧两路电感放大倍数 */
+    float bias_entry_gain;        /**< 进环阶段同侧两路电感放大倍数 */
+    float bias_exit_gain;         /**< 出环阶段对侧两路电感放大倍数 */
     float entry_straight_encoder; /**< 识别后零角速度直走距离（cm） */
-    float bias_entry_yaw;      /**< 结束进环偏置的累计转角阈值（度） */
-    float bias_entry_encoder;  /**< 结束进环偏置的编码器距离阈值（cm） */
-    float bias_finish_encoder; /**< 圆环完成的编码器距离阈值（cm） */
-    float bias_finish_yaw;     /**< 出环满圈角度积分阈值（度），与里程双条件确认 */
-    float target_speed;        /**< 圆环进环、环内和出环阶段目标速度 */
-    float adc_a_1;             /**< 圆环阶段横向主差分权重 */
-    float adc_b_1;             /**< 圆环阶段辅助电感差分权重 */
-    float adc_c_l;             /**< 圆环阶段分母补偿权重 */
-    float kp_Err;              /**< 圆环阶段方向环比例系数 */
-    float kd_Err;              /**< 圆环阶段方向环微分系数 */
-    float kp2_Err;             /**< 圆环阶段方向环非线性增强系数 */
-    float kp_Angle;            /**< 圆环阶段角速度内环比例系数 */
-    float kd_Angle;            /**< 圆环阶段角速度内环微分系数 */
-    float diff_inner_gain;     /**< 圆环阶段内轮减速增益 */
-    float diff_outer_gain;     /**< 圆环阶段外轮增速增益 */
+    float bias_entry_yaw;         /**< 结束进环偏置的累计转角阈值（度） */
+    float bias_entry_encoder;     /**< 结束进环偏置的编码器距离阈值（cm） */
+    float bias_finish_encoder;    /**< 圆环完成的编码器距离阈值（cm） */
+    float bias_finish_yaw;        /**< 出环满圈角度积分阈值（度），与里程双条件确认 */
+    float target_speed;           /**< 圆环进环、环内和出环阶段目标速度 */
+    float adc_a_1;                /**< 圆环阶段横向主差分权重 */
+    float adc_b_1;                /**< 圆环阶段辅助电感差分权重 */
+    float adc_c_l;                /**< 圆环阶段分母补偿权重 */
+    float kp_Err;                 /**< 圆环阶段方向环比例系数 */
+    float kd_Err;                 /**< 圆环阶段方向环微分系数 */
+    float kp2_Err;                /**< 圆环阶段方向环非线性增强系数 */
+    float kp_Angle;               /**< 圆环阶段角速度内环比例系数 */
+    float kd_Angle;               /**< 圆环阶段角速度内环微分系数 */
+    float diff_inner_gain;        /**< 圆环阶段内轮减速增益 */
+    float diff_outer_gain;        /**< 圆环阶段外轮增速增益 */
 } AppRingProfileConfig;
 
 /**
@@ -88,19 +88,19 @@ typedef struct
 typedef struct
 {
     /* 飞坡模式专用 */
-    int fly_speed;           /**< LOW 阶段目标速度 */
-    int fly_detect_count;    /**< IDLE 入口弱磁确认次数 */
-    int fly_recover_speed;   /**< 飞坡 COOLDOWN 恢复速度 */
+    int fly_speed;              /**< LOW 阶段目标速度 */
+    int fly_detect_count;       /**< IDLE 入口弱磁确认次数 */
+    int fly_recover_speed;      /**< 飞坡 COOLDOWN 恢复速度 */
     int fly_land_confirm_count; /**< 落地回升连续确认次数 */
-    float fly_release_step;  /**< 飞坡 COOLDOWN 步长 */
+    float fly_release_step;     /**< 飞坡 COOLDOWN 步长 */
     /* 停止等待模式专用 */
-    int seesaw_detect_count; /**< IDLE 入口命中次数 */
-    int seesaw_wait_count;   /**< 停车等待时间（×2ms） */
-    int seesaw_speed;        /**< CREEP 阶段目标速度 */
-    float seesaw_creep_cm;   /**< 前挪距离（cm） */
-    float seesaw_release_step;/**< 停止等待 COOLDOWN 步长 */
+    int seesaw_detect_count;   /**< IDLE 入口命中次数 */
+    int seesaw_wait_count;     /**< 停车等待时间（×2ms） */
+    int seesaw_speed;          /**< CREEP 阶段目标速度 */
+    float seesaw_creep_cm;     /**< 前挪距离（cm） */
+    float seesaw_release_step; /**< 停止等待 COOLDOWN 步长 */
     /* 共用 */
-    int16 seesaw_mode;       /**< 0=飞坡，1=停止等待 */
+    int16 seesaw_mode; /**< 0=飞坡，1=停止等待 */
 } AppFlyConfig;
 
 /**
@@ -123,9 +123,9 @@ typedef struct
  */
 typedef struct
 {
-    int slow_speed;   /**< 墙面阶段降速目标值。 */
-    int slow_time;    /**< 墙面阶段降速持续时间，单位为 2ms 主控制周期。 */
-    int timing_count; /**< 墙面阶段下墙计时，单位为 2ms 主控制周期。 */
+    int slow_speed;       /**< 墙面阶段降速目标值。 */
+    int slow_time;        /**< 墙面阶段降速持续时间，单位为 2ms 主控制周期。 */
+    int timing_count;     /**< 墙面阶段下墙计时，单位为 2ms 主控制周期。 */
     float encoder_target; /**< 墙面退出编码器积分阈值。 */
 } AppWallConfig;
 
@@ -135,9 +135,12 @@ typedef struct
 typedef struct
 {
     float encoder_target; /**< 双十字退出编码器积分阈值 */
-    float adc_a_1;              /**< 双十字专用横向主差分权重。 */
-    float adc_b_1;              /**< 双十字专用竖向差分权重。 */
-    float adc_c_l;              /**< 双十字专用分母补偿权重。 */
+    float adc_a_1;        /**< 双十字专用横向主差分权重。 */
+    float adc_b_1;        /**< 双十字专用竖向差分权重。 */
+    float adc_c_l;        /**< 双十字专用分母补偿权重。 */
+    float kp_Err;         /**< 双十字专用方向环比例系数 */
+    float kd_Err;         /**< 双十字专用方向环微分系数 */
+    float kp2_Err;        /**< 双十字专用方向环非线性增强系数 */
 } AppCrossConfig;
 
 /**
