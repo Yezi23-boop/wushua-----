@@ -65,7 +65,11 @@ static int8 track_element_is_executable(int element)
  */
 static void track_element_enter(enum TrackElement element)
 {
-    a_run_ring_reset();
+    /* 圆环出环释放期间不清状态机，否则释放过程会被元素切换打断。 */
+    if (a_run_ring_get_state() != RING_STATE_RELEASE)
+    {
+        a_run_ring_reset();
+    }
     if (element == ELEMENT_NONE ||
         element == ELEMENT_CYLINDER ||
         a_run_cylinder_get_state() != CYLINDER_STATE_RELEASE)
@@ -173,8 +177,9 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         element_sequence_started = 1;
     }
 
-    /* 圆桶恢复只提供基础速度上限，当前元素可在后续 switch 中覆盖更低速度。 */
+    /* 圆桶/圆环释放只提供基础速度上限，当前元素可在后续 switch 中覆盖更低速度。 */
     a_run_cylinder_update_release_speed(speed);
+    a_run_ring_update_release_speed(speed);
 
     switch (expected_element)
     {

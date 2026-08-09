@@ -9,7 +9,7 @@
 #define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 70 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
 #define CYLINDER_TOP_WINDOW_COUNT 250u         /* 圆桶命中统计窗口，2ms * 250 = 500ms。 */
 #define CYLINDER_TOP_HIT_COUNT 5               /* 500ms 窗口内强信号达到该次数才认定进入圆桶段。 */
-#define CYLINDER_SPEED_RAMP_STEP 0.1f          /* 圆桶确认后每个 2ms 周期的阶梯加减速步长。 */
+#define CYLINDER_SPEED_RAMP_STEP 0.05f         /* 圆桶确认后每个 2ms 周期的阶梯加减速步长。 */
 
 static CylinderState cylinder_state = CYLINDER_STATE_IDLE; /**< 圆桶状态机阶段，由 2ms 主环推进。 */
 static uint8 cylinder_top_count = 0;                       /**< 圆桶窗口内命中次数，达到阈值后认定进入圆桶段。 */

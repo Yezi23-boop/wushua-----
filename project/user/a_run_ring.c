@@ -8,11 +8,13 @@
 #define RING_ENTRY_CONFIRM_COUNT 5u     /* 300ms窗口累计命中次数，2ms调用下最快约 10ms。 */
 #define RING_GAIN_REFERENCE_SPEED 50.0f /* 基础进环增益对应的目标速度。 */
 #define RING_YAW_DT_SCALE 0.40f         /* gyro_z已缩放0.005，二者相乘等效 2ms 角度积分。 */
+#define RING_SPEED_RELEASE_STEP 0.1f    /* 出环后每个 2ms 周期的阶梯加速步长，与圆桶保持一致。 */
 
 static RingState ring_state = RING_STATE_IDLE; /**< 当前圆环状态机阶段，左右圆环共用。 */
 RingStruct ring_data = {0};                    /**< 圆环方向、积分量和软定时器。 */
 static uint8 ring_entry_count = 0;             /**< 300ms窗口内累计入口命中次数。 */
 static float ring_entry_gain_active = 0.0f;    /**< 本圈入口确认时锁存的实际进环增益。 */
+static float ring_ramp_speed = 0.0f;           /**< 出环释放阶段当前目标速度，逐拍爬回 speed_run。 */
 
 #define RING_ACTIVE_PROFILE (app.ring.profile)
 
@@ -102,6 +104,8 @@ void a_run_ring_apply_angle_diff_params(float *kp,
 
 /**
  * @brief 新圆环运行阶段使用锁存参数组的目标速度。
+ *
+ * RELEASE 态不覆盖，速度由 a_run_ring_update_release_speed() 阶梯接管。
  * @param speed 当前控制链目标速度指针。
  */
 void a_run_ring_apply_speed(float *speed)
@@ -111,6 +115,44 @@ void a_run_ring_apply_speed(float *speed)
         ring_state == RING_STATE_OUT_RING)
     {
         *speed = RING_ACTIVE_PROFILE.target_speed;
+    }
+}
+
+/**
+ * @brief 更新圆环出环后的后台阶梯加速。
+ *
+ * 出环后速度从 target_speed 逐拍加步长爬回 speed_run，避免环内降速
+ * 运行时出环瞬间扭矩突变丢线；释放完成后复位状态机。
+ *
+ * @param speed 当前目标速度指针，非 RELEASE 态不修改。
+ */
+void a_run_ring_update_release_speed(float *speed)
+{
+    float target_speed;
+
+    if (ring_state != RING_STATE_RELEASE)
+    {
+        return;
+    }
+
+    target_speed = app.speed.speed_run;
+    if (ring_ramp_speed >= target_speed)
+    {
+        *speed = target_speed;
+        a_run_ring_reset();
+        return;
+    }
+
+    ring_ramp_speed += RING_SPEED_RELEASE_STEP;
+    if (ring_ramp_speed > target_speed)
+    {
+        ring_ramp_speed = target_speed;
+    }
+    *speed = ring_ramp_speed;
+
+    if (ring_ramp_speed >= target_speed)
+    {
+        a_run_ring_reset();
     }
 }
 
@@ -174,6 +216,7 @@ void a_run_ring_reset(void)
     ring_data.yaw_delta_sum = 0;
     ring_entry_count = 0;
     ring_entry_gain_active = 0.0f;
+    ring_ramp_speed = 0.0f;
     ring_state = RING_STATE_IDLE;
 }
 
@@ -221,7 +264,8 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
 
     a_run_ring_update_integrals();
 
-    if (ring_state == RING_STATE_IDLE)
+    /* RELEASE 态与 IDLE 同等开放入口检测，序列连续两个圆环时释放中也能重进环。 */
+    if (ring_state == RING_STATE_IDLE || ring_state == RING_STATE_RELEASE)
     {
         /* 五路电感阈值同时命中为圆环入口特征，300ms窗口内累计确认。 */
         if (ad1 > 30 &&
@@ -302,9 +346,25 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
     case RING_STATE_OUT_RING:
         if (timeadd(&ring_data.out_ring_time, 500))
         {
-            a_run_ring_reset();
+            /*
+             * 环速不低于巡线速度时出环无需加速过渡，直接复位；
+             * 否则进 RELEASE 态后台阶梯爬回 speed_run，释放完成才复位。
+             */
+            if (RING_ACTIVE_PROFILE.target_speed >= app.speed.speed_run)
+            {
+                a_run_ring_reset();
+            }
+            else
+            {
+                ring_ramp_speed = RING_ACTIVE_PROFILE.target_speed;
+                ring_state = RING_STATE_RELEASE;
+            }
             return 1;
         }
+        break;
+
+    case RING_STATE_RELEASE:
+        /* 入口检测已在函数头部覆盖，此处仅作分支占位，速度由后台释放函数接管。 */
         break;
 
     default:

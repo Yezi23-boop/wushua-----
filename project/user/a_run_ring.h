@@ -12,7 +12,8 @@ typedef enum
     RING_STATE_ENTRY = 1,    /**< 已识别圆环入口，该阶段零角速度直走。 */
     RING_STATE_PRE_RING = 2, /**< 预入环阶段，该阶段放大外侧电感。 */
     RING_STATE_IN_RING = 3,  /**< 环内阶段。 */
-    RING_STATE_OUT_RING = 4  /**< 出环确认阶段。 */
+    RING_STATE_OUT_RING = 4, /**< 出环确认阶段。 */
+    RING_STATE_RELEASE = 5   /**< 出环完成后后台阶梯恢复巡线速度。 */
 } RingState;
 
 /**
@@ -100,6 +101,16 @@ void a_run_ring_apply_angle_diff_params(float *kp,
  * @param speed 当前控制链目标速度指针。
  */
 void a_run_ring_apply_speed(float *speed);
+
+/**
+ * @brief 更新圆环出环后的后台阶梯加速。
+ *
+ * 与圆桶释放同模式：出环后从 target_speed 逐拍爬回 speed_run，
+ * 释放完成或再次进环时才真正复位状态机。
+ *
+ * @param speed 当前目标速度指针，非 RELEASE 态不修改。
+ */
+void a_run_ring_update_release_speed(float *speed);
 
 /**
  * @brief 进环时放大入环侧电感，出环时反向放大另一侧电感。
