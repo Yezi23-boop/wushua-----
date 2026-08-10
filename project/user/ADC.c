@@ -44,11 +44,16 @@ volatile uint16 ad3 = 0;
 volatile uint16 ad4 = 0;
 volatile uint16 ad5 = 0; /**< 第五路横向中间电感，归一化值 0~100 */
 volatile float Err = 0.0f;
+volatile uint8 adc_strong_signal = 0;     /**< 强信号区标志：四路电感和超过阈值时置1，转向外环据此锁定姿态。 */
+volatile int8 adc_err_sign_hist[3] = {0}; /**< 最近三次有效解算的Err符号，[0]最新，强信号区表决拖拽方向用。 */
+
+#define ADC_ERR_SIGN_DEADBAND 0.5f /* Err符号记录死区：居中抖动不参与强信号方向表决。 */
 
 /* 内部私有函数声明 */
 static void adc_read_channels(uint16 *raw_buffer);
 static uint16 adc_normalize_value(uint16 raw_value, uint16 min_value, uint16 max_value);
 static void dispose(uint16 ad1, uint16 ad2, uint16 ad3, uint16 ad4);
+static void adc_push_err_sign(void);
 
 /**
  * @brief 处理电感偏差计算
@@ -72,6 +77,19 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     float middle_diff;
     float middle_diff_abs;
     CylinderState cylinder_state;
+
+    /*
+     * 四路电感和过高说明正压过十字交叉线，多线同时作用会让差比和解算失真：
+     * 置强信号标志，转向外环据此切换到Err符号表决的反向修正；
+     * Err本身不冻结照常解算，区内符号即拖拽方向供表决，离区后PID自动恢复。阈值由菜单调节。
+     * 元素流程中豁免：圆环入口五路全高、墙面识别本身要求和超阈、
+     * PRE_RING单侧放大也会推高四路和，强信号修正会干扰元素自身控制。
+     */
+    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_NONE &&
+        (float)((uint32)ad11 + ad22 + ad33 + ad44) > app.angle.strong_signal_sum)
+        adc_strong_signal = 1;
+    else
+        adc_strong_signal = 0;
 
     a_value = app.angle.A_1;
     b_value = app.angle.B_1;
@@ -105,6 +123,13 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
         b_value = app.cross.adc_b_1;
         c_value = app.cross.adc_c_l;
     }
+    if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
+    {
+        /* 单十字确认后使用独立权重，离开 TIMING 后自动恢复全局 ABC。 */
+        a_value = app.cross_single.adc_a_1;
+        b_value = app.cross_single.adc_b_1;
+        c_value = app.cross_single.adc_c_l;
+    }
     a_run_ring_apply_adc_params(&a_value, &b_value, &c_value);
 
     left_signal = (float)ad11;
@@ -136,9 +161,31 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     if (denom < 1.0f)
     {
         Err = 0.0f;
+        adc_push_err_sign();
         return;
     }
     Err = (float)limit * numer / denom;
+    adc_push_err_sign();
+}
+
+/**
+ * @brief 将当前Err符号压入三次历史，供强信号区多数表决拖拽方向。
+ * @details
+ * 符号带死区记录，居中时记0不参与表决；强信号期间Err照常解算不冻结，
+ * 区内被交叉线拖偏的符号恰好持续指示拖拽方向，表决可实时跟踪。
+ * 仅在 2ms TM0 中断的 dispose 尾部调用，与转向外环读取分属不同节拍，
+ * 三字节移位非原子但表决结果只影响修正方向，单次读错位下一拍自愈。
+ */
+static void adc_push_err_sign(void)
+{
+    adc_err_sign_hist[2] = adc_err_sign_hist[1];
+    adc_err_sign_hist[1] = adc_err_sign_hist[0];
+    if (Err > ADC_ERR_SIGN_DEADBAND)
+        adc_err_sign_hist[0] = 1;
+    else if (Err < -ADC_ERR_SIGN_DEADBAND)
+        adc_err_sign_hist[0] = -1;
+    else
+        adc_err_sign_hist[0] = 0;
 }
 
 /**

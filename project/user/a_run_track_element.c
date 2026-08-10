@@ -13,13 +13,14 @@
 
 enum TrackElement
 {
-    ELEMENT_NONE = TRACK_ELEMENT_NONE,             /**< 无特殊元素；保留给后续模式切换或保护降级。 */
-    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,   /**< 左圆环流程，接入序列表串行仲裁。 */
-    ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING, /**< 右圆环流程，复用圆环状态机并反向控制。 */
-    ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,     /**< 圆桶流程，保持菜单显示值 3 不变。 */
-    ELEMENT_WALL = TRACK_ELEMENT_WALL,             /**< 墙面流程，保持菜单显示值 4 不变。 */
-    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW,         /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
-    ELEMENT_CROSS = TRACK_ELEMENT_CROSS            /**< 双十字流程，电感和命中后编码器积分退出。 */
+    ELEMENT_NONE = TRACK_ELEMENT_NONE,                /**< 无特殊元素；保留给后续模式切换或保护降级。 */
+    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,      /**< 左圆环流程，接入序列表串行仲裁。 */
+    ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING,    /**< 右圆环流程，复用圆环状态机并反向控制。 */
+    ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,        /**< 圆桶流程，保持菜单显示值 3 不变。 */
+    ELEMENT_WALL = TRACK_ELEMENT_WALL,                /**< 墙面流程，保持菜单显示值 4 不变。 */
+    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW,            /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
+    ELEMENT_CROSS = TRACK_ELEMENT_CROSS,              /**< 双十字流程，电感和命中后编码器积分退出。 */
+    ELEMENT_CROSS_SINGLE = TRACK_ELEMENT_CROSS_SINGLE /**< 单十字流程，入口判定与双十字相同，仅序列区分。 */
 };
 
 static int8 track_element_is_executable(int element);
@@ -52,7 +53,8 @@ static int8 track_element_is_executable(int element)
         element == ELEMENT_CYLINDER ||
         element == ELEMENT_WALL ||
         element == ELEMENT_SEESAW ||
-        element == ELEMENT_CROSS)
+        element == ELEMENT_CROSS ||
+        element == ELEMENT_CROSS_SINGLE)
     {
         return 1;
     }
@@ -78,6 +80,7 @@ static void track_element_enter(enum TrackElement element)
     }
     a_run_wall_reset();
     a_run_cross_reset();
+    a_run_cross_single_reset();
     /*
      * 跷跷板完成事件只推进元素序列，RELEASE 还要继续释放速度。
      * 切到任意后续元素时都不能清掉 seesaw_release_speed，否则会一拍回到巡线速度。
@@ -230,6 +233,13 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
 
     case ELEMENT_CROSS:
         if (a_run_cross_update_5ms() != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_CROSS_SINGLE:
+        if (a_run_cross_single_update_5ms() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }

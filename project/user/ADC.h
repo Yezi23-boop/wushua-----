@@ -7,7 +7,7 @@
  * @brief 传感器数量
  * @details 对应四路电感传感器
  */
-#define NUM 5  /**< 五路电感传感器：左横/左竖/右竖/右横/中横 */
+#define NUM 5 /**< 五路电感传感器：左横/左竖/右竖/右横/中横 */
 
 /* --- 全局变量声明 --- */
 
@@ -25,6 +25,19 @@ extern volatile uint16 ad5; /**< 第五路横向中间电感，归一化值 0~10
  * @brief 计算出的赛道位置偏差值
  */
 extern volatile float Err;
+
+/**
+ * @brief 强信号区标志：四路电感和超过阈值时为1，转向外环据此锁定姿态。
+ */
+extern volatile uint8 adc_strong_signal;
+
+/**
+ * @brief 最近三次有效解算的Err符号历史（-1/0/+1，[0]为最新）。
+ *
+ * 历史随每拍解算实时更新，强信号区内Err符号即拖拽方向，
+ * 转向外环据此多数表决十字拖拽方向。
+ */
+extern volatile int8 adc_err_sign_hist[3];
 
 /**
  * @brief 电感原始采样最大值记录
@@ -60,7 +73,7 @@ void adc_measure_reset(void);
 /**
  * @brief 扫描并更新电感原始采样的最大/最小值。
  *
- * @details 
+ * @details
  * 在开启标定使能的情况下，实时比对当前 RAW 采样值与历史最大/最小值，
  * 只作为调试显示和现场手动记录参考；当前 read_AD() 仍使用固定 MIN_Err/MAX_Err 做归一化。
  *
@@ -71,7 +84,7 @@ void scan_track_max_value(void);
 /**
  * @brief 执行完整的电感数据采集与解算
  *
- * @details 
+ * @details
  * 包含多通道采样、选择排序、去极值均值滤波、归一化及四路电感差比和计算输出 Err。
  * 该函数处于高频控制链(2ms TM0 内)，任何修改都需避免引入阻塞。
  *

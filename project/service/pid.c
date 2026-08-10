@@ -102,11 +102,11 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);
     low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);
 
-//    encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
-//    if (encoder_sum >= app.start.encoder_stop_distance_cm)
-//    {
-//        stop = 1;
-//    }
+    encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
+    if (encoder_sum >= app.start.encoder_stop_distance_cm)
+    {
+        stop = 1;
+    }
 
     left->speed = speed_l;
     right->speed = speed_r;

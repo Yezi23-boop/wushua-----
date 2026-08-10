@@ -80,6 +80,7 @@ typedef enum
     MENU_PAGE_WALL,
     MENU_PAGE_FLY,
     MENU_PAGE_CROSS,
+    MENU_PAGE_CROSS_SINGLE,
     MENU_PAGE_ELEMENT,
     MENU_PAGE_TPL,
     MENU_PAGE_COUNT
@@ -161,14 +162,20 @@ static const MenuItemDef menu_diff_items[] = {
     {"inner_g", &app.speed.diff_inner_gain,
      MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
     {"outer_g", &app.speed.diff_outer_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    /* 强信号修正两项借 DIFF 页空位安放，MODEL 页保持标题+6 项满屏上限。 */
+    {"strong_sm", &app.angle.strong_signal_sum,
+     MENU_META(MENU_ITEM_FLOAT, 3, 0), MENU_FLOAT_STEP_1},
+    {"sc_angle", &app.angle.strong_correct_angle,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
 
 static const MenuItemDef menu_yuanshu_items[] = {
     {"RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING},
     {"CYLINDER", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CYLINDER},
     {"WALL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_WALL},
     {"FLY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_FLY},
-    {"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS}};
+    {"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS},
+    {"CROSSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS_SINGLE}};
 
 static const MenuItemDef menu_ring_items[] = {
     {"straight_E", &app.ring.profile.entry_straight_encoder,
@@ -273,6 +280,17 @@ static const MenuItemDef menu_cross_items[] = {
     {"kd_Err", &app.cross.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
     {"kp2_Err", &app.cross.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
 
+static const MenuItemDef menu_cross_single_items[] = {
+    {"enc_target", &app.cross_single.encoder_target,
+     MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
+    {"adc_a_1", &app.cross_single.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.cross_single.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.cross_single.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.cross_single.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.cross_single.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.cross_single.kp2_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
 static const MenuItemDef menu_element_items[] = {
     {"E1", &app.start.element_seq[0], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E2", &app.start.element_seq[1], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
@@ -310,6 +328,8 @@ static const MenuPageDef menu_pages[] = {
     {"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU},
     {"<<SEESAW", menu_fly_items, MENU_ITEM_COUNT(menu_fly_items), MENU_PAGE_YUANSHU},
     {"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU},
+    {"<<CROSSS", menu_cross_single_items,
+     MENU_ITEM_COUNT(menu_cross_single_items), MENU_PAGE_YUANSHU},
     {"<<ELEM", menu_element_items,
      MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_START},
     {"<<TPL", menu_tpl_items, MENU_ITEM_COUNT(menu_tpl_items), MENU_PAGE_SENSOR}};
@@ -948,7 +968,8 @@ static void Menu_Handle_Edit(uint8 event_code)
             Menu_Render_Page();
             return;
         }
-        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u : ((menu_change_multiplier == 10) ? 100u : 1u);
+        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u
+                                                               : ((menu_change_multiplier == 10) ? 100u : 1u);
         break;
     case KEYSTROKE_FOUR:
     case KEYSTROKE_FOUR_LONG:

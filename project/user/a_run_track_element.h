@@ -4,13 +4,14 @@
 #include "zf_common_typedef.h"
 
 /* 元素编号与默认序列常量统一收拢在这里，避免再多一层薄配置头。 */
-#define TRACK_ELEMENT_NONE 0       /**< 空槽位，用于跳过或现场临时关闭某个序列位置。 */
-#define TRACK_ELEMENT_LEFT_RING 1  /**< 左圆环流程显示值。 */
-#define TRACK_ELEMENT_RIGHT_RING 2 /**< 右圆环流程显示值。 */
-#define TRACK_ELEMENT_CYLINDER 3   /**< 圆桶流程显示值。 */
-#define TRACK_ELEMENT_WALL 4       /**< 墙面流程显示值。 */
-#define TRACK_ELEMENT_SEESAW 5     /**< 跷跷板流程显示值。 */
-#define TRACK_ELEMENT_CROSS 6      /**< 双十字流程显示值。 */
+#define TRACK_ELEMENT_NONE 0         /**< 空槽位，用于跳过或现场临时关闭某个序列位置。 */
+#define TRACK_ELEMENT_LEFT_RING 1    /**< 左圆环流程显示值。 */
+#define TRACK_ELEMENT_RIGHT_RING 2   /**< 右圆环流程显示值。 */
+#define TRACK_ELEMENT_CYLINDER 3     /**< 圆桶流程显示值。 */
+#define TRACK_ELEMENT_WALL 4         /**< 墙面流程显示值。 */
+#define TRACK_ELEMENT_SEESAW 5       /**< 跷跷板流程显示值。 */
+#define TRACK_ELEMENT_CROSS 6        /**< 双十字流程显示值。 */
+#define TRACK_ELEMENT_CROSS_SINGLE 7 /**< 单十字流程显示值。 */
 
 #define TRACK_ELEMENT_SEQUENCE_MAX 6 /**< 菜单和 EEPROM 固定保存的最大元素槽位数。 */
 /**
@@ -25,7 +26,7 @@ void a_run_track_element_update_gate(float *speed, float *angle_target);
 
 /**
  * @brief 读取当前期望赛道元素。
- * @return int8 0-无，1-左圆环，2-右圆环，3-圆桶，4-墙面，5-跷跷板，6-双十字。
+ * @return int8 0-无，1-左圆环，2-右圆环，3-圆桶，4-墙面，5-跷跷板，6-双十字，7-单十字。
  */
 int8 a_run_track_element_get_expected_element(void);
 

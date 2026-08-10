@@ -62,8 +62,36 @@ void run_time_1(void)
             PID.steer.Kd = app.cross.kd_Err;
             PID.steer.Kp2 = app.cross.kp2_Err;
         }
+        if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
+        {
+            /* 单十字确认后使用独立转向环参数，离开TIMING自动恢复全局值。 */
+            PID.steer.Kp = app.cross_single.kp_Err;
+            PID.steer.Kd = app.cross_single.kd_Err;
+            PID.steer.Kp2 = app.cross_single.kp2_Err;
+        }
         /* 方向外环根据电感偏差生成差速目标，后续再结合 gyro 阻尼输出最终差速。 */
-        pid_steer_update(&PID.steer, Err, 0.0f);
+        if (adc_strong_signal != 0)
+        {
+            int8 dir_vote;
+
+            /*
+             * 方向由最近三次有效解算Err符号多数表决：入口附近样本已带十字拖拽趋势，
+             * 表决可防单拍噪声把修正方向打反（如++-取+的反即-）；
+             * 幅度带符号可现场反向，票数为0视为居中不给修正量。
+             */
+            dir_vote = (int8)(adc_err_sign_hist[0] + adc_err_sign_hist[1] +
+                              adc_err_sign_hist[2]);
+            if (dir_vote > 0)
+                PID.steer.output = -app.angle.strong_correct_angle;
+            else if (dir_vote < 0)
+                PID.steer.output = app.angle.strong_correct_angle;
+            else
+                PID.steer.output = 0.0f;
+        }
+        else
+        {
+            pid_steer_update(&PID.steer, Err, 0.0f);
+        }
         steer_div_10 = 0;
     }
     speed_active = app.speed.speed_run;

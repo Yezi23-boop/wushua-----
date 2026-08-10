@@ -39,13 +39,15 @@ typedef struct
  */
 typedef struct
 {
-    float kp_Angle;            /**< 角速度内环比例系数 Kp（跟踪转向目标角速度） */
-    float kd_Angle;            /**< 角速度内环微分系数 Kd（抑制角速度过冲） */
-    float gyro_feedback_scale; /**< 角速度反馈缩放系数 N（匹配 gyro_z 与目标角速度量级） */
-    float limiting_Angle;      /**< 角速度内环输出限幅（差速目标限幅） */
-    float A_1;                 /**< 主亮度权重，用于横向主差分归一化 */
-    float B_1;                 /**< 竖向差分权重，用于斜入/斜出姿态修正 */
-    float C_l;                 /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
+    float kp_Angle;             /**< 角速度内环比例系数 Kp（跟踪转向目标角速度） */
+    float kd_Angle;             /**< 角速度内环微分系数 Kd（抑制角速度过冲） */
+    float gyro_feedback_scale;  /**< 角速度反馈缩放系数 N（匹配 gyro_z 与目标角速度量级） */
+    float limiting_Angle;       /**< 角速度内环输出限幅（差速目标限幅） */
+    float A_1;                  /**< 主亮度权重，用于横向主差分归一化 */
+    float B_1;                  /**< 竖向差分权重，用于斜入/斜出姿态修正 */
+    float C_l;                  /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
+    float strong_signal_sum;    /**< 强信号姿态锁定阈值：四路电感和超过该值时转向外环锁定当前航向 */
+    float strong_correct_angle; /**< 强信号区反向修正角速度，带符号，方向与冻结Err相反，负值反向 */
 } AppAngleConfig;
 
 /**
@@ -144,19 +146,34 @@ typedef struct
 } AppCrossConfig;
 
 /**
+ * @brief 单十字元素控制配置
+ */
+typedef struct
+{
+    float encoder_target; /**< 单十字退出编码器积分阈值 */
+    float adc_a_1;        /**< 单十字专用横向主差分权重。 */
+    float adc_b_1;        /**< 单十字专用竖向差分权重。 */
+    float adc_c_l;        /**< 单十字专用分母补偿权重。 */
+    float kp_Err;         /**< 单十字专用方向环比例系数 */
+    float kd_Err;         /**< 单十字专用方向环微分系数 */
+    float kp2_Err;        /**< 单十字专用方向环非线性增强系数 */
+} AppCrossSingleConfig;
+
+/**
  * @brief 应用程序全局配置聚合结构体
  * @details 包含所有子模块的配置参数，整个结构体会被保存到 EEPROM
  */
 typedef struct
 {
-    AppStartConfig start;       /**< 启动与基础配置 */
-    AppSpeedConfig speed;       /**< 速度与转向 PID 配置 */
-    AppAngleConfig angle;       /**< 电感偏差解算配置 */
-    AppRingConfig ring;         /**< 圆环处理策略配置 */
-    AppFlyConfig fly;           /**< 飞坡处理策略配置 */
-    AppCylinderConfig cylinder; /**< 圆桶处理策略配置 */
-    AppWallConfig wall;         /**< 墙面处理策略配置 */
-    AppCrossConfig cross;       /**< 双十字处理策略配置 */
+    AppStartConfig start;              /**< 启动与基础配置 */
+    AppSpeedConfig speed;              /**< 速度与转向 PID 配置 */
+    AppAngleConfig angle;              /**< 电感偏差解算配置 */
+    AppRingConfig ring;                /**< 圆环处理策略配置 */
+    AppFlyConfig fly;                  /**< 飞坡处理策略配置 */
+    AppCylinderConfig cylinder;        /**< 圆桶处理策略配置 */
+    AppWallConfig wall;                /**< 墙面处理策略配置 */
+    AppCrossConfig cross;              /**< 双十字处理策略配置 */
+    AppCrossSingleConfig cross_single; /**< 单十字处理策略配置 */
 } AppConfig;
 
 /* --- 全局变量声明 --- */
