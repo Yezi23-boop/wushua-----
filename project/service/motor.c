@@ -1,7 +1,7 @@
 #include "motor.h"
 
 #define MOTOR_START_PWM_RAMP_INITIAL_LIMIT 3000 /* 起步首个输出周期的 PWM 上限，单位：占空比。 */
-#define MOTOR_START_PWM_RAMP_STEP 48            /* 2ms 非零输出加 48，约 250ms 从 3000 放开到 9000。 */
+#define MOTOR_START_RAMP_DISTANCE_CM 30.0f      /* 起步爬坡限幅生效里程：发车后前0.5m线性放开，之后全功率。 */
 #define MOTOR_STALL_PWM_THRESHOLD 6000          /* 堵转判定的实际输出 PWM 下限，低于该值时不认为电机已强驱。 */
 #define MOTOR_STALL_SPEED_THRESHOLD 2.0f        /* 堵转判定的编码器速度上限，单位同 PID.left_speed.speed。 */
 #define MOTOR_STALL_CONFIRM_COUNT 80            /* 10ms 检测周期计数，80 次约 0.8s，用于过滤起步和瞬时卡顿。 */
@@ -11,6 +11,7 @@ volatile uint8 stop = 0;   /* 停车标志位，1 表示紧急停车保护 */
 volatile float dianya = 0; /* 当前电池电压值 */
 
 static int32 motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
+static float motor_start_ramp_distance = 0.0f; /* 发车后累计里程，单位cm；rearm 时清零。 */
 static int32 motor_last_lpwm_limited = 0;
 static int32 motor_last_rpwm_limited = 0;
 static int16 motor_left_stall_count = 0;
@@ -82,17 +83,34 @@ static void motor_limit_start_pwm_pair(int32 *lpwm, int32 *rpwm)
 }
 
 /**
- * @brief 根据本周期输出推进或重置起步 PWM 爬坡窗口。
+ * @brief 发车时重新武装起步 PWM 爬坡窗口。
+ * @details
+ * 仅由启动状态机进入运行态的发车沿调用：斜坡从 3000 重新放开、里程窗口清零，
+ * 其他任何时刻（运行中的零输出、保护停车）都不重置，
+ * 避免零输出恢复后重新被限低 PWM 造成突降速。
+ */
+void motor_start_ramp_rearm(void)
+{
+    motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
+    motor_start_ramp_distance = 0.0f;
+}
+
+/**
+ * @brief 按发车后累计里程推进起步 PWM 爬坡窗口。
  * @param lpwm_limited 已经完成起步限幅后的左轮 PWM。
  * @param rpwm_limited 已经完成起步限幅后的右轮 PWM。
  *
- * 非运行态由上层传入 0 输出，本函数借此重置窗口；只有非零输出才消耗爬坡次数。
+ * 窗口只在发车时由 motor_start_ramp_rearm() 重置，本函数只负责放开：
+ * 0~50cm 内上限从 3000 线性插值到满限，跑满 50cm 即全功率。
+ * 零输出拍仅清理堵转判定历史，不碰爬坡上限。
  */
 static void motor_update_start_pwm_ramp(int32 lpwm_limited, int32 rpwm_limited)
 {
+    /* 里程累计与输出无关：零输出拍车在惯性滑行同样位移，故在分支之前累计。 */
+    motor_start_ramp_distance += (speed_l + speed_r) * 0.5f * 0.012f;
+
     if (lpwm_limited == 0 && rpwm_limited == 0)
     {
-        motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT;
         motor_last_lpwm_limited = 0;
         motor_last_rpwm_limited = 0;
         motor_left_stall_count = 0;
@@ -100,13 +118,16 @@ static void motor_update_start_pwm_ramp(int32 lpwm_limited, int32 rpwm_limited)
         return;
     }
 
-    if (motor_start_pwm_ramp_limit < MOTOR_OUTPUT_PWM_LIMIT)
+    if (motor_start_ramp_distance < MOTOR_START_RAMP_DISTANCE_CM)
     {
-        motor_start_pwm_ramp_limit += MOTOR_START_PWM_RAMP_STEP;
-        if (motor_start_pwm_ramp_limit > MOTOR_OUTPUT_PWM_LIMIT)
-        {
-            motor_start_pwm_ramp_limit = MOTOR_OUTPUT_PWM_LIMIT;
-        }
+        /* 0~50cm 内上限从 3000 线性放开到满限，起步扭矩随位置渐进。 */
+        motor_start_pwm_ramp_limit = MOTOR_START_PWM_RAMP_INITIAL_LIMIT +
+                                     (int32)((float)(MOTOR_OUTPUT_PWM_LIMIT - MOTOR_START_PWM_RAMP_INITIAL_LIMIT) *
+                                             motor_start_ramp_distance / MOTOR_START_RAMP_DISTANCE_CM);
+    }
+    else
+    {
+        motor_start_pwm_ramp_limit = MOTOR_OUTPUT_PWM_LIMIT;
     }
 }
 

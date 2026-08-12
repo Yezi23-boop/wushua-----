@@ -8,9 +8,9 @@
 #include "zf_common_headfile.h"
 
 /* --- 启停状态机参数 --- */
-#define START_DEBOUNCE_TIME 2    /* 启动按键消抖确认次数，单位为 10ms 调用周期；当前约 20ms。 */
-#define START_DELAY_TICKS 100    /* 进入运行态前的确认时间，单位为 10ms 调用周期；当前约 1s。 */
-#define START_LED_ON 0           /* P43 指示灯为低电平点亮。 */
+#define START_DEBOUNCE_TIME 2 /* 启动按键消抖确认次数，单位为 10ms 调用周期；当前约 20ms。 */
+#define START_DELAY_TICKS 100 /* 进入运行态前的确认时间，单位为 10ms 调用周期；当前约 1s。 */
+#define START_LED_ON 0        /* P43 指示灯为低电平点亮。 */
 #define START_LED_OFF 1
 
 enum StartState
@@ -23,7 +23,7 @@ enum StartState
 static enum StartState current_start_state = START_STATE_0; /**< 当前启动状态，由 `a_run_mode_update_start_state` 写入，外部只读。 */
 static int press_debounce_cnt = 0;                          /**< 按下消抖计数，仅在 `a_run_mode_update_start_state`（10ms 上下文）中递增。 */
 static int8 key_released = 1;                               /**< 按键释放锁存：1-已释放等待下一次按下，0-仍在按下期间，防止重复触发状态切换。 */
-static int start_delay_ticks = 0;                            /**< 预启动到运行态的倒计时，期间对外仍保持 START_STATE_1。 */
+static int start_delay_ticks = 0;                           /**< 预启动到运行态的倒计时，期间对外仍保持 START_STATE_1。 */
 
 /**
  * @brief 启动状态机更新
@@ -40,6 +40,8 @@ void a_run_mode_update_start_state(void)
         {
             P43 = START_LED_OFF;
             current_start_state = START_STATE_2;
+            /* 发车沿：重新武装起步PWM爬坡窗口，仅此一次，运行中不再重置。 */
+            motor_start_ramp_rearm();
         }
         return;
     }
@@ -85,4 +87,3 @@ int8 a_run_mode_get_start_state(void)
 {
     return (int8)current_start_state;
 }
-

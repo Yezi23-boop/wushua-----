@@ -14,12 +14,9 @@
 #include "ADC.h"
 
 /* 内部常量定义 */
-#define ADC_RAW_MAX 3500            /* ADC 原始采样的理论最大有效值 */
-#define ADC_NORM_MAX 100            /* 归一化后的量程上限 */
-#define SORT_LENGTH 4               /* 滑动排序/均值滤波的样本长度 */
-#define ADC_SEESAW_CENTER_A_1 1.50f /* 跷跷板前挪/恢复期横向主差分权重，强调左右主电感居中。 */
-#define ADC_SEESAW_CENTER_B_1 0.50f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
-#define ADC_SEESAW_CENTER_C_L 1.00f /* 跷跷板前挪/恢复期弱信号分母补偿，抑制偏差突变。 */
+#define ADC_RAW_MAX 3500 /* ADC 原始采样的理论最大有效值 */
+#define ADC_NORM_MAX 100 /* 归一化后的量程上限 */
+#define SORT_LENGTH 4    /* 滑动排序/均值滤波的样本长度 */
 
 /* 内部中间变量 */
 static uint16 AD_value[NUM][SORT_LENGTH] = {{0}}; /* 滤波缓冲区 */
@@ -48,6 +45,9 @@ volatile uint8 adc_strong_signal = 0;     /**< 强信号区标志：四路电感
 volatile int8 adc_err_sign_hist[3] = {0}; /**< 最近三次有效解算的Err符号，[0]最新，强信号区表决拖拽方向用。 */
 
 #define ADC_ERR_SIGN_DEADBAND 0.5f /* Err符号记录死区：居中抖动不参与强信号方向表决。 */
+/* 强信号出区阈值的滞回裕量：进区按四路和超 strong_signal_sum，出区按和回落到
+ * (阈值-裕量)以下，防止临界震荡时标志 0/1 跳变；阈值参数须明显大于该裕量（当前 120>>20）。 */
+#define ADC_STRONG_SIGNAL_RELEASE_MARGIN 20.0f
 
 /* 内部私有函数声明 */
 static void adc_read_channels(uint16 *raw_buffer);
@@ -76,61 +76,45 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
     float right_signal;
     float middle_diff;
     float middle_diff_abs;
-    CylinderState cylinder_state;
+    float strong_sum;
 
     /*
      * 四路电感和过高说明正压过十字交叉线，多线同时作用会让差比和解算失真：
      * 置强信号标志，转向外环据此切换到Err符号表决的反向修正；
-     * Err本身不冻结照常解算，区内符号即拖拽方向供表决，离区后PID自动恢复。阈值由菜单调节。
+     * Err本身不冻结照常解算，区内符号即拖拽方向供表决，离区后PID自动恢复。
+     * 总开关strong_signal_enable可从菜单关闭，关闭时标志恒0外环纯PID。阈值由菜单调节。
      * 元素流程中豁免：圆环入口五路全高、墙面识别本身要求和超阈、
      * PRE_RING单侧放大也会推高四路和，强信号修正会干扰元素自身控制。
+     * 进出区带滞回：进区用阈值，出区用(阈值-裕量)，防止四路和
+     * 在离区沿临界震荡时标志 0/1 跳变，导致转向输出在强制修正与
+     * PID 解算值间交替抖动；开关关闭或元素执行时立即退出，
+     * 下次必须重新超过进区阈值才再触发。
      */
-    if (a_run_track_element_get_expected_element() == TRACK_ELEMENT_NONE &&
-        (float)((uint32)ad11 + ad22 + ad33 + ad44) > app.angle.strong_signal_sum)
-        adc_strong_signal = 1;
-    else
+    strong_sum = (float)((uint32)ad11 + ad22 + ad33 + ad44);
+    if (app.angle.strong_signal_enable == 0 ||
+        a_run_track_element_get_expected_element() != TRACK_ELEMENT_NONE)
+    {
         adc_strong_signal = 0;
+    }
+    else if (adc_strong_signal == 0)
+    {
+        if (strong_sum > app.angle.strong_signal_sum)
+            adc_strong_signal = 1;
+    }
+    else if (strong_sum <= app.angle.strong_signal_sum - ADC_STRONG_SIGNAL_RELEASE_MARGIN)
+    {
+        adc_strong_signal = 0;
+    }
 
     a_value = app.angle.A_1;
     b_value = app.angle.B_1;
     c_value = app.angle.C_l;
-
-    cylinder_state = a_run_cylinder_get_state();
-    if (cylinder_state == CYLINDER_STATE_DECEL)
-    {
-        /*
-         * 圆桶窗口确认后才切专用 ABC，避免序列轮到圆桶但尚未识别时削弱普通循迹。
-         * 只切换本次解算局部权重，避免修改 app.angle 导致异常退出后参数无法恢复。
-         */
-        a_value = app.cylinder.adc_a_1;
-        b_value = app.cylinder.adc_b_1;
-        c_value = app.cylinder.adc_c_l;
-    }
-    if (seesaw_centering_active != 0)
-    {
-        /*
-         * 跷跷板前挪和落地恢复只临时改变本次解算权重，避免污染菜单中的全局 ABC。
-         * 该阶段优先贴主横向中线，降低刚起步时竖向差分把车带向旁线的风险。
-         */
-        a_value = ADC_SEESAW_CENTER_A_1;
-        b_value = ADC_SEESAW_CENTER_B_1;
-        c_value = ADC_SEESAW_CENTER_C_L;
-    }
-    if (a_run_cross_get_state() == CROSS_STATE_TIMING)
-    {
-        /* 双十字确认后使用独立权重，离开 TIMING 后自动恢复全局 ABC。 */
-        a_value = app.cross.adc_a_1;
-        b_value = app.cross.adc_b_1;
-        c_value = app.cross.adc_c_l;
-    }
-    if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
-    {
-        /* 单十字确认后使用独立权重，离开 TIMING 后自动恢复全局 ABC。 */
-        a_value = app.cross_single.adc_a_1;
-        b_value = app.cross_single.adc_b_1;
-        c_value = app.cross_single.adc_c_l;
-    }
-    a_run_ring_apply_adc_params(&a_value, &b_value, &c_value);
+    /*
+     * 元素专用ABC权重覆盖统一由仲裁模块按优先级施加
+     * （圆环>单十字>双十字>跷跷板居中>圆桶DECEL）；
+     * 只切换本次解算局部权重，避免修改 app.angle 导致异常退出后参数无法恢复。
+     */
+    a_run_track_element_apply_adc_params(&a_value, &b_value, &c_value);
 
     left_signal = (float)ad11;
     left_middle_signal = (float)ad22;

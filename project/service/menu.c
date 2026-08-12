@@ -167,7 +167,8 @@ static const MenuItemDef menu_diff_items[] = {
     {"strong_sm", &app.angle.strong_signal_sum,
      MENU_META(MENU_ITEM_FLOAT, 3, 0), MENU_FLOAT_STEP_1},
     {"sc_angle", &app.angle.strong_correct_angle,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"strong_en", &app.angle.strong_signal_enable, MENU_META(MENU_ITEM_BOOL, 1, 0), 0}};
 
 static const MenuItemDef menu_yuanshu_items[] = {
     {"RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING},

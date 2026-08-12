@@ -3,10 +3,10 @@
 LowPassFilter_t encoder_filter_left;
 LowPassFilter_t encoder_filter_right;
 /* 内部中间变量 */
-float speed_l = 0;        /* 左轮当前速度反馈，普通速度环使用绝对值。 */
-float speed_r = 0;        /* 右轮当前速度反馈，普通速度环使用绝对值。 */
-float speed_l_signed = 0; /* 左轮带方向速度反馈，跷跷板零速刹车和里程方向判断使用。 */
-float speed_r_signed = 0; /* 右轮带方向速度反馈，跷跷板零速刹车和里程方向判断使用。 */
+float speed_l = 0;        /* 左轮当前速度反馈，带符号，经低通滤波后供普通速度环使用。 */
+float speed_r = 0;        /* 右轮当前速度反馈，带符号，经低通滤波后供普通速度环使用。 */
+float speed_l_signed = 0; /* 左轮带符号速度反馈（未滤波），跷跷板零速刹车和里程方向判断使用。 */
+float speed_r_signed = 0; /* 右轮带符号速度反馈（未滤波），跷跷板零速刹车和里程方向判断使用。 */
 
 /* 实例化全局控制器聚合结构 */
 PID_Controllers PID;
@@ -89,14 +89,14 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     speed_l_signed = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
     speed_r = speed_r_signed;
     speed_l = speed_l_signed;
-    if (speed_l < 0)
-    {
-        speed_l = -speed_l;
-    }
-    if (speed_r < 0)
-    {
-        speed_r = -speed_r;
-    }
+//    if (speed_l < 0)
+//    {
+//        speed_l = -speed_l;
+//    }
+//    if (speed_r < 0)
+//    {
+//        speed_r = -speed_r;
+//    }
     /* 低通滤波 alpha=0.25f：一阶 IIR 滤波器系数，y[n]=alpha*x[n]+(1-alpha)*y[n-1]。
      * 0.25 约对应 2ms 周期下 ~8ms 的阶跃响应时间常数，平衡响应速度与平滑度。 */
     low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);

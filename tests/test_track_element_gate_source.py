@@ -50,8 +50,10 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "int8 a_run_track_element_get_expected_element(void);" in track_header
     assert "static enum TrackElement expected_element = ELEMENT_NONE;" in track_source
 
-    run_time_1_body = _function_body(runner, "void run_time_1(void)", "void run_time_2(void)")
-    run_time_2_body = _function_body(runner, "void run_time_2(void)", "void run_time_3(void)")
+    run_time_1_body = _function_body(
+        runner, "void run_time_1(void)", "void run_time_2(void)")
+    run_time_2_body = _function_body(
+        runner, "void run_time_2(void)", "void run_time_3(void)")
 
     assert "read_AD();" in run_time_1_body
     assert "Encoder_get(&PID.left_speed, &PID.right_speed);" in run_time_1_body
@@ -97,7 +99,8 @@ def test_main_control_uses_stable_nonlinear_differential_distribution():
     pid_header = _read(ROOT / "project" / "service" / "pid.h")
     runner = _read(A_RUN_C)
     differential_body = pid_source[pid_source.index("void Pid_Differential("):]
-    run_time_1_body = _function_body(runner, "void run_time_1(void)", "void run_time_2(void)")
+    run_time_1_body = _function_body(
+        runner, "void run_time_1(void)", "void run_time_2(void)")
 
     assert "void Pid_Differential(float speed_run, float diff_output," in pid_source
     assert "float scope, float inner_gain, float outer_gain)" in pid_source
@@ -357,11 +360,14 @@ def test_element_state_interfaces_use_public_typed_enums():
 
     expected_interfaces = (
         (ring_header, ring_source, "RingState", "ring_state", "RING_STATE_IDLE"),
-        (cylinder_header, cylinder_source, "CylinderState", "cylinder_state", "CYLINDER_STATE_IDLE"),
+        (cylinder_header, cylinder_source, "CylinderState",
+         "cylinder_state", "CYLINDER_STATE_IDLE"),
         (wall_header, wall_source, "WallState", "wall_state", "WALL_STATE_IDLE"),
-        (cross_header, cross_source, "CrossState", "cross_state", "CROSS_STATE_IDLE"),
+        (cross_header, cross_source, "CrossState",
+         "cross_state", "CROSS_STATE_IDLE"),
         (fly_header, fly_source, "FlyState", "fly_state", "FLY_STATE_IDLE"),
-        (fly_header, fly_source, "SeesawState", "seesaw_state", "SEESAW_STATE_IDLE"),
+        (fly_header, fly_source, "SeesawState",
+         "seesaw_state", "SEESAW_STATE_IDLE"),
     )
 
     for header, source, state_type, state_var, idle_state in expected_interfaces:
@@ -375,12 +381,14 @@ def test_element_state_interfaces_use_public_typed_enums():
     assert "FlyState a_run_fly_get_state(void);" in fly_header
     assert "SeesawState a_run_seesaw_get_state(void);" in fly_header
     assert "volatile int flat_fly" not in runner
-    assert "extern volatile int flat_fly" not in _read(ROOT / "project" / "user" / "a_run.h")
+    assert "extern volatile int flat_fly" not in _read(
+        ROOT / "project" / "user" / "a_run.h")
     assert "a_run_fly_get_state() != FLY_STATE_COOLDOWN" in track_source
 
 
 def test_cross_timing_uses_dedicated_adc_weights():
     adc_source = _read(ADC_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
     eeprom_header = _read(EEPROM_H)
     eeprom_source = _read(EEPROM_C)
     menu_source = _read(MENU_C)
@@ -399,13 +407,15 @@ def test_cross_timing_uses_dedicated_adc_weights():
     assert "save_float(config->cross.adc_b_1, 58);" in eeprom_source
     assert "save_float(config->cross.adc_c_l, 59);" in eeprom_source
 
-    assert "if (a_run_cross_get_state() == CROSS_STATE_TIMING)" in adc_source
-    assert "a_value = app.cross.adc_a_1;" in adc_source
-    assert "b_value = app.cross.adc_b_1;" in adc_source
-    assert "c_value = app.cross.adc_c_l;" in adc_source
-    assert adc_source.index("if (seesaw_centering_active != 0)") < adc_source.index(
+    # 双十字ABC权重覆盖已收进仲裁模块通用覆盖函数。
+    assert "if (a_run_cross_get_state() == CROSS_STATE_TIMING)" in track_source
+    assert "a_value = app.cross.adc_a_1;" in track_source
+    assert "b_value = app.cross.adc_b_1;" in track_source
+    assert "c_value = app.cross.adc_c_l;" in track_source
+    assert track_source.index("if (seesaw_centering_active != 0)") < track_source.index(
         "if (a_run_cross_get_state() == CROSS_STATE_TIMING)"
     )
+    assert "a_run_track_element_apply_adc_params(&a_value, &b_value, &c_value);" in adc_source
 
     assert '"adc_a_1", &app.cross.adc_a_1' in menu_source
     assert '"adc_b_1", &app.cross.adc_b_1' in menu_source
@@ -450,7 +460,8 @@ def test_cylinder_confirmation_starts_immediate_ramp_deceleration():
 
     release_call = "a_run_cylinder_update_release_speed(speed);"
     assert release_call in track_source
-    assert track_source.index(release_call) < track_source.index("switch (expected_element)")
+    assert track_source.index(release_call) < track_source.index(
+        "switch (expected_element)")
     assert "element == ELEMENT_CYLINDER ||" in track_source
     assert "a_run_cylinder_get_state() != CYLINDER_STATE_RELEASE" in track_source
 
@@ -461,16 +472,19 @@ def test_cylinder_confirmation_starts_immediate_ramp_deceleration():
     assert "read_float(27)" not in eeprom_source
     assert "save_float(config->cylinder.exit_slow_distance, 27)" not in eeprom_source
 
-    assert "cylinder_state == CYLINDER_STATE_DECEL" in adc_source
+    # 圆桶DECEL的ABC权重覆盖已收进仲裁模块通用覆盖函数。
+    assert "a_run_cylinder_get_state() == CYLINDER_STATE_DECEL" in track_source
     assert "CYLINDER_STATE_WAIT_GROUND" not in adc_source
     assert "CYLINDER_STATE_EXIT_SLOW" not in adc_source
-    assert "cylinder_state == CYLINDER_STATE_DECEL" in runner
+    # 圆桶DECEL的转向参数覆盖已收进仲裁模块通用覆盖函数。
+    assert "a_run_cylinder_get_state() == CYLINDER_STATE_DECEL" in track_source
     assert "CYLINDER_STATE_WAIT_GROUND" not in runner
     assert "CYLINDER_STATE_EXIT_SLOW" not in runner
 
     assert '"exit_spd", &app.cylinder.exit_slow_speed' in menu_source
     assert '"exit_dist"' not in menu_source
-    cylinder_menu = menu_source.split("static const MenuItemDef menu_cylinder_items[] = {", 1)[1].split("};", 1)[0]
+    cylinder_menu = menu_source.split(
+        "static const MenuItemDef menu_cylinder_items[] = {", 1)[1].split("};", 1)[0]
     assert cylinder_menu.count("MENU_META(") == 6
     assert '"cyl_kp"' not in menu_source
     assert '"cyl_kd"' not in menu_source
@@ -525,7 +539,8 @@ def test_imu_drops_wall_pitch_history_after_wall_uses_adc_only():
 
 def test_adc_uses_cylinder_abc_while_expected_element_is_cylinder():
     source = _read(ADC_C)
-    dispose_body = _function_body(source, "static void dispose", "/**\n * @brief 动态扫描")
+    dispose_body = _function_body(
+        source, "static void dispose", "/**\n * @brief 动态扫描")
 
     assert "#define ADC_CYLINDER_A_1 1.00f" in source
     assert "#define ADC_CYLINDER_B_1 1.00f" in source
@@ -757,7 +772,8 @@ def test_fly_cooldown_runs_in_background_during_wall_timing():
     fly_source = _read(A_RUN_FLY_C)
     track_source = _read(A_RUN_TRACK_ELEMENT_C)
 
-    assert "void a_run_fly_update_release_speed(float *speed);" in _read(A_RUN_FLY_H)
+    assert "void a_run_fly_update_release_speed(float *speed);" in _read(
+        A_RUN_FLY_H)
     assert "void a_run_fly_update_release_speed(float *speed)" in fly_source
     assert "apply_speed" not in fly_source
     assert "expected_element == ELEMENT_WALL && a_run_wall_get_state() == 2" not in track_source
@@ -794,7 +810,8 @@ def test_fly_and_seesaw_share_the_same_entry_gate_helper():
         "void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)",
         "void a_run_fly_update_release_speed(float *speed)",
     )
-    fly_body = fly_source[fly_source.index("void a_run_fly_update_speed(float *speed, uint8 allow_entry)"):]
+    fly_body = fly_source[fly_source.index(
+        "void a_run_fly_update_speed(float *speed, uint8 allow_entry)"):]
 
     assert "static uint8 a_run_fly_update_entry_gate(" in fly_source
     assert "a_run_fly_update_entry_gate(" in seesaw_body

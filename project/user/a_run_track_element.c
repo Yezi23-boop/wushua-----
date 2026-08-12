@@ -11,6 +11,10 @@
 #include "a_run_wall.h"
 #include "a_run_cross.h"
 
+#define ADC_SEESAW_CENTER_A_1 1.50f /* 跷跷板前挪/恢复期横向主差分权重，强调左右主电感居中。 */
+#define ADC_SEESAW_CENTER_B_1 0.50f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
+#define ADC_SEESAW_CENTER_C_L 1.00f /* 跷跷板前挪/恢复期弱信号分母补偿，抑制偏差突变。 */
+
 enum TrackElement
 {
     ELEMENT_NONE = TRACK_ELEMENT_NONE,                /**< 无特殊元素；保留给后续模式切换或保护降级。 */
@@ -39,6 +43,86 @@ static uint8 element_sequence_started = 0;                /**< 元素识别开�
 int8 a_run_track_element_get_expected_element(void)
 {
     return (int8)expected_element;
+}
+
+/**
+ * @brief 按当前激活元素覆盖转向环参数。
+ * @param kp 转向环比例系数指针，调用方需先写入全局默认值。
+ * @param kd 转向环微分系数指针，调用方需先写入全局默认值。
+ * @param kp2 转向环非线性增强系数指针，调用方需先写入全局默认值。
+ *
+ * 优先级从高到低：单十字TIMING > 双十字TIMING > 圆桶DECEL > 圆环有效阶段。
+ * 圆桶与圆环由序列仲裁保证互斥，DECEL 优先于圆环是历史语义（else 分支保留）；
+ * 双/单十字状态机同时处于 TIMING 不可能发生，双分支保留原顺序兜底。
+ * 无元素激活时不写指针，全局默认值直接生效。
+ */
+void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2)
+{
+    if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
+    {
+        /* 圆桶减速阶段沿用圆桶专用Kp/Kd，Kp2保持全局值。 */
+        *kp = app.cylinder.kp_Err;
+        *kd = app.cylinder.kd_Err;
+    }
+    else
+    {
+        a_run_ring_apply_steer_params(kp, kd, kp2);
+    }
+    if (a_run_cross_get_state() == CROSS_STATE_TIMING)
+    {
+        *kp = app.cross.kp_Err;
+        *kd = app.cross.kd_Err;
+        *kp2 = app.cross.kp2_Err;
+    }
+    if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
+    {
+        *kp = app.cross_single.kp_Err;
+        *kd = app.cross_single.kd_Err;
+        *kp2 = app.cross_single.kp2_Err;
+    }
+}
+
+/**
+ * @brief 按当前激活元素覆盖电感差比和解算的ABC权重。
+ * @param a_value 横向主差分权重指针，调用方需先写入全局默认值。
+ * @param b_value 竖向差分权重指针，调用方需先写入全局默认值。
+ * @param c_value 分母补偿权重指针，调用方需先写入全局默认值。
+ *
+ * 顺序覆盖、后写生效，优先级从高到低：
+ * 圆环有效阶段 > 单十字TIMING > 双十字TIMING > 跷跷板居中 > 圆桶DECEL。
+ * 圆环最后施加优先级最高，保持原语义（进出环必须严格跟随专用权重）；
+ * 只改本次解算局部权重，不动 app.angle，异常退出后全局值自动恢复。
+ * 无元素激活时不写指针，全局默认值直接生效。
+ */
+void a_run_track_element_apply_adc_params(float *a_value, float *b_value, float *c_value)
+{
+    if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
+    {
+        /* 圆桶窗口确认后才切专用ABC，避免序列轮到圆桶但尚未识别时削弱普通循迹。 */
+        *a_value = app.cylinder.adc_a_1;
+        *b_value = app.cylinder.adc_b_1;
+        *c_value = app.cylinder.adc_c_l;
+    }
+    if (seesaw_centering_active != 0)
+    {
+        /* 前挪和落地恢复阶段优先贴主横向中线，降低刚起步时竖向差分把车带向旁线的风险。 */
+        *a_value = ADC_SEESAW_CENTER_A_1;
+        *b_value = ADC_SEESAW_CENTER_B_1;
+        *c_value = ADC_SEESAW_CENTER_C_L;
+    }
+    if (a_run_cross_get_state() == CROSS_STATE_TIMING)
+    {
+        *a_value = app.cross.adc_a_1;
+        *b_value = app.cross.adc_b_1;
+        *c_value = app.cross.adc_c_l;
+    }
+    if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
+    {
+        *a_value = app.cross_single.adc_a_1;
+        *b_value = app.cross_single.adc_b_1;
+        *c_value = app.cross_single.adc_c_l;
+    }
+    a_run_ring_apply_adc_params(a_value, b_value, c_value);
 }
 
 /**

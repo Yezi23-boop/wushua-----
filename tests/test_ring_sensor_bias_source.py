@@ -50,7 +50,8 @@ def test_sensor_bias_reverses_virtual_signal_side_during_out_ring():
         bias_function.index("if (ring_state == RING_STATE_PRE_RING)"):
         bias_function.index("else if (ring_state == RING_STATE_OUT_RING)")
     ]
-    out_ring = bias_function[bias_function.index("else if (ring_state == RING_STATE_OUT_RING)"):]
+    out_ring = bias_function[bias_function.index(
+        "else if (ring_state == RING_STATE_OUT_RING)"):]
     pre_left = pre_ring[
         pre_ring.index("if (ring_data.flast_l != 0)"):
         pre_ring.index("else if (ring_data.flast_r != 0)")
@@ -89,13 +90,16 @@ def test_sensor_bias_reverses_virtual_signal_side_during_out_ring():
 
 def test_ring_uses_independent_adc_weights_through_out_ring():
     adc = _read(ADC_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
     header = _read(RING_H)
     source = _read(RING_LEGACY_C)
 
     signature = "void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)"
     assert signature + ";" in header
     assert signature in source
-    assert "a_run_ring_apply_adc_params(&a_value, &b_value, &c_value);" in adc
+    # 圆环ABC权重覆盖已收进仲裁模块的通用覆盖函数，ADC.c 只保留一次调用。
+    assert "a_run_track_element_apply_adc_params(&a_value, &b_value, &c_value);" in adc
+    assert "a_run_ring_apply_adc_params(a_value, b_value, c_value);" in track_source
     assert "ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING" in source
     assert "ring_state == RING_STATE_PRE_RING ||" in source
     assert "ring_state == RING_STATE_IN_RING ||" in source
@@ -106,6 +110,7 @@ def test_ring_uses_independent_adc_weights_through_out_ring():
 
 def test_ring_uses_independent_steer_parameters_through_out_ring():
     runner = _read(A_RUN_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
     header = _read(RING_H)
     source = _read(RING_LEGACY_C)
 
@@ -115,7 +120,9 @@ def test_ring_uses_independent_steer_parameters_through_out_ring():
     assert "PID.steer.Kp = app.speed.kp_Err;" in runner
     assert "PID.steer.Kd = app.speed.kd_Err;" in runner
     assert "PID.steer.Kp2 = app.speed.kp2_Err;" in runner
-    assert "a_run_ring_apply_steer_params(&PID.steer.Kp," in runner
+    # 圆环转向参数覆盖已收进仲裁模块的通用覆盖函数，a_run.c 只保留一次调用。
+    assert "a_run_track_element_apply_steer_params(&PID.steer.Kp," in runner
+    assert "a_run_ring_apply_steer_params(kp, kd, kp2);" in track_source
     assert "*kp = app.ring.profiles[0].kp_Err;" in source
     assert "*kp = RING_ACTIVE_PROFILE.kp_Err;" in source
     steer_function = source[
@@ -178,7 +185,8 @@ def test_ring_profile_overrides_angle_loop_and_differential_gains():
     runner = _read(A_RUN_C)
     source = _read(RING_LEGACY_C)
     signature = "void a_run_ring_apply_angle_diff_params(float *kp,"
-    control = source[source.index(signature):source.index("/**", source.index(signature))]
+    control = source[source.index(signature):source.index(
+        "/**", source.index(signature))]
 
     assert signature in header
     assert "ring_state != RING_STATE_IDLE && ring_state != RING_STATE_OUT_RING" in control
@@ -190,7 +198,8 @@ def test_ring_profile_overrides_angle_loop_and_differential_gains():
 
     global_kp = runner.index("PID.angle.Kp = app.angle.kp_Angle;")
     global_kd = runner.index("PID.angle.Kd = app.angle.kd_Angle;")
-    apply_ring = runner.index("a_run_ring_apply_angle_diff_params(&PID.angle.Kp,")
+    apply_ring = runner.index(
+        "a_run_ring_apply_angle_diff_params(&PID.angle.Kp,")
     angle_update = runner.index("pid_angle_update(&PID.angle,")
     assert global_kp < apply_ring < angle_update
     assert global_kd < apply_ring
@@ -294,8 +303,10 @@ def test_ring_menu_exposes_runtime_mode_and_both_parameter_sets():
     assert source.count('"adc_a_1", &app.ring.profiles[') == 3
     assert source.count('"kp_Ang", &app.ring.profiles[0].kp_Angle') == 2
     assert source.count('"kp_Ang", &app.ring.profiles[1].kp_Angle') == 1
-    assert source.count('"inner_g", &app.ring.profiles[0].diff_inner_gain') == 2
-    assert source.count('"inner_g", &app.ring.profiles[1].diff_inner_gain') == 1
+    assert source.count(
+        '"inner_g", &app.ring.profiles[0].diff_inner_gain') == 2
+    assert source.count(
+        '"inner_g", &app.ring.profiles[1].diff_inner_gain') == 1
     assert '"pre_r_T", &app.ring.pre_ring_Gyro_target' in source
     assert '"pre_o_T", &app.ring.pre_out_ring_Gyro_target' in source
 
@@ -359,7 +370,8 @@ def test_third_same_direction_ring_stops_only_after_entering_in_ring():
     assert "if (ring_third_stop_active != 0)" in sensor_in_ring
     assert "break;" in legacy_in_ring
     assert "break;" in sensor_in_ring
-    assert source.count("ring_data.distance = 0;\n                ring_data.gyro_flat = 0;\n                stop = 1;") == 2
+    assert source.count(
+        "ring_data.distance = 0;\n                ring_data.gyro_flat = 0;\n                stop = 1;") == 2
     assert "ring_left_pass_count = 0;" not in normal_reset
     assert "ring_right_pass_count = 0;" not in normal_reset
     assert "ring_third_stop_active = 0;" in normal_reset

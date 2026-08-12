@@ -50,8 +50,8 @@ void test_speed_func(void)
     Encoder_get(&PID.left_speed, &PID.right_speed);
 
     /* 2. 更新左右轮速度环 PID */
-    pid_speed_update(&PID.left_speed, test_speed_value, PID.left_speed.speed);
-    pid_speed_update(&PID.right_speed, test_speed_value, PID.right_speed.speed);
+    pid_speed_update(&PID.left_speed, 50, PID.left_speed.speed);
+    pid_speed_update(&PID.right_speed, 50, PID.right_speed.speed);
 //    pid_speed_update(&PID.left_speed, test_speed_value, PID.left_speed.speed);
 //    pid_speed_update(&PID.right_speed, test_speed_value, PID.right_speed.speed);
     /* 3. 直接输出 PID 计算得到的占空比 */

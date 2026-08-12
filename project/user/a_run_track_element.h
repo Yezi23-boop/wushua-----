@@ -25,6 +25,31 @@
 void a_run_track_element_update_gate(float *speed, float *angle_target);
 
 /**
+ * @brief 按当前激活元素覆盖转向环参数，无元素激活时不写指针。
+ * @details
+ * 调用方先把三个指针置为全局默认值，本函数只做元素覆盖；
+ * 优先级：单十字TIMING > 双十字TIMING > 圆桶DECEL > 圆环有效阶段。
+ *
+ * @param kp 转向环比例系数指针。
+ * @param kd 转向环微分系数指针。
+ * @param kp2 转向环非线性增强系数指针。
+ */
+void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2);
+
+/**
+ * @brief 按当前激活元素覆盖电感解算ABC权重，无元素激活时不写指针。
+ * @details
+ * 调用方先把三个指针置为全局默认值，本函数只做元素覆盖；
+ * 顺序覆盖后写生效，优先级：圆环有效阶段 > 单十字TIMING > 双十字TIMING >
+ * 跷跷板居中 > 圆桶DECEL。
+ *
+ * @param a_value 横向主差分权重指针。
+ * @param b_value 竖向差分权重指针。
+ * @param c_value 分母补偿权重指针。
+ */
+void a_run_track_element_apply_adc_params(float *a_value, float *b_value, float *c_value);
+
+/**
  * @brief 读取当前期望赛道元素。
  * @return int8 0-无，1-左圆环，2-右圆环，3-圆桶，4-墙面，5-跷跷板，6-双十字，7-单十字。
  */

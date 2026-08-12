@@ -54,7 +54,7 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_start_items": 6,
         "menu_speed_items": 6,
         "menu_model_items": 6,
-        "menu_diff_items": 5,
+        "menu_diff_items": 6,
         "menu_yuanshu_items": 6,
         "menu_tpl_items": 5,
         "menu_ring_items": 5,
@@ -128,7 +128,8 @@ def test_menu_parameter_steps_match_tuning_contract():
 
     wall = _item_block(source, "menu_wall_items")
     assert "MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1" in wall
-    assert wall.count("MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10") == 2
+    assert wall.count(
+        "MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10") == 2
     assert "MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1" in wall
 
     cross = _item_block(source, "menu_cross_items")
@@ -155,6 +156,7 @@ def test_diff_menu_exposes_switch_and_both_gains():
     assert diff.count("MENU_FLOAT_STEP_001") == 2
     assert '"strong_sm", &app.angle.strong_signal_sum' in diff
     assert '"sc_angle", &app.angle.strong_correct_angle' in diff
+    assert '"strong_en", &app.angle.strong_signal_enable' in diff
 
 
 def test_start_menu_exposes_encoder_stop_distance_in_centimeters():

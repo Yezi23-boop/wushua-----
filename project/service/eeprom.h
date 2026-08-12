@@ -48,6 +48,7 @@ typedef struct
     float C_l;                  /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
     float strong_signal_sum;    /**< 强信号姿态锁定阈值：四路电感和超过该值时转向外环锁定当前航向 */
     float strong_correct_angle; /**< 强信号区反向修正角速度，带符号，方向与冻结Err相反，负值反向 */
+    int16 strong_signal_enable; /**< 强信号姿态锁定总开关：1-开启（四路和超阈锁定航向），0-关闭 */
 } AppAngleConfig;
 
 /**

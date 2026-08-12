@@ -27,7 +27,6 @@ static float speed_active = 0.0f; /* 当前参与速度环计算的目标速度�
 void run_time_1(void)
 {
     int8 start_state;
-    CylinderState cylinder_state;
     float diff_inner_gain;
     float diff_outer_gain;
     steer_div_10++;
@@ -38,37 +37,14 @@ void run_time_1(void)
     imu_update_gyro_z_from_imu660rc();
     if (steer_div_10 >= 3)
     {
-        /* 每次方向环更新都先恢复全局参数，使菜单中的Kp2修改可以立即生效。 */
+        /* 每次方向环更新都先恢复全局参数，使菜单中的Kp2修改可以立即生效；
+         * 元素专用参数覆盖统一由仲裁模块按优先级处理（单十字>双十字>圆桶DECEL>圆环）。 */
         PID.steer.Kp = app.speed.kp_Err;
         PID.steer.Kd = app.speed.kd_Err;
         PID.steer.Kp2 = app.speed.kp2_Err;
-        cylinder_state = a_run_cylinder_get_state();
-        if (cylinder_state == CYLINDER_STATE_DECEL)
-        {
-            /* 圆桶减速阶段保持最高优先级，沿用圆桶专用Kp/Kd和全局Kp2。 */
-            PID.steer.Kp = app.cylinder.kp_Err;
-            PID.steer.Kd = app.cylinder.kd_Err;
-        }
-        else
-        {
-            a_run_ring_apply_steer_params(&PID.steer.Kp,
-                                          &PID.steer.Kd,
-                                          &PID.steer.Kp2);
-        }
-        if (a_run_cross_get_state() == CROSS_STATE_TIMING)
-        {
-            /* 双十字确认后使用独立转向环参数，离开TIMING自动恢复全局值。 */
-            PID.steer.Kp = app.cross.kp_Err;
-            PID.steer.Kd = app.cross.kd_Err;
-            PID.steer.Kp2 = app.cross.kp2_Err;
-        }
-        if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
-        {
-            /* 单十字确认后使用独立转向环参数，离开TIMING自动恢复全局值。 */
-            PID.steer.Kp = app.cross_single.kp_Err;
-            PID.steer.Kd = app.cross_single.kd_Err;
-            PID.steer.Kp2 = app.cross_single.kp2_Err;
-        }
+        a_run_track_element_apply_steer_params(&PID.steer.Kp,
+                                               &PID.steer.Kd,
+                                               &PID.steer.Kp2);
         /* 方向外环根据电感偏差生成差速目标，后续再结合 gyro 阻尼输出最终差速。 */
         if (adc_strong_signal != 0)
         {
@@ -103,51 +79,47 @@ void run_time_1(void)
     if (seesaw_zero_brake_active != 0)
     {
         /*
-         * 跷跷板停止等待前零速闭环刹车。
-         * 此阶段使用 signed 编码器速度，前滑给反向力矩，倒滑则自动收回到正向。
+         * 跷跷板停止等待前的零速闭环刹车窗：旁路角速度环与差速分配，
+         * 强制两轮零速闭环，避免刹车时转向扭矩继续翻板。
+         * 反馈用低通滤波前的带符号速度（speed_l_signed），
+         * 前滑立即给反向力矩、倒滑立即收回到正向，滤波后的同量会慢一拍。
          */
         PID.angle.output = 0.0f;
         left_target = 0.0f;
         right_target = 0.0f;
         pid_speed_update(&PID.left_speed, left_target, speed_l_signed);
         pid_speed_update(&PID.right_speed, right_target, speed_r_signed);
-        if (start_state == 2)
-        {
-            motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
-        }
-        else
-        {
-            motor_output(0, 0);
-        }
-        return;
-    }
-    PID.angle.Kp = app.angle.kp_Angle;
-    PID.angle.Kd = app.angle.kd_Angle;
-    diff_inner_gain = app.speed.diff_inner_gain;
-    diff_outer_gain = app.speed.diff_outer_gain;
-    a_run_ring_apply_angle_diff_params(&PID.angle.Kp,
-                                       &PID.angle.Kd,
-                                       &diff_inner_gain,
-                                       &diff_outer_gain);
-    pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
-    if (app.speed.diff_enable != 0)
-    {
-        Pid_Differential(speed_active, PID.angle.output,
-                         &left_target, &right_target,
-                         app.angle.limiting_Angle,
-                         diff_inner_gain, diff_outer_gain);
     }
     else
     {
-        left_target = speed_active - PID.angle.output;
-        right_target = speed_active + PID.angle.output;
+        PID.angle.Kp = app.angle.kp_Angle;
+        PID.angle.Kd = app.angle.kd_Angle;
+        diff_inner_gain = app.speed.diff_inner_gain;
+        diff_outer_gain = app.speed.diff_outer_gain;
+        a_run_ring_apply_angle_diff_params(&PID.angle.Kp,
+                                           &PID.angle.Kd,
+                                           &diff_inner_gain,
+                                           &diff_outer_gain);
+        pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);
+        if (app.speed.diff_enable != 0)
+        {
+            Pid_Differential(speed_active, PID.angle.output,
+                             &left_target, &right_target,
+                             app.angle.limiting_Angle,
+                             diff_inner_gain, diff_outer_gain);
+        }
+        else
+        {
+            left_target = speed_active - PID.angle.output;
+            right_target = speed_active + PID.angle.output;
+        }
+
+        /* 速度环保持高频更新，保证电机执行链路带宽 */
+        pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
+        pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
     }
 
-    /* 速度环保持高频更新，保证电机执行链路带宽 */
-    pid_speed_update(&PID.left_speed, left_target, PID.left_speed.speed);
-    pid_speed_update(&PID.right_speed, right_target, PID.right_speed.speed);
-
-    /* 7. 仅在运行态时允许电机输出 */
+    /* 两条路径共用唯一电机门控：仅在运行态时允许输出 */
     if (start_state == 2)
     {
         motor_output((int32)PID.left_speed.output, (int32)PID.right_speed.output);
