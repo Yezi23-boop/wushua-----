@@ -344,7 +344,7 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
         break;
 
     case RING_STATE_OUT_RING:
-        if (timeadd(&ring_data.out_ring_time, 500))
+        if (timeadd(&ring_data.out_ring_time, 100))
         {
             /*
              * 环速不低于巡线速度时出环无需加速过渡，直接复位；

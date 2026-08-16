@@ -40,8 +40,6 @@ void a_run_mode_update_start_state(void)
         {
             P43 = START_LED_OFF;
             current_start_state = START_STATE_2;
-            /* 发车沿：重新武装起步PWM爬坡窗口，仅此一次，运行中不再重置。 */
-            motor_start_ramp_rearm();
         }
         return;
     }

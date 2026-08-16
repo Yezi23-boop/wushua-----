@@ -49,7 +49,8 @@ def test_steer_encoder_and_ring_scaling_match_2ms_loop():
     pid = _read(PID_C)
     ring = _read(A_RUN_RING_C)
     imu = _read(IMU_C)
-    run_time_1_body = _function_body(runner, "void run_time_1(void)", "void run_time_2(void)")
+    run_time_1_body = _function_body(
+        runner, "void run_time_1(void)", "void run_time_2(void)")
 
     assert "if (steer_div_10 >= 3)" in run_time_1_body
     assert "if (steer_div_10 >= 2)" not in run_time_1_body
@@ -79,8 +80,10 @@ def test_element_counts_keep_original_wall_clock_time_at_2ms():
     assert "#define FLY_RECOVER_LOST_LINE_ENABLE_COUNT 500u" in fly
 
 
-def test_motor_start_ramp_keeps_original_wall_clock_time_at_2ms():
+def test_motor_start_ramp_removed_and_stall_confirm_kept():
     motor = _read(ROOT / "project" / "service" / "motor.c")
 
-    assert "#define MOTOR_START_PWM_RAMP_STEP 48" in motor
+    # 起步阶梯机制已整体取消，发车即全功率；堵转确认窗口保留。
+    assert "MOTOR_START_PWM_RAMP" not in motor
+    assert "motor_start_ramp" not in motor
     assert "#define MOTOR_STALL_CONFIRM_COUNT 80" in motor

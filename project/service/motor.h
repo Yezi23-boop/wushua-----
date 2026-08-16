@@ -20,12 +20,6 @@ void motor_Init(void);
 void motor_output(int32 lpwm, int32 rpwm);
 
 /**
- * @brief 发车时重新武装起步 PWM 爬坡限幅。
- * @details 仅由启动状态机进入运行态的发车沿调用，其他时刻不重置斜坡。
- */
-void motor_start_ramp_rearm(void);
-
-/**
  * @brief 10ms 周期电机堵转检测
  * @details 由 10ms 状态环调用，根据最近一次实际 PWM 和编码器速度触发 stop 保护。
  */

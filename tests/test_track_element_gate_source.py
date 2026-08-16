@@ -693,7 +693,8 @@ def test_seesaw_wait_state_machine_uses_global_stop_only_at_hold_boundaries():
     assert reset_body.count("stop = 0;") == 1
 
     assert "if (stop == 0)" in motor_source
-    assert "motor_update_start_pwm_ramp(0, 0);" in motor_source
+    # 起步阶梯已取消，发车即全功率，不再有爬坡限幅调用。
+    assert "motor_update_start_pwm_ramp" not in motor_source
     assert "pwm_set_duty(PWMB_CH2_P13, 100);" in motor_source
     assert "pwm_set_duty(PWMB_CH3_P52, 100);" in motor_source
     assert "config->fly.seesaw_wait_count = 10;" in eeprom_source

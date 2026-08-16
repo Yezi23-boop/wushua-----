@@ -89,18 +89,18 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     speed_l_signed = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
     speed_r = speed_r_signed;
     speed_l = speed_l_signed;
-//    if (speed_l < 0)
-//    {
-//        speed_l = -speed_l;
-//    }
-//    if (speed_r < 0)
-//    {
-//        speed_r = -speed_r;
-//    }
+    if (speed_l < 0)
+    {
+        speed_l = -speed_l;
+    }
+    if (speed_r < 0)
+    {
+        speed_r = -speed_r;
+    }
     /* 低通滤波 alpha=0.25f：一阶 IIR 滤波器系数，y[n]=alpha*x[n]+(1-alpha)*y[n-1]。
-     * 0.25 约对应 2ms 周期下 ~8ms 的阶跃响应时间常数，平衡响应速度与平滑度。 */
-    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);
-    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);
+     * 0.40 约对应 2ms 周期下 ~5ms 的阶跃响应时间常数，平衡响应速度与平滑度。 */
+    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.40f);
+    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.40f);
 
     encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
     if (encoder_sum >= app.start.encoder_stop_distance_cm)
