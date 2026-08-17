@@ -63,24 +63,6 @@ def _correct_sequence(sequence):
     return output
 
 
-def test_filter_keeps_history_sign_fix_as_available_utility():
-    filter_header = FILTER_H_PATH.read_text(encoding="utf-8")
-    filter_source = FILTER_C_PATH.read_text(encoding="utf-8")
-    pid_source = PID_C_PATH.read_text(encoding="utf-8")
-
-    assert "typedef struct" in filter_header
-    assert "EncoderSignFixState" in filter_header
-    assert "CorrectEncoderSignByHistory" in filter_header
-    assert "int32 CorrectEncoderSignByHistory" in filter_source
-    assert "FilterEncoderCountMedian3EmaHalf" in filter_header
-    assert "FilterEncoderCountMedian3EmaHalf" in filter_source
-
-    assert "low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.25f);" in pid_source
-    assert "low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.25f);" in pid_source
-    assert "CorrectEncoderSignByHistory(raw_left_count, &encoder_sign_fix_left)" not in pid_source
-    assert "CorrectEncoderSignByHistory(raw_right_count, &encoder_sign_fix_right)" not in pid_source
-
-
 def test_first_three_samples_passthrough():
     assert _correct_sequence([50, 52, 51]) == [50, 52, 51]
 

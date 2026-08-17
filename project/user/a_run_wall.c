@@ -38,7 +38,7 @@ void a_run_wall_reset(void)
 }
 
 /**
- * @brief 更新墙面识别/下墙计时状态机。
+ * @brief 按 2ms 主控制环周期更新墙面识别/下墙计时状态机。
  *
  * TIMING 前段按 app.wall.slow_speed 降速，让负压有时间安稳吸住车身；
  * 后段恢复正常控制，继续计时或累计编码器到阈值后完成。
@@ -46,7 +46,7 @@ void a_run_wall_reset(void)
  * @param speed 输出目标速度指针；TIMING 前段会被降速值覆盖。
  * @return uint8 1-墙面流程完成，可重新开放下一元素；0-仍在墙面流程中。
  */
-uint8 a_run_wall_update_5ms(float *speed)
+uint8 a_run_wall_update_2ms(float *speed)
 {
     uint16 ad_sum;
     int slow_speed;

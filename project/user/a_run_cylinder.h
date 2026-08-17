@@ -20,11 +20,11 @@ typedef enum
 void a_run_cylinder_reset(void);
 
 /**
- * @brief 按主控制环周期更新圆桶状态机。
+ * @brief 按 2ms 主控制环周期更新圆桶状态机。
  * @param speed 当前目标速度指针，圆桶确认后的减速阶段会覆盖该值。
  * @return uint8 1-圆桶流程完成，0-未完成。
  */
-uint8 a_run_cylinder_update_5ms(float *speed);
+uint8 a_run_cylinder_update_2ms(float *speed);
 
 /**
  * @brief 更新圆桶完成后的后台阶梯加速。

@@ -1,6 +1,6 @@
 /**
  * @file a_run_ring.c
- * @brief 左右圆环入口识别、运行时算法选择与环内控制量维护。
+ * @brief 左右圆环入口识别、电感偏置控制与环内状态机维护。
  */
 #include "zf_common_headfile.h"
 #include "a_run_ring.h"
@@ -16,10 +16,12 @@ static uint8 ring_entry_count = 0;             /**< 300ms窗口内累计入口�
 static float ring_entry_gain_active = 0.0f;    /**< 本圈入口确认时锁存的实际进环增益。 */
 static float ring_ramp_speed = 0.0f;           /**< 出环释放阶段当前目标速度，逐拍爬回 speed_run。 */
 
-#define RING_ACTIVE_PROFILE (app.ring.profile)
+/* 本圈生效的参数组指针，入口确认时锁存；状态机不认识大小概念，只使用被传入的这套参数。
+ * IDLE/RELEASE 期间无意义，所有读取点都由活动环阶段（ENTRY~OUT_RING）门控。 */
+static const AppRingProfileConfig *ring_profile_active;
 
 /**
- * @brief 根据锁存算法和圆环阶段更新角速度目标。
+ * @brief 根据圆环阶段更新角速度目标。
  * @param angle_target 指向当前角速度目标。
  */
 void a_run_ring_update_angle_target(float *angle_target)
@@ -28,9 +30,9 @@ void a_run_ring_update_angle_target(float *angle_target)
     {
         *angle_target = 0.0f;
     }
-    else if (ring_data.diff_set != 0.0f)
+    else if (ring_data.angle_set != 0.0f)
     {
-        *angle_target = ring_data.diff_set;
+        *angle_target = ring_data.angle_set;
     }
 }
 
@@ -55,9 +57,9 @@ void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)
         ring_state == RING_STATE_IN_RING ||
         ring_state == RING_STATE_OUT_RING)
     {
-        *a_value = RING_ACTIVE_PROFILE.adc_a_1;
-        *b_value = RING_ACTIVE_PROFILE.adc_b_1;
-        *c_value = RING_ACTIVE_PROFILE.adc_c_l;
+        *a_value = ring_profile_active->adc_a_1;
+        *b_value = ring_profile_active->adc_b_1;
+        *c_value = ring_profile_active->adc_c_l;
     }
 }
 
@@ -73,9 +75,9 @@ void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)
         ring_state == RING_STATE_IN_RING ||
         ring_state == RING_STATE_OUT_RING)
     {
-        *kp = RING_ACTIVE_PROFILE.kp_Err;
-        *kd = RING_ACTIVE_PROFILE.kd_Err;
-        *kp2 = RING_ACTIVE_PROFILE.kp2_Err;
+        *kp = ring_profile_active->kp_Err;
+        *kd = ring_profile_active->kd_Err;
+        *kp2 = ring_profile_active->kp2_Err;
     }
 }
 
@@ -95,15 +97,15 @@ void a_run_ring_apply_angle_diff_params(float *kp,
         ring_state == RING_STATE_IN_RING ||
         ring_state == RING_STATE_OUT_RING)
     {
-        *kp = RING_ACTIVE_PROFILE.kp_Angle;
-        *kd = RING_ACTIVE_PROFILE.kd_Angle;
-        *inner_gain = RING_ACTIVE_PROFILE.diff_inner_gain;
-        *outer_gain = RING_ACTIVE_PROFILE.diff_outer_gain;
+        *kp = ring_profile_active->kp_Angle;
+        *kd = ring_profile_active->kd_Angle;
+        *inner_gain = ring_profile_active->diff_inner_gain;
+        *outer_gain = ring_profile_active->diff_outer_gain;
     }
 }
 
 /**
- * @brief 新圆环运行阶段使用锁存参数组的目标速度。
+ * @brief 圆环有效阶段使用圆环参数组的目标速度。
  *
  * RELEASE 态不覆盖，速度由 a_run_ring_update_release_speed() 阶梯接管。
  * @param speed 当前控制链目标速度指针。
@@ -114,7 +116,7 @@ void a_run_ring_apply_speed(float *speed)
         ring_state == RING_STATE_IN_RING ||
         ring_state == RING_STATE_OUT_RING)
     {
-        *speed = RING_ACTIVE_PROFILE.target_speed;
+        *speed = ring_profile_active->target_speed;
     }
 }
 
@@ -157,7 +159,7 @@ void a_run_ring_update_release_speed(float *speed)
 }
 
 /**
- * @brief 新圆环进环时放大同侧电感，出环时放大对侧电感。
+ * @brief 圆环进环时放大同侧电感，出环时放大对侧电感。
  * @param left_signal 左侧主电感ad1的局部浮点值。
  * @param left_middle_signal 左侧辅助电感ad2的局部浮点值。
  * @param right_middle_signal 右侧辅助电感ad3的局部浮点值。
@@ -170,12 +172,13 @@ void a_run_ring_apply_adc_bias(float *left_signal,
 {
     if (ring_state == RING_STATE_PRE_RING)
     {
-        if (ring_data.flast_l != 0)
+        /* 进环阶段放大环方向同侧电感，差比和把车拖向环内。 */
+        if (ring_data.ring_dir > 0)
         {
             *left_signal *= ring_entry_gain_active;
             *left_middle_signal *= ring_entry_gain_active;
         }
-        else if (ring_data.flast_r != 0)
+        else if (ring_data.ring_dir < 0)
         {
             *right_middle_signal *= ring_entry_gain_active;
             *right_signal *= ring_entry_gain_active;
@@ -183,15 +186,16 @@ void a_run_ring_apply_adc_bias(float *left_signal,
     }
     else if (ring_state == RING_STATE_OUT_RING)
     {
-        if (ring_data.flast_l != 0)
+        /* 出环阶段反向放大对侧电感，把车头从环内拉回主线。 */
+        if (ring_data.ring_dir > 0)
         {
-            *right_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
-            *right_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
+            *right_middle_signal *= ring_profile_active->bias_exit_gain;
+            *right_signal *= ring_profile_active->bias_exit_gain;
         }
-        else if (ring_data.flast_r != 0)
+        else if (ring_data.ring_dir < 0)
         {
-            *left_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
-            *left_middle_signal *= RING_ACTIVE_PROFILE.bias_exit_gain;
+            *left_signal *= ring_profile_active->bias_exit_gain;
+            *left_middle_signal *= ring_profile_active->bias_exit_gain;
         }
     }
 }
@@ -201,18 +205,14 @@ void a_run_ring_apply_adc_bias(float *left_signal,
  */
 void a_run_ring_reset(void)
 {
-    timedestroy(&ring_data.time_l);
-    timedestroy(&ring_data.time_r);
-    timedestroy(&ring_data.ing_ring_time);
-    timedestroy(&ring_data.out_ring_time);
+    timedestroy(&ring_data.entry_timer);
+    timedestroy(&ring_data.out_ring_timer);
 
-    ring_data.flast_l = 0;
-    ring_data.flast_r = 0;
-    ring_data.last_yaw = 0;
-    ring_data.diff_set = 0;
-    ring_data.distance = 0;
-    ring_data.encoder = 0;
-    ring_data.gyro_flat = 0;
+    ring_data.ring_dir = 0;
+    ring_data.angle_set = 0;
+    ring_data.distance_enable = 0;
+    ring_data.distance_cm = 0;
+    ring_data.yaw_enable = 0;
     ring_data.yaw_delta_sum = 0;
     ring_entry_count = 0;
     ring_entry_gain_active = 0.0f;
@@ -227,7 +227,7 @@ void a_run_ring_update_integrals(void)
 {
     float delta_angle;
 
-    if (ring_data.gyro_flat == 1)
+    if (ring_data.yaw_enable == 1)
     {
         delta_angle = gyro_z;
         if (delta_angle < 0.0f)
@@ -237,10 +237,10 @@ void a_run_ring_update_integrals(void)
         ring_data.yaw_delta_sum += delta_angle * RING_YAW_DT_SCALE;
     }
 
-    if (ring_data.distance == 1)
+    if (ring_data.distance_enable == 1)
     {
         /* 0.012f由2ms周期和轮径/编码器标定共同确定，结果单位为cm。 */
-        ring_data.encoder += (speed_l + speed_r) * 0.5f * 0.012f;
+        ring_data.distance_cm += (speed_l + speed_r) * 0.5f * 0.012f;
     }
 }
 
@@ -248,10 +248,12 @@ void a_run_ring_update_integrals(void)
  * @brief 按2ms主控制周期更新圆环状态机。
  * @details 完整链路：积分更新、IDLE入口计数确认、ENTRY直走、PRE_RING预入环、
  * IN_RING双条件出环、OUT_RING定时收尾，一次读完无需跳转。
+ * 大小圆环共用本状态机，参数组在入口确认时锁存。
  * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
+ * @param profile 本圈生效的参数组指针。
  * @return uint8 1-当前圆环流程完成，0-未完成。
  */
-uint8 a_run_ring_update_2ms(int8 ring_dir)
+uint8 a_run_ring_update_2ms(int8 ring_dir, const AppRingProfileConfig *profile)
 {
     if (ring_dir >= 0)
     {
@@ -267,7 +269,7 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
     /* RELEASE 态与 IDLE 同等开放入口检测，序列连续两个圆环时释放中也能重进环。 */
     if (ring_state == RING_STATE_IDLE || ring_state == RING_STATE_RELEASE)
     {
-        /* 五路电感阈值同时命中为圆环入口特征，300ms窗口内累计确认。 */
+        /* 五路电感阈值同时命中为圆环入口特征，大小圆环共用，300ms窗口内累计确认。 */
         if (ad1 > 30 &&
             ad2 > 5 &&
             ad3 > 5 &&
@@ -282,25 +284,26 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
             if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
             {
                 ring_entry_count = 0;
-                timedestroy(&ring_data.time_l);
-                ring_entry_gain_active = RING_ACTIVE_PROFILE.bias_entry_gain;
-                /* 以速度50为基准，斜率由菜单调节并在本圈入口锁存。 */
+                timedestroy(&ring_data.entry_timer);
+                /* 先锁存参数组，本圈所有参数读取都跟随该指针。 */
+                ring_profile_active = profile;
+                ring_entry_gain_active = ring_profile_active->bias_entry_gain;
+                /* 以速度50为基准，斜率随参数组走，本圈入口锁存进环增益。 */
                 ring_entry_gain_active +=
-                    (RING_ACTIVE_PROFILE.target_speed - RING_GAIN_REFERENCE_SPEED) *
-                    app.ring.gain_speed_slope;
-                ring_data.flast_l = (ring_dir > 0) ? 1 : 0;
-                ring_data.flast_r = (ring_dir < 0) ? 1 : 0;
-                ring_data.diff_set = 0;
-                ring_data.encoder = 0;
+                    (ring_profile_active->target_speed - RING_GAIN_REFERENCE_SPEED) *
+                    ring_profile_active->gain_speed_slope;
+                ring_data.ring_dir = ring_dir;
+                ring_data.angle_set = 0;
+                ring_data.distance_cm = 0;
                 ring_data.yaw_delta_sum = 0;
-                ring_data.distance = 1;
-                ring_data.gyro_flat = 0;
+                ring_data.distance_enable = 1;
+                ring_data.yaw_enable = 0;
                 ring_state = RING_STATE_ENTRY;
             }
-            else if (timeadd(&ring_data.time_l, 300))
+            else if (timeadd(&ring_data.entry_timer, 300))
             {
                 ring_entry_count = 0;
-                timedestroy(&ring_data.time_l);
+                timedestroy(&ring_data.entry_timer);
             }
         }
         return 0;
@@ -310,21 +313,21 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
     switch (ring_state)
     {
     case RING_STATE_ENTRY:
-        ring_data.diff_set = 0;
-        if (ring_data.encoder >= RING_ACTIVE_PROFILE.entry_straight_encoder)
+        ring_data.angle_set = 0;
+        if (ring_data.distance_cm >= ring_profile_active->entry_straight_encoder)
         {
             /* 直走距离不计入进环和结束判定，PRE_RING从独立零点开始积分。 */
-            ring_data.encoder = 0;
+            ring_data.distance_cm = 0;
             ring_data.yaw_delta_sum = 0;
-            ring_data.distance = 1;
-            ring_data.gyro_flat = 1;
+            ring_data.distance_enable = 1;
+            ring_data.yaw_enable = 1;
             ring_state = RING_STATE_PRE_RING;
         }
         break;
 
     case RING_STATE_PRE_RING:
-        if (ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_entry_yaw &&
-            ring_data.encoder >= RING_ACTIVE_PROFILE.bias_entry_encoder)
+        if (ring_data.yaw_delta_sum >= ring_profile_active->bias_entry_yaw &&
+            ring_data.distance_cm >= ring_profile_active->bias_entry_encoder)
         {
             /* 保持角度积分继续累计，供IN_RING阶段满圈出环判定使用。 */
             ring_state = RING_STATE_IN_RING;
@@ -333,30 +336,30 @@ uint8 a_run_ring_update_2ms(int8 ring_dir)
 
     case RING_STATE_IN_RING:
         /* 里程与满圈角度积分双条件确认，角度阈值由菜单调节，防止里程单独误判提前出环。 */
-        if (ring_data.encoder >= RING_ACTIVE_PROFILE.bias_finish_encoder &&
-            ring_data.yaw_delta_sum >= RING_ACTIVE_PROFILE.bias_finish_yaw)
+        if (ring_data.distance_cm >= ring_profile_active->bias_finish_encoder &&
+            ring_data.yaw_delta_sum >= ring_profile_active->bias_finish_yaw)
         {
-            ring_data.distance = 0;
-            ring_data.gyro_flat = 0;
-            timedestroy(&ring_data.out_ring_time);
+            ring_data.distance_enable = 0;
+            ring_data.yaw_enable = 0;
+            timedestroy(&ring_data.out_ring_timer);
             ring_state = RING_STATE_OUT_RING;
         }
         break;
 
     case RING_STATE_OUT_RING:
-        if (timeadd(&ring_data.out_ring_time, 100))
+        if (timeadd(&ring_data.out_ring_timer, 100))
         {
             /*
              * 环速不低于巡线速度时出环无需加速过渡，直接复位；
              * 否则进 RELEASE 态后台阶梯爬回 speed_run，释放完成才复位。
              */
-            if (RING_ACTIVE_PROFILE.target_speed >= app.speed.speed_run)
+            if (ring_profile_active->target_speed >= app.speed.speed_run)
             {
                 a_run_ring_reset();
             }
             else
             {
-                ring_ramp_speed = RING_ACTIVE_PROFILE.target_speed;
+                ring_ramp_speed = ring_profile_active->target_speed;
                 ring_state = RING_STATE_RELEASE;
             }
             return 1;

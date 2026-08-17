@@ -1,6 +1,6 @@
 /**
  * @file a_run_track_element.c
- * @brief 环岛、圆桶、跷跷板与墙面赛道元素仲裁状态机。
+ * @brief 圆环、圆桶、跷跷板与墙面赛道元素仲裁状态机。
  * @details
  * 本文件只负责按 app.start.element_seq[] 串行开放元素识别，
  * 具体左圆环、圆桶和墙面状态机分别放在对应模块中，避免单文件过长。
@@ -17,14 +17,16 @@
 
 enum TrackElement
 {
-    ELEMENT_NONE = TRACK_ELEMENT_NONE,                /**< 无特殊元素；保留给后续模式切换或保护降级。 */
-    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,      /**< 左圆环流程，接入序列表串行仲裁。 */
-    ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING,    /**< 右圆环流程，复用圆环状态机并反向控制。 */
-    ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,        /**< 圆桶流程，保持菜单显示值 3 不变。 */
-    ELEMENT_WALL = TRACK_ELEMENT_WALL,                /**< 墙面流程，保持菜单显示值 4 不变。 */
-    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW,            /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
-    ELEMENT_CROSS = TRACK_ELEMENT_CROSS,              /**< 双十字流程，电感和命中后编码器积分退出。 */
-    ELEMENT_CROSS_SINGLE = TRACK_ELEMENT_CROSS_SINGLE /**< 单十字流程，入口判定与双十字相同，仅序列区分。 */
+    ELEMENT_NONE = TRACK_ELEMENT_NONE,                      /**< 无特殊元素；保留给后续模式切换或保护降级。 */
+    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,            /**< 左圆环流程，接入序列表串行仲裁。 */
+    ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING,          /**< 右圆环流程，复用圆环状态机并反向控制。 */
+    ELEMENT_LARGE_RING_LEFT = TRACK_ELEMENT_LARGE_RING_LEFT,  /**< 大圆环左流程，复用圆环状态机，参数取大圆环组。 */
+    ELEMENT_LARGE_RING_RIGHT = TRACK_ELEMENT_LARGE_RING_RIGHT, /**< 大圆环右流程，复用圆环状态机，参数取大圆环组。 */
+    ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,              /**< 圆桶流程。 */
+    ELEMENT_WALL = TRACK_ELEMENT_WALL,                      /**< 墙面流程。 */
+    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW,                  /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
+    ELEMENT_DOUBLE_CROSS = TRACK_ELEMENT_DOUBLE_CROSS,      /**< 双十字流程，电感和命中后编码器积分退出。 */
+    ELEMENT_SINGLE_CROSS = TRACK_ELEMENT_SINGLE_CROSS       /**< 单十字流程，入口判定与双十字相同，仅序列区分。 */
 };
 
 static int8 track_element_is_executable(int element);
@@ -34,11 +36,12 @@ static void track_element_reset_state(void);
 
 static enum TrackElement expected_element = ELEMENT_NONE; /**< 当前期望赛道元素，用于串行屏蔽非当前元素的入口识别。 */
 static uint8 element_index = 0;                           /**< 当前元素序列下标，只在 2ms 元素仲裁中更新。 */
-static uint8 element_sequence_started = 0;                /**< 元素识别开启后是否已经按 E1~E6 完成首元素初始化。 */
+static uint8 element_sequence_started = 0;                /**< 元素识别开启后是否已经按 E1~E8 完成首元素初始化。 */
 
 /**
  * @brief 读取当前期望赛道元素。
- * @return int8 0-无，1-左圆环，2-右圆环，3-圆桶，4-墙面，5-跷跷板。
+ * @return int8 0-无，1-左圆环，2-右圆环，3-大圆环左，4-大圆环右，
+ *              5-圆桶，6-墙面，7-跷跷板，8-双十字，9-单十字。
  */
 int8 a_run_track_element_get_expected_element(void)
 {
@@ -74,7 +77,7 @@ void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2)
         *kd = app.cross.kd_Err;
         *kp2 = app.cross.kp2_Err;
     }
-    if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
+    if (a_run_cross_single_get_state() == CROSS_STATE_TIMING)
     {
         *kp = app.cross_single.kp_Err;
         *kd = app.cross_single.kd_Err;
@@ -116,7 +119,7 @@ void a_run_track_element_apply_adc_params(float *a_value, float *b_value, float 
         *b_value = app.cross.adc_b_1;
         *c_value = app.cross.adc_c_l;
     }
-    if (a_run_cross_single_get_state() == CROSS_SINGLE_STATE_TIMING)
+    if (a_run_cross_single_get_state() == CROSS_STATE_TIMING)
     {
         *a_value = app.cross_single.adc_a_1;
         *b_value = app.cross_single.adc_b_1;
@@ -134,11 +137,13 @@ static int8 track_element_is_executable(int element)
 {
     if (element == ELEMENT_LEFT_RING ||
         element == ELEMENT_RIGHT_RING ||
+        element == ELEMENT_LARGE_RING_LEFT ||
+        element == ELEMENT_LARGE_RING_RIGHT ||
         element == ELEMENT_CYLINDER ||
         element == ELEMENT_WALL ||
         element == ELEMENT_SEESAW ||
-        element == ELEMENT_CROSS ||
-        element == ELEMENT_CROSS_SINGLE)
+        element == ELEMENT_DOUBLE_CROSS ||
+        element == ELEMENT_SINGLE_CROSS)
     {
         return 1;
     }
@@ -233,7 +238,7 @@ static void track_element_enter_from_index(uint8 start_index)
 /**
  * @brief 复位赛道元素仲裁状态机。
  *
- * 菜单关闭元素识别时，仲裁、环岛、圆桶、跷跷板和墙面必须同步回到初始状态。
+ * 菜单关闭元素识别时，仲裁、圆环、圆桶、跷跷板和墙面必须同步回到初始状态。
  */
 static void track_element_reset_state(void)
 {
@@ -271,21 +276,42 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
     switch (expected_element)
     {
     case ELEMENT_LEFT_RING:
-        if (a_run_ring_update_2ms(1) != 0)
+        if (a_run_ring_update_2ms(1, &app.ring.small_profile) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
     case ELEMENT_RIGHT_RING:
-        if (a_run_ring_update_2ms(-1) != 0)
+        if (a_run_ring_update_2ms(-1, &app.ring.small_profile) != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_LARGE_RING_LEFT:
+        if (a_run_ring_update_2ms(1, &app.ring.large_profile) != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_LARGE_RING_RIGHT:
+        if (a_run_ring_update_2ms(-1, &app.ring.large_profile) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
     case ELEMENT_CYLINDER:
-        if (a_run_cylinder_update_5ms(speed) != 0)
+        if (a_run_cylinder_update_2ms(speed) != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_WALL:
+        if (a_run_wall_update_2ms(speed) != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
@@ -308,22 +334,15 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         }
         break;
 
-    case ELEMENT_WALL:
-        if (a_run_wall_update_5ms(speed) != 0)
+    case ELEMENT_DOUBLE_CROSS:
+        if (a_run_cross_update_2ms() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
-    case ELEMENT_CROSS:
-        if (a_run_cross_update_5ms() != 0)
-        {
-            track_element_enter_from_index((uint8)(element_index + 1));
-        }
-        break;
-
-    case ELEMENT_CROSS_SINGLE:
-        if (a_run_cross_single_update_5ms() != 0)
+    case ELEMENT_SINGLE_CROSS:
+        if (a_run_cross_single_update_2ms() != 0)
         {
             track_element_enter_from_index((uint8)(element_index + 1));
         }

@@ -116,10 +116,10 @@ void a_run_cross_reset(void)
 }
 
 /**
- * @brief 更新双十字识别/积分状态机，退出阈值取 app.cross.encoder_target。
+ * @brief 按 2ms 主控制环周期更新双十字识别/积分状态机，退出阈值取 app.cross.encoder_target。
  * @return uint8 1-双十字流程完成，0-仍在流程中。
  */
-uint8 a_run_cross_update_5ms(void)
+uint8 a_run_cross_update_2ms(void)
 {
     return cross_instance_update(&cross_inst, app.cross.encoder_target);
 }
@@ -128,9 +128,9 @@ uint8 a_run_cross_update_5ms(void)
 
 /**
  * @brief 读取当前单十字状态机阶段。
- * @return CrossSingleState 当前单十字状态。
+ * @return CrossState 当前单十字状态。
  */
-CrossSingleState a_run_cross_single_get_state(void)
+CrossState a_run_cross_single_get_state(void)
 {
     return cross_single_inst.state;
 }
@@ -144,10 +144,10 @@ void a_run_cross_single_reset(void)
 }
 
 /**
- * @brief 更新单十字识别/积分状态机，退出阈值取 app.cross_single.encoder_target。
+ * @brief 按 2ms 主控制环周期更新单十字识别/积分状态机，退出阈值取 app.cross_single.encoder_target。
  * @return uint8 1-单十字流程完成，0-仍在流程中。
  */
-uint8 a_run_cross_single_update_5ms(void)
+uint8 a_run_cross_single_update_2ms(void)
 {
     return cross_instance_update(&cross_single_inst, app.cross_single.encoder_target);
 }

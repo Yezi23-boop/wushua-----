@@ -1,85 +1,150 @@
 # EEPROM 参数表
 
+本文档描述当前固件的 EEPROM 配置存储布局（表驱动槽位模型），实现位于 `project/service/eeprom.c` / `eeprom.h`。
+
+## 存储模型
+
+- 配置表 `eeprom_config_items[]` 用 `EEPROM_INT/FLOAT(member, slot, default)` 宏描述"字段 → 槽位"映射，运行时统一从全局结构体 `AppConfig app` 读写。
+- 每个槽位 4 字节；RAM 缓冲区 `date_buff[432]` 覆盖槽位 0~107，整体映射到 Flash 配置扇区 `0x200`（512 字节扇区，432 字节不跨扇区）。
+- 槽位 107 为初始化标志（`EEPROM_INIT_FLAG_SLOT`），位于缓冲区末尾：标志随整包最后写入，读到标志有效即整包参数已写完。首次上电、Flash 被擦除或写中途掉电时，加载默认值并整包刷写。
+- 全部 float 参数读取时统一过 `eeprom_float_is_abnormal()` NaN 检测，脏数据逐项回退默认值，防止污染控制链。
+- 现场烧录为整片重新烧录（EEPROM 配置扇区一并擦除重写），因此修改槽位布局或默认值无需旧数据版本迁移；现场调参后需重新保存。
+
 ## 参数分组
 
-当前 EEPROM 配置由全局 `AppConfig app` 承载。
+参数结构体定义在 `project/service/eeprom.h`。
 
-### `start`
-
-| 字段 | 含义 |
-| --- | --- |
-| `start_flag` | 起跑/业务开关相关标志 |
-| `element_enable` | 整体赛道元素识别开关 |
-| `track_mode` | 赛道元素模式，当前主要使用 0 |
-| `fuya_xili` | 平地负压百分比 |
-| `fuya_wall_percent` | 墙面负压百分比保留字段，当前固定负压策略不使用 |
-| `element_len` | 元素序列有效长度，范围 1~6 |
-| `element_seq[0..5]` | 元素序列槽位，0空、1左环、2右环预留、3圆桶、4墙面、5跷跷板 |
-
-### `speed`
+### `start`（AppStartConfig）
 
 | 字段 | 含义 |
 | --- | --- |
-| `kp_Err` | 转向外环比例参数 |
-| `kd_Err` | 转向外环微分参数 |
-| `gyro_damp_Err` | 转向外环 gyro 阻尼参数 |
-| `speed_run` | 基础运行目标速度 |
-| `limiting_Err` | 转向外环输出限幅 |
-| `kp2_Err` | 转向外环非线性误差项系数 |
+| `start_flag` | 启动标志：1-运行，0-待机 |
+| `element_enable` | 赛道元素识别总开关：1-开启，0-关闭 |
+| `fuya_xili` | 平地负压吸附百分比，范围 0~100 |
+| `encoder_stop_distance_cm` | 上电累计里程达到该值后停车（cm） |
+| `element_seq[0..7]` | 元素序列 E1~E8：0空、1左环、2右环、3大圆环左、4大圆环右、5圆桶、6墙面、7跷跷板、8双十字、9单十字；其他值运行期跳过 |
 
-### `angle`
+### `speed`（AppSpeedConfig，转向差速环）
 
 | 字段 | 含义 |
 | --- | --- |
-| `kp_Angle` | 角速度内环比例参数 |
-| `kd_Angle` | 角速度内环微分参数 |
-| `gyro_feedback_scale` | gyro_z 反馈缩放系数 |
+| `kp_Err` | 转向环比例系数 |
+| `kd_Err` | 转向环微分系数 |
+| `gyro_damp_Err` | 转向环陀螺仪阻尼，抑制高速摆振 |
+| `speed_run` | 赛道基础运行速度 |
+| `limiting_Err` | 转向输出限幅 |
+| `kp2_Err` | 转向环二次项非线性增强系数 |
+| `diff_enable` | 非线性内外轮差速开关：1-开启，0-线性差速 |
+| `diff_inner_gain` | 差速分配内轮减速增益 |
+| `diff_outer_gain` | 差速分配外轮增速增益 |
+
+### `angle`（AppAngleConfig，电感偏差解算/角速度内环）
+
+| 字段 | 含义 |
+| --- | --- |
+| `kp_Angle` | 角速度内环比例系数 |
+| `kd_Angle` | 角速度内环微分系数 |
+| `gyro_feedback_scale` | 角速度反馈缩放，匹配 gyro_z 量级 |
 | `limiting_Angle` | 角速度内环输出限幅 |
-| `A_1` | 主亮度权重 |
-| `B_1` | 竖向差分权重 |
-| `C_l` | 弱信号分母补偿权重 |
+| `A_1` | 横向主差分权重 |
+| `B_1` | 竖向差分权重，斜入/斜出姿态修正 |
+| `C_l` | 分母补偿权重，弱信号时抑制偏差放大 |
+| `strong_signal_sum` | 强信号姿态锁定阈值，四路电感和超过即锁定航向 |
+| `strong_correct_angle` | 强信号区反向修正角速度，带符号 |
+| `strong_signal_enable` | 强信号姿态锁定总开关：1-开启，0-关闭 |
 
-### `ring`
+### `ring`（AppRingConfig）
+
+小圆环 `small_profile` 与大圆环 `large_profile` 各持一套独立的 `AppRingProfileConfig`（19 个参数），共用同一圆环状态机；仲裁层进入圆环元素时把对应参数组指针交给状态机。
+
+| 字段（小/大各一套） | 含义 |
+| --- | --- |
+| `gain_speed_slope` | 进环增益随目标速度的补偿斜率 |
+| `bias_entry_gain` | 进环阶段同侧两路电感放大倍数 |
+| `bias_exit_gain` | 出环阶段对侧两路电感放大倍数 |
+| `entry_straight_encoder` | 入口识别后零角速度直走距离（cm） |
+| `bias_entry_yaw` | 结束进环偏置的累计转角阈值（度） |
+| `bias_entry_encoder` | 结束进环偏置的里程阈值（cm） |
+| `bias_finish_encoder` | 出环判定的里程阈值（cm） |
+| `bias_finish_yaw` | 出环满圈角度积分阈值（度），与里程双条件确认 |
+| `target_speed` | 进环/环内/出环目标速度 |
+| `adc_a_1` / `adc_b_1` / `adc_c_l` | 圆环阶段横向主差分 / 辅助电感差分 / 分母补偿权重 |
+| `kp_Err` / `kd_Err` / `kp2_Err` | 圆环阶段方向环比例 / 微分 / 非线性增强系数 |
+| `kp_Angle` / `kd_Angle` | 圆环阶段角速度内环比例 / 微分系数 |
+| `diff_inner_gain` / `diff_outer_gain` | 圆环阶段内轮减速 / 外轮增速增益 |
+
+### `fly`（AppFlyConfig，飞坡 + 停止等待）
 
 | 字段 | 含义 |
 | --- | --- |
-| `ring_entry_encoder` | ring 阶段编码器积分阈值 |
-| `pre_ring_Gyro_target` | pre_ring 固定目标角速度 |
-| `pre_ring_Gyroz` | pre_ring 累计转角阈值 |
-| `in_ring_Gyroz` | in_ring 累计转角阈值 |
-| `pre_out_ring_Gyro_target` | pre_out_ring 固定目标角速度 |
-| `pre_out_ring_Gyroz` | pre_out_ring 累计转角阈值 |
+| `seesaw_mode` | 模式选择：0-飞坡，1-停止等待 |
+| `fly_speed` | 飞坡 LOW 阶段目标速度 |
+| `fly_detect_count` | 飞坡入口弱磁确认次数 |
+| `fly_recover_speed` | 飞坡 COOLDOWN 恢复速度 |
+| `fly_land_confirm_count` | 飞坡落地回升连续确认次数 |
+| `fly_release_step` | 飞坡 COOLDOWN 调节步长 |
+| `seesaw_speed` | 停止等待 CREEP 阶段目标速度 |
+| `seesaw_detect_count` | 跷跷板入口命中次数 |
+| `seesaw_wait_count` | 停车等待时间（×2ms） |
+| `seesaw_creep_cm` | 停止等待前挪距离（cm） |
+| `seesaw_release_step` | 停止等待 COOLDOWN 调节步长 |
 
-### `fly`
+### `cylinder`（AppCylinderConfig，圆桶）
 
 | 字段 | 含义 |
 | --- | --- |
-| `count_fly_speed` | 飞坡/跷跷板目标速度 |
-| `count_fly_time_1` | 弱磁入口确认次数，按 5ms 累计 |
-| `count_fly_time_2` | HOLD 保持时间，按 5ms 累计 |
+| `encoder_target` | 圆桶编码器积分退出阈值 |
+| `ad_both_high_threshold` | 圆桶双路强信号识别阈值 |
+| `adc_a_1` / `adc_b_1` / `adc_c_l` | 圆桶专用 ABC 权重 |
+| `kp_Err` / `kd_Err` | 圆桶专用方向环系数 |
+| `exit_slow_speed` | 圆桶确认后阶梯减速的最低目标速度 |
 
-## 存储策略说明
+### `wall`（AppWallConfig，墙面）
 
-- 当前实现保留旧地址布局
-- `eeprom_init()` 负责加载和初始化
-- `eeprom_flash()` 负责回写
-- 业务上统一通过 `config_save()` 和 `config_load()` 驱动
-- 旧 EEPROM 的新槽位可能是随机值；配置层不再校验元素序列，运行期由赛道元素仲裁跳过不可执行槽位或进入空状态
+| 字段 | 含义 |
+| --- | --- |
+| `slow_speed` | 墙面阶段降速目标值 |
+| `slow_time` | 墙面阶段降速持续时间（×2ms） |
+| `timing_count` | 墙面阶段下墙计时（×2ms） |
+| `encoder_target` | 墙面退出编码器积分阈值 |
+
+### `cross`（AppCrossConfig，双十字）与 `cross_single`（AppCrossSingleConfig，单十字）
+
+两者字段完全相同，各持独立默认值与槽位：
+
+| 字段 | 含义 |
+| --- | --- |
+| `encoder_target` | 退出编码器积分阈值 |
+| `adc_a_1` / `adc_b_1` / `adc_c_l` | 专用 ABC 权重 |
+| `kp_Err` / `kd_Err` / `kp2_Err` | 专用方向环系数 |
+
+## 槽位布局（按菜单显示顺序）
+
+| 槽位 | 内容 |
+| --- | --- |
+| 1~8 | 元素序列 E1~E8（放最前便于现场调整序列） |
+| 9~13 | START |
+| 14~19 | CTRL |
+| 20~25 | MODEL |
+| 26~31 | DIFF |
+| 32~50 | 小圆环 RING |
+| 51~69 | 大圆环 RING（紧跟小圆环，与菜单 RING 页顺序一致） |
+| 70~77 | CYLINDER |
+| 78~81 | WALL |
+| 82~92 | FLY |
+| 93~99 | CROSS（双十字） |
+| 100~106 | CROSSS（单十字） |
+| 107 | 初始化标志 |
+
+## 存储流程
+
+- `eeprom_init()`：读配置扇区到 `date_buff` → 检查槽位 107 标志 → 无效则先加载默认值、写标志、`eeprom_flash()` 整包刷写；有效则按表读入 `app`。
+- `eeprom_flash()`：把 `app` 按表序列化到 `date_buff` 后单次 IAP 刷写。菜单保存参数时调用，Flash 擦写耗时长，严禁在运行态（电机未断脱）调用。
+- 新增持久化参数 = 在对应结构体加字段 + 参数表加一行（槽位 + 默认值），读写/默认值加载全部由表驱动完成。
 
 ## 使用建议
 
-- 新增参数前，先判断是否必须掉电保存
-- 调试阶段的临时变量不要随意塞进 EEPROM
-- 会保存的参数应优先归入 `app`
-
-## 槽位索引
-
-| EEPROM 槽位 | 字段 |
-| --- | --- |
-| 30 | `element_len` |
-| 31 | `element_seq[0]` |
-| 32 | `element_seq[1]` |
-| 33 | `element_seq[2]` |
-| 34 | `element_seq[3]` |
-| 35 | `element_seq[4]` |
-| 36 | `element_seq[5]` |
+- 新增参数前先判断是否必须掉电保存。
+- 调试阶段的临时变量不要随意塞进 EEPROM。
+- 会保存的参数应优先归入 `app`。
+- 改默认值不会影响现场已刷写的车；调整槽位布局后按整片重烧处理，现场调参需重新保存。

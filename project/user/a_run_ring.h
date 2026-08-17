@@ -2,6 +2,7 @@
 #define __A_RUN_RING_H__
 
 #include "a_run_track_element.h"
+#include "eeprom.h"
 
 /**
  * @brief 圆环状态机阶段。
@@ -10,33 +11,29 @@ typedef enum
 {
     RING_STATE_IDLE = 0,     /**< 未进入圆环流程。 */
     RING_STATE_ENTRY = 1,    /**< 已识别圆环入口，该阶段零角速度直走。 */
-    RING_STATE_PRE_RING = 2, /**< 预入环阶段，该阶段放大外侧电感。 */
+    RING_STATE_PRE_RING = 2, /**< 预入环阶段，该阶段放大入环同侧两路电感。 */
     RING_STATE_IN_RING = 3,  /**< 环内阶段。 */
     RING_STATE_OUT_RING = 4, /**< 出环确认阶段。 */
     RING_STATE_RELEASE = 5   /**< 出环完成后后台阶梯恢复巡线速度。 */
 } RingState;
 
 /**
- * @brief 环岛状态数据。
- * @details 保存环岛识别过程中用到的里程累计值、相对偏航角、阶段标志和计时器。
+ * @brief 圆环状态数据。
+ * @details 保存圆环过程中用到的里程累计、角度积分、方向标志和计时器。
  */
 typedef struct
 {
-    float encoder;        // 环岛阶段的里程累计量，用于出入环距离判定
-    float yaw_delta_sum;  /**< 环岛阶段累计的 gyro_z 绝对角增量，单位为度。 */
-    float last_yaw;       // 保留给历史 yaw 差值方案，当前 gyro_z 绝对积分不依赖该字段
-    float diff_set;       // 环岛阶段固定目标角速度，非 0 时覆盖普通循迹目标
-    int8 distance;        // 编码器累计使能：1-累计，0-停止累计
-    uint32 time_r;        // 右环识别计时器
-    uint32 time_l;        // 左环识别计时器
-    int8 gyro_flat;       // gyro_z 绝对角增量累计使能：1-更新，0-停止更新
-    int8 flast_l;         // 左环过程标志
-    int8 flast_r;         // 右环过程标志
-    uint32 ing_ring_time; // 入环阶段确认计时
-    uint32 out_ring_time; // 出环阶段确认计时
+    float distance_cm;    // 圆环阶段里程累计（cm），由编码器速度积分得到
+    float yaw_delta_sum;  /**< 圆环阶段累计的 gyro_z 绝对角增量，单位为度。 */
+    float angle_set;      // 圆环阶段固定角速度目标设定，非 0 时覆盖巡线目标角速度
+    int8 distance_enable; // 里程累计使能：1-累计，0-停止累计
+    uint32 entry_timer;   // 入口识别300ms确认窗口计时器
+    int8 yaw_enable;      // gyro_z 绝对角积分累计使能：1-更新，0-停止更新
+    int8 ring_dir;        // 当前圆环方向：1-左圆环，-1-右圆环，0-未进入
+    uint32 out_ring_timer; // 出环阶段确认计时
 } RingStruct;
 
-/** 环岛过程数据，菜单和调试界面允许直接读取。 */
+/** 圆环过程数据，菜单和调试界面允许直接读取。 */
 extern RingStruct ring_data;
 
 /**
@@ -47,9 +44,12 @@ void a_run_ring_reset(void);
 /**
  * @brief 按 2ms 主控制环周期更新圆环状态机。
  * @param ring_dir 圆环方向：1-左圆环，-1-右圆环。
+ * @param profile 本圈生效的参数组指针，由仲裁层按元素类型传入
+ *                （&app.ring.small_profile 或 &app.ring.large_profile），
+ *                入口确认时锁存，本圈全程不变。
  * @return uint8 1-当前圆环流程完成，0-未完成。
  */
-uint8 a_run_ring_update_2ms(int8 ring_dir);
+uint8 a_run_ring_update_2ms(int8 ring_dir, const AppRingProfileConfig *profile);
 
 /**
  * @brief 根据圆环状态更新角速度目标。
@@ -97,7 +97,7 @@ void a_run_ring_apply_angle_diff_params(float *kp,
                                         float *outer_gain);
 
 /**
- * @brief 圆环运行阶段使用锁存参数组的目标速度。
+ * @brief 圆环有效阶段使用圆环参数组的目标速度。
  * @param speed 当前控制链目标速度指针。
  */
 void a_run_ring_apply_speed(float *speed);

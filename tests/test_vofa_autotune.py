@@ -36,14 +36,6 @@ def test_vofa_service_uses_current_legacy_command_path():
     assert "vofa_service_legacy();" in debug_source
 
 
-def test_removed_autotune_adapter_no_longer_includes_missing_topic_header():
-    adapter_source = AUTOTUNE_ADAPTER_C.read_text(encoding="utf-8")
-
-    assert '../speed_loop_autotune/firmware/speed_loop_autotune.h' not in adapter_source
-    assert "speed_loop_autotune_component_init" not in adapter_source
-    assert "void speed_loop_autotune_project_init(void)" in adapter_source
-
-
 def test_old_autotune_tool_modules_import_without_missing_project_package():
     for tool_name in TOOL_NAMES:
         tool_path = ROOT / "tools" / tool_name

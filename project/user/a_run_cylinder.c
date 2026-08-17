@@ -80,11 +80,11 @@ void a_run_cylinder_update_release_speed(float *speed)
 }
 
 /**
- * @brief 更新圆桶入口确认、阶梯减速与编码器积分状态机。
+ * @brief 按 2ms 主控制环周期更新圆桶入口确认、阶梯减速与编码器积分状态机。
  * @param speed 当前目标速度指针，圆桶确认后的减速阶段会覆盖该值。
  * @return uint8 1-圆桶流程完成，可切入下一元素；0-仍在圆桶流程中。
  */
-uint8 a_run_cylinder_update_5ms(float *speed)
+uint8 a_run_cylinder_update_2ms(float *speed)
 {
     uint8 cylinder_ad_high;
     int both_high_threshold;

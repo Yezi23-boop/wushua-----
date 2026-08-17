@@ -13,7 +13,8 @@ typedef struct
     int16 element_enable;                        /**< 整体赛道元素识别开关：1-开启，0-关闭 */
     float fuya_xili;                             /**< 平地负压百分比，范围 0~100 */
     float encoder_stop_distance_cm;              /**< 上电累计里程达到该值后停车，单位 cm */
-    int element_seq[TRACK_ELEMENT_SEQUENCE_MAX]; /**< 元素序列槽位：0空、1左环、2右环、3圆桶、4墙面、5跷跷板、6双十字；其他值运行期跳过。 */
+    /** 元素序列槽位：0空、1左环、2右环、3大圆环左、4大圆环右、5圆桶、6墙面、7跷跷板、8双十字、9单十字；其他值运行期跳过。 */
+    int element_seq[TRACK_ELEMENT_SEQUENCE_MAX];
 } AppStartConfig;
 
 /**
@@ -52,10 +53,12 @@ typedef struct
 } AppAngleConfig;
 
 /**
- * @brief 电感偏置圆环单套参数。
+ * @brief 电感偏置圆环单套完整参数：进环增益补偿斜率 + 各阶段控制参数。
+ * @details 斜率随参数组走，一套参数自包含；加新参数只改本结构体。
  */
 typedef struct
 {
+    float gain_speed_slope;       /**< 进环增益随目标速度的补偿斜率 */
     float bias_entry_gain;        /**< 进环阶段同侧两路电感放大倍数 */
     float bias_exit_gain;         /**< 出环阶段对侧两路电感放大倍数 */
     float entry_straight_encoder; /**< 识别后零角速度直走距离（cm） */
@@ -78,11 +81,14 @@ typedef struct
 
 /**
  * @brief 圆环元素识别与控制相关配置。
+ * @details 小圆环与大圆环共用圆环状态机，各持一套独立参数；
+ *          仲裁层进入圆环元素时把对应参数组指针交给状态机，
+ *          状态机不认识大小概念，只使用被传入的那套参数。
  */
 typedef struct
 {
-    float gain_speed_slope;       /**< 目标速度每增加1时进环增益的增加量 */
-    AppRingProfileConfig profile; /**< 可独立保存和调节的电感偏置圆环参数 */
+    AppRingProfileConfig small_profile; /**< 小圆环参数组 */
+    AppRingProfileConfig large_profile; /**< 大圆环参数组 */
 } AppRingConfig;
 
 /**
@@ -178,7 +184,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[408]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 101。 */
+extern uint8 date_buff[432]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 107。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

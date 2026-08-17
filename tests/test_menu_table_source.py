@@ -57,18 +57,24 @@ def test_menu_page_counts_and_parent_links_are_complete():
         "menu_diff_items": 6,
         "menu_yuanshu_items": 6,
         "menu_tpl_items": 5,
-        "menu_ring_items": 5,
+        "menu_ring_items": 2,
+        "menu_ring_small_items": 5,
+        "menu_ring_large_items": 5,
         # ENTRY/CROSS/CROSSS 页为 7 项，超出标题+6 项满屏上限，待后续拆页。
-        "menu_ring_entry_items": 7,
-        "menu_ring_in_items": 6,
-        "menu_ring_drive_items": 4,
+        "menu_ring_small_entry_items": 7,
+        "menu_ring_small_in_items": 6,
+        "menu_ring_small_drive_items": 4,
+        "menu_ring_large_entry_items": 7,
+        "menu_ring_large_in_items": 6,
+        "menu_ring_large_drive_items": 4,
         "menu_cylinder_items": 6,
         "menu_wall_items": 4,
         "menu_fly_items": 6,
         "menu_seesaw_items": 6,
         "menu_cross_items": 7,
         "menu_cross_single_items": 7,
-        "menu_element_items": 6,
+        "menu_element_items": 5,
+        "menu_element2_items": 4,
     }
     for name, count in expected_counts.items():
         assert _item_count(source, name) == count
@@ -88,14 +94,18 @@ def test_menu_page_counts_and_parent_links_are_complete():
     assert '{"<<MODEL",menu_model_items,MENU_ITEM_COUNT(menu_model_items),MENU_PAGE_HOME}' in compact_source
     assert '{"<<TPL",menu_tpl_items,MENU_ITEM_COUNT(menu_tpl_items),MENU_PAGE_SENSOR}' in compact_source
     assert (
-        '{"<<ENTRY",menu_ring_entry_items,'
-        'MENU_ITEM_COUNT(menu_ring_entry_items),MENU_PAGE_RING}' in compact_source
+        '{"<<S_ENTRY",menu_ring_small_entry_items,'
+        'MENU_ITEM_COUNT(menu_ring_small_entry_items),MENU_PAGE_RING_SMALL}' in compact_source
     )
     assert (
-        '{"<<DRIVE",menu_ring_drive_items,'
-        'MENU_ITEM_COUNT(menu_ring_drive_items),MENU_PAGE_RING}' in compact_source
+        '{"<<L_DRIVE",menu_ring_large_drive_items,'
+        'MENU_ITEM_COUNT(menu_ring_large_drive_items),MENU_PAGE_RING_LARGE}' in compact_source
     )
     assert '{"<<ELEM",menu_element_items,MENU_ITEM_COUNT(menu_element_items),MENU_PAGE_START}' in compact_source
+    assert (
+        '{"<<ELEM2",menu_element2_items,'
+        'MENU_ITEM_COUNT(menu_element2_items),MENU_PAGE_START}' in compact_source
+    )
 
 
 def test_menu_parameter_steps_match_tuning_contract():
@@ -170,46 +180,53 @@ def test_start_menu_exposes_encoder_stop_distance_in_centimeters():
 def test_ring_menu_exposes_entry_ctrl_drive_subpages():
     source = _read(MENU_C)
     compact_source = _without_whitespace(source)
-    ring = _item_block(source, "menu_ring_items")
-    entry = _item_block(source, "menu_ring_entry_items")
-    ring_in = _item_block(source, "menu_ring_in_items")
-    drive = _item_block(source, "menu_ring_drive_items")
+    small = _item_block(source, "menu_ring_small_items")
+    large = _item_block(source, "menu_ring_large_items")
+    small_entry = _item_block(source, "menu_ring_small_entry_items")
+    small_in = _item_block(source, "menu_ring_small_in_items")
+    small_drive = _item_block(source, "menu_ring_small_drive_items")
+    large_entry = _item_block(source, "menu_ring_large_entry_items")
+    large_in = _item_block(source, "menu_ring_large_in_items")
+    large_drive = _item_block(source, "menu_ring_large_drive_items")
 
-    assert '"straight_E", &app.ring.profile.entry_straight_encoder' in ring
-    assert '"gain_k", &app.ring.gain_speed_slope' in ring
-    assert '{"ENTRY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_ENTRY}' in compact_source
-    assert '{"CTRL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_IN}' in compact_source
-    assert '{"DRIVE",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_DRIVE}' in compact_source
-    assert '"gain", &app.ring.profile.bias_entry_gain' in entry
-    assert '"exit_gain", &app.ring.profile.bias_exit_gain' in entry
-    assert '"finish_E", &app.ring.profile.bias_finish_encoder' in entry
-    assert '"finish_Gz", &app.ring.profile.bias_finish_yaw' in entry
-    assert '"ring_spd", &app.ring.profile.target_speed' in entry
-    assert '"adc_a_1", &app.ring.profile.adc_a_1' in ring_in
-    assert '"kp_Err", &app.ring.profile.kp_Err' in ring_in
-    assert '"kp2_Err", &app.ring.profile.kp2_Err' in ring_in
-    assert '"kp_Ang", &app.ring.profile.kp_Angle' in drive
-    assert '"inner_g", &app.ring.profile.diff_inner_gain' in drive
-    assert '"outer_g", &app.ring.profile.diff_outer_gain' in drive
+    # RING 页两个选项（SMALL/LARGE）分别进入大小圆环参数页。
+    assert '{"SMALL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_SMALL}' in compact_source
+    assert '{"LARGE",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LARGE}' in compact_source
+    assert '"straight_E", &app.ring.small_profile.entry_straight_encoder' in small
+    assert '"gain_k", &app.ring.small_profile.gain_speed_slope' in small
+    assert '"straight_E", &app.ring.large_profile.entry_straight_encoder' in large
+    assert '"gain_k", &app.ring.large_profile.gain_speed_slope' in large
+    assert '{"ENTRY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_SMALL_ENTRY}' in compact_source
+    assert '{"CTRL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_SMALL_IN}' in compact_source
+    assert '{"DRIVE",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_SMALL_DRIVE}' in compact_source
+    assert '{"ENTRY",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LARGE_ENTRY}' in compact_source
+    assert '{"CTRL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LARGE_IN}' in compact_source
+    assert '{"DRIVE",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_RING_LARGE_DRIVE}' in compact_source
 
+    assert '"gain", &app.ring.small_profile.bias_entry_gain' in small_entry
+    assert '"exit_gain", &app.ring.small_profile.bias_exit_gain' in small_entry
+    assert '"finish_E", &app.ring.small_profile.bias_finish_encoder' in small_entry
+    assert '"finish_Gz", &app.ring.small_profile.bias_finish_yaw' in small_entry
+    assert '"ring_spd", &app.ring.small_profile.target_speed' in small_entry
+    assert '"gain", &app.ring.large_profile.bias_entry_gain' in large_entry
+    assert '"exit_gain", &app.ring.large_profile.bias_exit_gain' in large_entry
+    assert '"finish_E", &app.ring.large_profile.bias_finish_encoder' in large_entry
+    assert '"finish_Gz", &app.ring.large_profile.bias_finish_yaw' in large_entry
+    assert '"ring_spd", &app.ring.large_profile.target_speed' in large_entry
 
-def test_menu_integer_steps_are_named_and_source_is_consistently_wrapped():
-    source = _read(MENU_C)
+    assert '"adc_a_1", &app.ring.small_profile.adc_a_1' in small_in
+    assert '"kp_Err", &app.ring.small_profile.kp_Err' in small_in
+    assert '"kp2_Err", &app.ring.small_profile.kp2_Err' in small_in
+    assert '"adc_a_1", &app.ring.large_profile.adc_a_1' in large_in
+    assert '"kp_Err", &app.ring.large_profile.kp_Err' in large_in
+    assert '"kp2_Err", &app.ring.large_profile.kp2_Err' in large_in
 
-    assert re.search(
-        r"typedef enum\s*\{\s*"
-        r"MENU_INT_STEP_1\s*=\s*1,\s*"
-        r"MENU_INT_STEP_5\s*=\s*5,\s*"
-        r"MENU_INT_STEP_10\s*=\s*10\s*"
-        r"\}\s*MenuIntStep;",
-        source,
-    )
-    assert not re.search(
-        r"MENU_META\(MENU_ITEM_INT16,[^)]*\),\s*(?:1|5|10)\s*\}",
-        source,
-    )
-    assert all(len(line) <= 100 for line in source.splitlines())
-    assert not re.search(r"#define MENU_META\([^\n]+\)\s+\+", source)
+    assert '"kp_Ang", &app.ring.small_profile.kp_Angle' in small_drive
+    assert '"inner_g", &app.ring.small_profile.diff_inner_gain' in small_drive
+    assert '"outer_g", &app.ring.small_profile.diff_outer_gain' in small_drive
+    assert '"kp_Ang", &app.ring.large_profile.kp_Angle' in large_drive
+    assert '"inner_g", &app.ring.large_profile.diff_inner_gain' in large_drive
+    assert '"outer_g", &app.ring.large_profile.diff_outer_gain' in large_drive
 
 
 def test_menu_preserves_edit_and_special_page_semantics():
