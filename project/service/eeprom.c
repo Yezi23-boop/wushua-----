@@ -42,6 +42,16 @@ typedef struct
     {&app.member, index, EEPROM_VALUE_INT16, 0.0f, value}
 #define EEPROM_FLOAT(member, index, value) \
     {&app.member, index, EEPROM_VALUE_FLOAT, value, 0}
+// #define TRACK_ELEMENT_NONE 0             /**< 空槽位，用于跳过或现场临时关闭某个序列位置。 */
+// #define TRACK_ELEMENT_LEFT_RING 1        /**< 左圆环元素编号，接入序列表串行仲裁。 */
+// #define TRACK_ELEMENT_RIGHT_RING 2       /**< 右圆环元素编号，复用圆环状态机并反向控制。 */
+// #define TRACK_ELEMENT_LARGE_RING_LEFT 3  /**< 大圆环左元素编号，复用圆环状态机，参数取大圆环组。 */
+// #define TRACK_ELEMENT_LARGE_RING_RIGHT 4 /**< 大圆环右元素编号，复用圆环状态机，参数取大圆环组。 */
+// #define TRACK_ELEMENT_CYLINDER 5         /**< 圆桶元素编号。 */
+// #define TRACK_ELEMENT_WALL 6             /**< 墙面元素编号。 */
+// #define TRACK_ELEMENT_SEESAW 7           /**< 跷跷板元素编号，复用 a_run_fly 的弱磁/恢复状态机。 */
+// #define TRACK_ELEMENT_DOUBLE_CROSS 8     /**< 双十字元素编号，电感和命中后编码器积分退出。 */
+// #define TRACK_ELEMENT_SINGLE_CROSS 9     /**< 单十字元素编号，入口判定与双十字相同，仅序列区分。 */
 static const EepromConfigItem eeprom_config_items[] = {
     /* --- 元素序列（ELEM/ELEM2 页面，放最前便于现场调整序列） --- */
     EEPROM_INT(start.element_seq[0], 1, TRACK_ELEMENT_NONE), // 元素序列槽位0
