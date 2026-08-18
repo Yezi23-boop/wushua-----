@@ -149,7 +149,7 @@
             <RestoreSysVw>1</RestoreSysVw>
           </Target>
           <RunDebugAfterBuild>0</RunDebugAfterBuild>
-          <TargetSelection>1</TargetSelection>
+          <TargetSelection>-1</TargetSelection>
           <SimDlls>
             <CpuDll></CpuDll>
             <CpuDllArguments></CpuDllArguments>
@@ -257,16 +257,16 @@
             </OnChipMemories>
           </Target251Misc>
           <C251>
-            <RegColor>0</RegColor>
+            <RegColor>1</RegColor>
             <uOrder>0</uOrder>
             <uAlias>0</uAlias>
             <uRentF>0</uRentF>
             <uUch>0</uUch>
             <uFlt64>0</uFlt64>
             <Fuzzy>3</Fuzzy>
-            <Optim>0</Optim>
+            <Optim>2</Optim>
             <wLevel>3</wLevel>
-            <SizSpd>0</SizSpd>
+            <SizSpd>1</SizSpd>
             <AcaOpt>0</AcaOpt>
             <VariousControls>
               <MiscControls></MiscControls>
@@ -645,6 +645,46 @@
               <FilePath>..\user\a_run_track_element.h</FilePath>
             </File>
             <File>
+              <FileName>a_run_ring.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_ring.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_ring.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_ring.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cylinder.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_cylinder.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cylinder.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_cylinder.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_wall.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_wall.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_wall.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_wall.h</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cross.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\user\a_run_cross.c</FilePath>
+            </File>
+            <File>
+              <FileName>a_run_cross.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\user\a_run_cross.h</FilePath>
+            </File>
+            <File>
               <FileName>ADC.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\user\ADC.c</FilePath>
@@ -685,6 +725,11 @@
               <FilePath>..\user\int_user.h</FilePath>
             </File>
             <File>
+              <FileName>stc_usb_cdc_32g.LIB</FileName>
+              <FileType>4</FileType>
+              <FilePath>.\stc_usb_cdc_32g.LIB</FilePath>
+            </File>
+            <File>
               <FileName>AI8051U_32_MDU32.LIB</FileName>
               <FileType>4</FileType>
               <FilePath>.\AI8051U_32_MDU32.LIB</FilePath>
@@ -693,11 +738,6 @@
               <FileName>AI8051U_32_TFPU.LIB</FileName>
               <FileType>4</FileType>
               <FilePath>.\AI8051U_32_TFPU.LIB</FilePath>
-            </File>
-            <File>
-              <FileName>stc_usb_cdc_32g.LIB</FileName>
-              <FileType>4</FileType>
-              <FilePath>.\stc_usb_cdc_32g.LIB</FilePath>
             </File>
           </Files>
         </Group>
@@ -733,6 +773,16 @@
               <FileName>menu.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\service\menu.h</FilePath>
+            </File>
+            <File>
+              <FileName>tpl0102.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\service\tpl0102.c</FilePath>
+            </File>
+            <File>
+              <FileName>tpl0102.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\service\tpl0102.h</FilePath>
             </File>
             <File>
               <FileName>filter.c</FileName>

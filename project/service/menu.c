@@ -1,15 +1,14 @@
 /**
  * @file menu.c
- * @brief 屏幕菜单与交互状态机实现
- * @details
- * 负责通过 IPS 屏幕和独立按键进行小车所有实时环境参数（速度、PID、摄像头、环岛阈值等）的就地修改和 EEPROM 同步。
- * 大部分时间以阻塞形式（或状态机驻留形式）独占 CPU 的前台任务，但在调整参数时中断服务依然照常运作。
+ * @brief IPS114 参数菜单与按键交互实现。
+ *
+ * 页面、行项目和编辑规则由只读描述表集中定义，运行期只保留当前页面、
+ * 光标和编辑状态，避免每个页面各自维护绘制与按键分支。
  */
 #include "zf_common_headfile.h"
 #include "menu.h"
 #include "../user/a_run_mode.h"
 
-/* 按键事件编码，与 key 模块保持一致。 */
 #define KEYSTROKE_ONE 1
 #define KEYSTROKE_TWO 2
 #define KEYSTROKE_THREE 3
@@ -18,109 +17,461 @@
 #define KEYSTROKE_TWO_LONG 6
 #define KEYSTROKE_FOUR_LONG 8
 
-/* 阻塞式菜单固定使用 18 像素行高。 */
-#define MENU_ROW_HEIGHT 18
-#define MENU_ROW_MIN (1 * MENU_ROW_HEIGHT)
-#define MENU_HOME_ROW_MAX (6 * MENU_ROW_HEIGHT)
-#define MENU_PAGE_COUNT 7
+#define MENU_ROW_HEIGHT 17 /* 135px 屏高、16px 字模，17px 行距可容标题+7 项满屏。 */
 #define MENU_CENTER_X (12 * 8)
 #define MENU_STEP_X (14 * 8)
 #define MENU_STEP_INT_X (15 * 8)
-#define EEPROM_MODE 1
 #define MENU_SAVE_PROMPT_DELAY_MS 300
+#define MENU_PAGE_NONE 0xFFu
+
+#define MENU_TYPE_SHIFT 5
+#define MENU_WIDTH_SHIFT 2
+#define MENU_TYPE_MASK 0xE0u
+#define MENU_WIDTH_MASK 0x1Cu
+#define MENU_DECIMAL_MASK 0x03u
+#define MENU_META(type, width, decimal) \
+    ((uint8)(((type) << MENU_TYPE_SHIFT) | ((width) << MENU_WIDTH_SHIFT) | (decimal)))
+
+/** @brief 菜单行类型。 */
+typedef enum
+{
+    MENU_ITEM_FLOAT = 0,
+    MENU_ITEM_INT16,
+    MENU_ITEM_BOOL,
+    MENU_ITEM_LINK,
+    MENU_ITEM_TPL_CHANNEL,
+    MENU_ITEM_TPL_SAVE
+} MenuItemType;
+
+/** @brief 浮点参数步长索引。 */
+typedef enum
+{
+    MENU_FLOAT_STEP_0001 = 0,
+    MENU_FLOAT_STEP_001,
+    MENU_FLOAT_STEP_01,
+    MENU_FLOAT_STEP_1,
+    MENU_FLOAT_STEP_5,
+    MENU_FLOAT_STEP_10
+} MenuFloatStep;
+
+/** @brief 整数参数步长。 */
+typedef enum
+{
+    MENU_INT_STEP_1 = 1,
+    MENU_INT_STEP_5 = 5,
+    MENU_INT_STEP_10 = 10
+} MenuIntStep;
+
+/** @brief 菜单页面编号。 */
+typedef enum
+{
+    MENU_PAGE_HOME = 0,
+    MENU_PAGE_START,
+    MENU_PAGE_SPEED,
+    MENU_PAGE_MODEL,
+    MENU_PAGE_YUANSHU,
+    MENU_PAGE_SENSOR,
+    MENU_PAGE_RING,
+    MENU_PAGE_RING_SMALL,
+    MENU_PAGE_RING_SMALL_ENTRY,
+    MENU_PAGE_RING_SMALL_IN,
+    MENU_PAGE_RING_SMALL_DRIVE,
+    MENU_PAGE_RING_LARGE,
+    MENU_PAGE_RING_LARGE_ENTRY,
+    MENU_PAGE_RING_LARGE_IN,
+    MENU_PAGE_RING_LARGE_DRIVE,
+    MENU_PAGE_CYLINDER,
+    MENU_PAGE_WALL,
+    MENU_PAGE_FLY,
+    MENU_PAGE_FLY_CENTER,
+    MENU_PAGE_CROSS,
+    MENU_PAGE_CROSS_SINGLE,
+    MENU_PAGE_ELEMENT,
+    MENU_PAGE_ELEMENT2,
+    MENU_PAGE_TPL,
+    MENU_PAGE_COUNT
+} MenuPageId;
+
+/** @brief 扁平 TPL 页面通道编号。 */
+typedef enum
+{
+    MENU_TPL_CHANNEL_AD1 = 0,
+    MENU_TPL_CHANNEL_AD2,
+    MENU_TPL_CHANNEL_AD3,
+    MENU_TPL_CHANNEL_AD4
+} MenuTplChannel;
+
+/**
+ * @brief 菜单行描述。
+ *
+ * meta 高 3 位为类型、中 3 位为整数宽度、低 2 位为小数位数。
+ * action 对浮点项表示步长编号，对整数项表示基础步长，对链接项表示目标页面。
+ */
+typedef struct
+{
+    const char *label;
+    void *target;
+    uint8 meta;
+    uint8 action;
+} MenuItemDef;
+
+/**
+ * @brief 菜单页面描述。
+ */
+typedef struct
+{
+    const char *title;
+    const MenuItemDef *items;
+    uint8 item_count;
+    uint8 parent;
+} MenuPageDef;
+
+static const float menu_float_steps[] = {0.001f, 0.01f, 0.1f, 1.0f, 5.0f, 10.0f};
+
+static const MenuItemDef menu_home_items[] = {
+    {"START", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_START},
+    {"CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_SPEED},
+    {"MODEL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_MODEL},
+    {"YUANSHU", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_YUANSHU},
+    {"SENSOR", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_SENSOR}};
+
+static const MenuItemDef menu_start_items[] = {
+    {"Start_Flag", &app.start.start_flag, MENU_META(MENU_ITEM_BOOL, 3, 0), 0},
+    {"elem_en", &app.start.element_enable, MENU_META(MENU_ITEM_BOOL, 3, 0), 0},
+    {"fuya_ground", &app.start.fuya_xili,
+     MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
+    {"gyro_fbN", &app.angle.gyro_feedback_scale,
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_001},
+    {"ELEM", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_ELEMENT},
+    {"stop_cm", &app.start.encoder_stop_distance_cm,
+     MENU_META(MENU_ITEM_FLOAT, 4, 0), MENU_FLOAT_STEP_10}};
+
+static const MenuItemDef menu_speed_items[] = {
+    {"kp_Err", &app.speed.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.speed.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"gyro_dmp", &app.speed.gyro_damp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001},
+    {"speed_run", &app.speed.speed_run, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
+    {"limit_Err", &app.speed.limiting_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_1},
+    {"kp2_Err", &app.speed.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+static const MenuItemDef menu_model_items[] = {
+    {"kp_Ang", &app.angle.kp_Angle, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Ang", &app.angle.kd_Angle, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"lim_Ang", &app.angle.limiting_Angle, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_1},
+    {"A_1", &app.angle.A_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"B_1", &app.angle.B_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"C_l", &app.angle.C_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
+
+static const MenuItemDef menu_yuanshu_items[] = {
+    {"RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING},
+    {"CYLINDER", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CYLINDER},
+    {"WALL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_WALL},
+    {"FLY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_FLY},
+    {"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS},
+    {"CROSSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS_SINGLE}};
+
+/* RING 页两个选项分别进入大小圆环参数调整页。 */
+static const MenuItemDef menu_ring_items[] = {
+    {"SMALL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_SMALL},
+    {"LARGE", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_LARGE}};
+
+static const MenuItemDef menu_ring_small_items[] = {
+    {"straight_E", &app.ring.small_profile.entry_straight_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"gain_k", &app.ring.small_profile.gain_speed_slope,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_SMALL_ENTRY},
+    {"CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_SMALL_IN},
+    {"DRIVE", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_SMALL_DRIVE}};
+
+static const MenuItemDef menu_ring_large_items[] = {
+    {"straight_E", &app.ring.large_profile.entry_straight_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"gain_k", &app.ring.large_profile.gain_speed_slope,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"ENTRY", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_LARGE_ENTRY},
+    {"CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_LARGE_IN},
+    {"DRIVE", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING_LARGE_DRIVE}};
+
+static const MenuItemDef menu_ring_small_entry_items[] = {
+    {"gain", &app.ring.small_profile.bias_entry_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"exit_gain", &app.ring.small_profile.bias_exit_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"entry_Gz", &app.ring.small_profile.bias_entry_yaw,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"entry_E", &app.ring.small_profile.bias_entry_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"finish_E", &app.ring.small_profile.bias_finish_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"finish_Gz", &app.ring.small_profile.bias_finish_yaw,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"ring_spd", &app.ring.small_profile.target_speed,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1}};
+
+static const MenuItemDef menu_ring_small_in_items[] = {
+    {"adc_a_1", &app.ring.small_profile.adc_a_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.ring.small_profile.adc_b_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.ring.small_profile.adc_c_l,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.ring.small_profile.kp_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.ring.small_profile.kd_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.ring.small_profile.kp2_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+static const MenuItemDef menu_ring_small_drive_items[] = {
+    {"kp_Ang", &app.ring.small_profile.kp_Angle,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Ang", &app.ring.small_profile.kd_Angle,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001}};
+
+static const MenuItemDef menu_ring_large_entry_items[] = {
+    {"gain", &app.ring.large_profile.bias_entry_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"exit_gain", &app.ring.large_profile.bias_exit_gain,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
+    {"entry_Gz", &app.ring.large_profile.bias_entry_yaw,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"entry_E", &app.ring.large_profile.bias_entry_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"finish_E", &app.ring.large_profile.bias_finish_encoder,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"finish_Gz", &app.ring.large_profile.bias_finish_yaw,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1},
+    {"ring_spd", &app.ring.large_profile.target_speed,
+     MENU_META(MENU_ITEM_FLOAT, 3, 1), MENU_FLOAT_STEP_1}};
+
+static const MenuItemDef menu_ring_large_in_items[] = {
+    {"adc_a_1", &app.ring.large_profile.adc_a_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.ring.large_profile.adc_b_1,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.ring.large_profile.adc_c_l,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.ring.large_profile.kp_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.ring.large_profile.kd_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.ring.large_profile.kp2_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+static const MenuItemDef menu_ring_large_drive_items[] = {
+    {"kp_Ang", &app.ring.large_profile.kp_Angle,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Ang", &app.ring.large_profile.kd_Angle,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001}};
+
+static const MenuItemDef menu_cylinder_items[] = {
+    {"cyl_enc", &app.cylinder.encoder_target,
+     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_10},
+    {"cyl_both", &app.cylinder.ad_both_high_threshold,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"adc_a_1", &app.cylinder.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.cylinder.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.cylinder.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"exit_spd", &app.cylinder.exit_slow_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}};
+
+static const MenuItemDef menu_wall_items[] = {
+    {"wall_spd", &app.wall.entry_speed,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"wall_timing", &app.wall.timing_count,
+     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10},
+    {"wall_enc", &app.wall.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1}};
+
+static const MenuItemDef menu_fly_items[] = {
+    {"seesaw_mode", &app.fly.seesaw_mode, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
+    {"fly_speed", &app.fly.fly_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"detect_cnt", &app.fly.fly_detect_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"recover_spd", &app.fly.fly_recover_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"release_stp", &app.fly.fly_release_step,
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"CENTER", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_FLY_CENTER}};
+
+static const MenuItemDef menu_seesaw_items[] = {
+    {"seesaw_mode", &app.fly.seesaw_mode, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
+    {"seesaw_spd", &app.fly.seesaw_speed,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"detect_cnt", &app.fly.seesaw_detect_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"wait_cnt", &app.fly.seesaw_wait_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"creep_cm", &app.fly.seesaw_creep_cm, MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"CENTER", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_FLY_CENTER}};
+
+/* CENTER 页按模式动态切换：各带 1 个释放收尾参数 + 3 个释放期居中 ABC 权重。 */
+static const MenuItemDef menu_fly_center_items[] = {
+    {"land_cnt", &app.fly.fly_land_confirm_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"c_a_1", &app.fly.center_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_b_1", &app.fly.center_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_l", &app.fly.center_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
+
+static const MenuItemDef menu_seesaw_center_items[] = {
+    {"release_stp", &app.fly.seesaw_release_step,
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"c_a_1", &app.fly.center_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_b_1", &app.fly.center_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_l", &app.fly.center_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
+
+static const MenuItemDef menu_cross_items[] = {
+    {"enc_target", &app.cross.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
+    {"adc_a_1", &app.cross.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.cross.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.cross.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.cross.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.cross.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.cross.kp2_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+static const MenuItemDef menu_cross_single_items[] = {
+    {"enc_target", &app.cross_single.encoder_target,
+     MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
+    {"adc_a_1", &app.cross_single.adc_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_b_1", &app.cross_single.adc_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"adc_c_l", &app.cross_single.adc_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"kp_Err", &app.cross_single.kp_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kd_Err", &app.cross_single.kd_Err, MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
+    {"kp2_Err", &app.cross_single.kp2_Err,
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
+
+/* 8 槽位按满屏 7 项拆两页：ELEM 放 E1~E6 并链接 ELEM2，E7~E8 在 ELEM2。 */
+static const MenuItemDef menu_element_items[] = {
+    {"E1", &app.start.element_seq[0], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E2", &app.start.element_seq[1], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E3", &app.start.element_seq[2], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E4", &app.start.element_seq[3], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E5", &app.start.element_seq[4], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E6", &app.start.element_seq[5], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"NEXT", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_ELEMENT2}};
+
+static const MenuItemDef menu_element2_items[] = {
+    {"E7", &app.start.element_seq[6], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E8", &app.start.element_seq[7], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1}};
+
+static const MenuItemDef menu_tpl_items[] = {
+    {"AD1", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD1},
+    {"AD2", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD2},
+    {"AD3", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD3},
+    {"AD4", 0, MENU_META(MENU_ITEM_TPL_CHANNEL, 3, 0), MENU_TPL_CHANNEL_AD4},
+    {"SAVE", 0, MENU_META(MENU_ITEM_TPL_SAVE, 0, 0), 0}};
+
+#define MENU_ITEM_COUNT(items) ((uint8)(sizeof(items) / sizeof((items)[0])))
+
+static const MenuPageDef menu_pages[] = {
+    {"MENU", menu_home_items, MENU_ITEM_COUNT(menu_home_items), MENU_PAGE_NONE},
+    {"<<START", menu_start_items, MENU_ITEM_COUNT(menu_start_items), MENU_PAGE_HOME},
+    {"<<CTRL", menu_speed_items, MENU_ITEM_COUNT(menu_speed_items), MENU_PAGE_HOME},
+    {"<<MODEL", menu_model_items, MENU_ITEM_COUNT(menu_model_items), MENU_PAGE_HOME},
+    {"<<YUANSHU", menu_yuanshu_items, MENU_ITEM_COUNT(menu_yuanshu_items), MENU_PAGE_HOME},
+    {"<<SENSOR", 0, 0, MENU_PAGE_HOME},
+    {"<<RING", menu_ring_items, MENU_ITEM_COUNT(menu_ring_items), MENU_PAGE_YUANSHU},
+    {"<<S_RING", menu_ring_small_items,
+     MENU_ITEM_COUNT(menu_ring_small_items), MENU_PAGE_RING},
+    {"<<S_ENTRY", menu_ring_small_entry_items,
+     MENU_ITEM_COUNT(menu_ring_small_entry_items), MENU_PAGE_RING_SMALL},
+    {"<<S_CTRL", menu_ring_small_in_items,
+     MENU_ITEM_COUNT(menu_ring_small_in_items), MENU_PAGE_RING_SMALL},
+    {"<<S_DRIVE", menu_ring_small_drive_items,
+     MENU_ITEM_COUNT(menu_ring_small_drive_items), MENU_PAGE_RING_SMALL},
+    {"<<L_RING", menu_ring_large_items,
+     MENU_ITEM_COUNT(menu_ring_large_items), MENU_PAGE_RING},
+    {"<<L_ENTRY", menu_ring_large_entry_items,
+     MENU_ITEM_COUNT(menu_ring_large_entry_items), MENU_PAGE_RING_LARGE},
+    {"<<L_CTRL", menu_ring_large_in_items,
+     MENU_ITEM_COUNT(menu_ring_large_in_items), MENU_PAGE_RING_LARGE},
+    {"<<L_DRIVE", menu_ring_large_drive_items,
+     MENU_ITEM_COUNT(menu_ring_large_drive_items), MENU_PAGE_RING_LARGE},
+    {"<<CYLINDER", menu_cylinder_items,
+     MENU_ITEM_COUNT(menu_cylinder_items), MENU_PAGE_YUANSHU},
+    {"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU},
+    {"<<SEESAW", menu_fly_items, MENU_ITEM_COUNT(menu_fly_items), MENU_PAGE_YUANSHU},
+    {"<<CENTER", menu_fly_center_items,
+     MENU_ITEM_COUNT(menu_fly_center_items), MENU_PAGE_FLY},
+    {"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU},
+    {"<<CROSSS", menu_cross_single_items,
+     MENU_ITEM_COUNT(menu_cross_single_items), MENU_PAGE_YUANSHU},
+    {"<<ELEM", menu_element_items,
+     MENU_ITEM_COUNT(menu_element_items), MENU_PAGE_START},
+    {"<<ELEM2", menu_element2_items,
+     MENU_ITEM_COUNT(menu_element2_items), MENU_PAGE_START},
+    {"<<TPL", menu_tpl_items, MENU_ITEM_COUNT(menu_tpl_items), MENU_PAGE_SENSOR}};
 
 static uint8 menu_service_enabled = 0;
-static int cursor_row = MENU_ROW_MIN;
-static int previous_cursor_row = -1;
-static int menu_next_flag = 0;
-static int change_unit_multiplier = 1;
-static int keystroke_three_count = 0;
-static int menu_saved_row[MENU_PAGE_COUNT];
-static int menu_entry_row[MENU_PAGE_COUNT];
-
-int display_codename = 0;
-
-static const int menu_have_sub[] = {
-    0,
-    1, 11, 12, 13, 14, 15,
-    2, 21, 22, 23, 24, 25, 26,
-    3, 31, 32, 33, 34, 35, 36,
-    4,
-    5, 51, 52, 53, 54, 55, 56,
-    6, 61, 62, 63, 64};
+static uint8 menu_page = MENU_PAGE_HOME;
+static uint8 menu_selected[MENU_PAGE_COUNT];
+static uint8 menu_editing = 0;
+static uint8 menu_change_multiplier = 1;
+static int8 menu_previous_row = -1;
 
 static void Menu_Clear_Pending_Key_Events(void);
 static void Menu_Clear_Page(void);
-static void Menu_Reset_Page_Memory(void);
-static void Menu_Reset_Cursor(void);
 static uint8 Menu_Read_Key_Event(void);
-static int Menu_Get_Page_Root(int page_id);
-static int Menu_Get_Page_Row_Max(int page_root);
-static int Menu_Normalize_Row(int page_id, int row);
-static void Menu_Save_Page_Position(int page_id, int row);
-static int Menu_Load_Page_Position(int page_id);
-static int Menu_Have_Sub_Menu(int menu_id);
-static void Menu_Draw_Navigation_Cursor(int row_max);
-static void Menu_Cursor_Update(int row_max);
-static void Menu_Render_Current_Page(void);
-static void Menu_Next_Back(void);
-static void Menu_Handle_Common_Key(int label);
-static void Menu_Show_Save_Prompt(void);
-static void Menu_Draw_Home(void);
-static void Menu_Draw_Start(int edit_line);
-static void Menu_Draw_Speed(int edit_line);
-static void Menu_Draw_Model(int edit_line);
+static const MenuItemDef *Menu_Get_Items(void);
+static uint8 Menu_Get_Item_Type(const MenuItemDef *item);
+static uint8 Menu_Get_Tpl_Channel_Device(uint8 channel);
+static uint16 Menu_Get_Tpl_Channel_Ad(uint8 channel);
+static void Menu_Show_Int32(uint16 x, uint16 y, int16 dat, uint8 num);
+static void Menu_Show_Float(uint16 x, uint16 y, float dat, uint8 num, uint8 pointnum);
+static void Menu_Draw_Item_Value(const MenuItemDef *item, uint16 y);
 static void Menu_Draw_Sensor(void);
-static void Menu_Draw_Ring(int edit_line);
-static void Menu_Draw_Fly(int edit_line);
-static void Menu_Process_Special_Value(int16 *parameter);
-static void Menu_Process_Track_Mode(void);
-static void Menu_Process_Int_Value(int *parameter, int change_unit_min);
-static void Menu_Process_Float_Value(float *parameter, float change_unit_min);
-static void Keystroke_Menu_HOME(void);
-static void Menu_Start_Process(void);
-static void Menu_Speed_Process(void);
-static void Menu_Model_Process(void);
-static void Menu_Sensor_Process(void);
-static void Menu_Ring_Process(void);
-static void Menu_Fly_Process(void);
+static void Menu_Draw_Page_Extras(void);
+static void Menu_Draw_Edit_Step(const MenuItemDef *item);
+static void Menu_Render_Page(void);
+static void Menu_Change_Page(uint8 page);
+static void Menu_Apply_Item_Change(const MenuItemDef *item, uint8 increase);
+static void Menu_Apply_Tpl_Channel_Change(const MenuItemDef *item, uint8 increase);
+static void Menu_Handle_Edit(uint8 event_code);
+static void Menu_Handle_Navigation(uint8 event_code);
+static void Menu_Show_Save_Prompt(void);
+static void Menu_Show_Tpl_Save_Result(uint8 success);
 
+/**
+ * @brief 设置菜单服务使能状态并复位菜单会话。
+ * @param enabled 非零表示使能。
+ * @return 无。
+ */
 void Menu_Set_Service_Enable(uint8 enabled)
 {
-    menu_service_enabled = enabled ? 1 : 0;
+    uint8 i;
 
-    if (menu_service_enabled)
-    {
-        Menu_Reset_Page_Memory();
-        display_codename = 0;
-        menu_next_flag = 0;
-        change_unit_multiplier = 1;
-        keystroke_three_count = 0;
-        Menu_Reset_Cursor();
-    }
-    else
-    {
-        Menu_Reset_Page_Memory();
-        display_codename = 0;
-        menu_next_flag = 0;
-        change_unit_multiplier = 1;
-        keystroke_three_count = 0;
-        Menu_Reset_Cursor();
-    }
-
+    menu_service_enabled = enabled ? 1u : 0u;
+    menu_page = MENU_PAGE_HOME;
+    menu_editing = 0;
+    menu_change_multiplier = 1;
+    menu_previous_row = -1;
+    for (i = 0; i < MENU_PAGE_COUNT; i++)
+        menu_selected[i] = 0;
     Menu_Clear_Pending_Key_Events();
 }
 
+/**
+ * @brief 查询菜单服务是否使能。
+ * @return uint8 1-使能，0-关闭。
+ */
 uint8 Menu_Is_Service_Enabled(void)
 {
     return menu_service_enabled;
 }
 
+/**
+ * @brief 保留给 10ms 中断链路的兼容入口。
+ * @return 无。
+ */
 void Menu_Tick_10ms(void)
 {
-    /* 阻塞式菜单直接消费按键队列，此处无需额外 UI 节拍。 */
 }
 
+/**
+ * @brief 清空尚未消费的按键事件。
+ * @return 无。
+ */
 static void Menu_Clear_Pending_Key_Events(void)
 {
     while (Keystroke_Get_Event() != 0)
@@ -128,1020 +479,702 @@ static void Menu_Clear_Pending_Key_Events(void)
     }
 }
 
+/**
+ * @brief 清空屏幕并重置光标擦除状态。
+ * @return 无。
+ */
 static void Menu_Clear_Page(void)
 {
     ips114_clear(RGB565_WHITE);
-    previous_cursor_row = -1;
+    menu_previous_row = -1;
 }
 
-static void Menu_Reset_Page_Memory(void)
-{
-    int i;
-
-    for (i = 0; i < MENU_PAGE_COUNT; i++)
-    {
-        menu_saved_row[i] = MENU_ROW_MIN;
-        menu_entry_row[i] = MENU_ROW_MIN;
-    }
-}
-
-static void Menu_Reset_Cursor(void)
-{
-    cursor_row = Menu_Load_Page_Position(display_codename);
-    previous_cursor_row = -1;
-}
-
+/**
+ * @brief 读取一次按键事件。
+ * @return uint8 按键事件编码，0 表示无事件。
+ */
 static uint8 Menu_Read_Key_Event(void)
 {
-    uint8 event_code;
-
-    if (!menu_service_enabled)
-        return 0;
-
-    event_code = Keystroke_Get_Event();
-    if (event_code != 0)
-    {
-        keystroke_label = event_code;
-        return event_code;
-    }
-
-    return 0;
+    return Keystroke_Get_Event();
 }
 
-static int Menu_Get_Page_Root(int page_id)
+/**
+ * @brief 获取当前页面使用的行描述。
+ * @return const MenuItemDef * 当前行描述首地址。
+ *
+ * FLY/CENTER 页面根据 seesaw_mode 动态选择飞坡或停止等待参数集。
+ */
+static const MenuItemDef *Menu_Get_Items(void)
 {
-    while (page_id >= 10)
-        page_id /= 10;
+    if (menu_page == MENU_PAGE_FLY && app.fly.seesaw_mode != 0)
+        return menu_seesaw_items;
 
-    if (page_id < 0 || page_id >= MENU_PAGE_COUNT)
-        return 0;
+    if (menu_page == MENU_PAGE_FLY_CENTER && app.fly.seesaw_mode != 0)
+        return menu_seesaw_center_items;
 
-    return page_id;
+    return menu_pages[menu_page].items;
 }
 
-static int Menu_Get_Page_Row_Max(int page_root)
+/**
+ * @brief 解码菜单行类型。
+ * @param item 菜单行描述。
+ * @return uint8 MenuItemType。
+ */
+static uint8 Menu_Get_Item_Type(const MenuItemDef *item)
 {
-    switch (page_root)
+    return (uint8)((item->meta & MENU_TYPE_MASK) >> MENU_TYPE_SHIFT);
+}
+
+/**
+ * @brief 根据扁平 TPL 通道取得对应器件索引。
+ * @param channel AD1 至 AD4 通道编号。
+ * @return TPL0102_DEVICE_54 或 TPL0102_DEVICE_56。
+ */
+static uint8 Menu_Get_Tpl_Channel_Device(uint8 channel)
+{
+    return (channel < MENU_TPL_CHANNEL_AD3) ? TPL0102_DEVICE_54 : TPL0102_DEVICE_56;
+}
+
+/**
+ * @brief 读取一个扁平 TPL 通道对应的归一化电感值。
+ * @param channel AD1 至 AD4 通道编号。
+ * @return 当前归一化电感值。
+ */
+static uint16 Menu_Get_Tpl_Channel_Ad(uint8 channel)
+{
+    switch (channel)
     {
-    case 0:
-        return MENU_HOME_ROW_MAX;
-    case 1:
-        return 5 * MENU_ROW_HEIGHT;
-    case 2:
-        return 6 * MENU_ROW_HEIGHT;
-    case 3:
-        return 6 * MENU_ROW_HEIGHT;
-    case 4:
-        return MENU_ROW_MIN;
-    case 5:
-        return 6 * MENU_ROW_HEIGHT;
-    case 6:
-        return 4 * MENU_ROW_HEIGHT;
+    case MENU_TPL_CHANNEL_AD1:
+        return ad1;
+    case MENU_TPL_CHANNEL_AD2:
+        return ad2;
+    case MENU_TPL_CHANNEL_AD3:
+        return ad3;
     default:
-        return MENU_ROW_MIN;
+        return ad4;
     }
 }
 
-static int Menu_Normalize_Row(int page_id, int row)
+/**
+ * @brief 菜单专用 16 位整数显示。
+ * @param x 显示起始横坐标。
+ * @param y 显示起始纵坐标。
+ * @param dat 待显示整数，菜单约束为绝对值不超过 9999。
+ * @param num 整数显示宽度，最大 4 位。
+ * @return 无。
+ */
+static void Menu_Show_Int32(uint16 x, uint16 y, int16 dat, uint8 num)
 {
-    int row_max;
-    int page_root;
+    char buff[6];
+    uint8 pos;
+    uint8 length;
+    uint16 value;
+    uint16 div;
 
-    page_root = Menu_Get_Page_Root(page_id);
-    row_max = Menu_Get_Page_Row_Max(page_root);
-    if (row < MENU_ROW_MIN || row > row_max)
-        return MENU_ROW_MIN;
-
-    return row;
-}
-
-static void Menu_Save_Page_Position(int page_id, int row)
-{
-    int page_root;
-
-    page_root = Menu_Get_Page_Root(page_id);
-    menu_saved_row[page_root] = Menu_Normalize_Row(page_root, row);
-}
-
-static int Menu_Load_Page_Position(int page_id)
-{
-    int page_root;
-
-    page_root = Menu_Get_Page_Root(page_id);
-    return Menu_Normalize_Row(page_root, menu_saved_row[page_root]);
-}
-
-static int Menu_Have_Sub_Menu(int menu_id)
-{
-    int i;
-    int item_count;
-
-    item_count = (int)(sizeof(menu_have_sub) / sizeof(menu_have_sub[0]));
-    for (i = 0; i < item_count; i++)
+    pos = 0;
+    length = num + 1;
+    if (dat < 0)
     {
-        if (menu_have_sub[i] == menu_id)
-            return 1;
+        buff[pos++] = '-';
+        value = (uint16)(-dat);
     }
-    return 0;
-}
-
-static void Menu_Draw_Navigation_Cursor(int row_max)
-{
-    if (cursor_row < MENU_ROW_MIN || cursor_row > row_max)
-        cursor_row = MENU_ROW_MIN;
-
-    ips114_show_string(0, cursor_row, ">");
-    if (previous_cursor_row != cursor_row && previous_cursor_row >= MENU_ROW_MIN && previous_cursor_row <= row_max)
-        ips114_show_string(0, previous_cursor_row, " ");
-    previous_cursor_row = cursor_row;
-}
-
-static void Menu_Cursor_Update(int row_max)
-{
-    menu_next_flag = 0;
-
-    switch (keystroke_label)
+    else
     {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        cursor_row = (cursor_row > MENU_ROW_MIN) ? (cursor_row - MENU_ROW_HEIGHT) : row_max;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        cursor_row = (cursor_row < row_max) ? (cursor_row + MENU_ROW_HEIGHT) : MENU_ROW_MIN;
-        break;
-    case KEYSTROKE_THREE:
-        menu_next_flag = 1;
-        break;
-    case KEYSTROKE_FOUR:
-    case KEYSTROKE_FOUR_LONG:
-        menu_next_flag = -1;
-        break;
-    default:
-        break;
+        buff[pos++] = ' ';
+        value = (uint16)dat;
     }
 
-    ips114_show_string(0, cursor_row, ">");
-    if (previous_cursor_row != cursor_row && previous_cursor_row >= MENU_ROW_MIN && previous_cursor_row <= row_max)
-        ips114_show_string(0, previous_cursor_row, " ");
-    previous_cursor_row = cursor_row;
-}
-
-static void Menu_Render_Current_Page(void)
-{
-    switch (display_codename)
+    div = 1;
+    while (div < 1000u && div <= value / 10)
+        div *= 10;
+    while (div > 0)
     {
-    case 0:
-        Menu_Draw_Home();
-        Menu_Draw_Navigation_Cursor(MENU_HOME_ROW_MAX);
-        break;
-    case 1:
-        Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(5 * MENU_ROW_HEIGHT);
-        break;
-    case 11:
-        Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
-        break;
-    case 12:
-        Menu_Draw_Start(2 * MENU_ROW_HEIGHT);
-        break;
-    case 13:
-        Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
-        break;
-    case 14:
-        Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
-        break;
-    case 15:
-        Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
-        break;
-    case 2:
-        Menu_Draw_Speed(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 21:
-        Menu_Draw_Speed(1 * MENU_ROW_HEIGHT);
-        break;
-    case 22:
-        Menu_Draw_Speed(2 * MENU_ROW_HEIGHT);
-        break;
-    case 23:
-        Menu_Draw_Speed(3 * MENU_ROW_HEIGHT);
-        break;
-    case 24:
-        Menu_Draw_Speed(4 * MENU_ROW_HEIGHT);
-        break;
-    case 25:
-        Menu_Draw_Speed(5 * MENU_ROW_HEIGHT);
-        break;
-    case 26:
-        Menu_Draw_Speed(6 * MENU_ROW_HEIGHT);
-        break;
-    case 3:
-        Menu_Draw_Model(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 31:
-        Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
-        break;
-    case 32:
-        Menu_Draw_Model(2 * MENU_ROW_HEIGHT);
-        break;
-    case 33:
-        Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
-        break;
-    case 34:
-        Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
-        break;
-    case 35:
-        Menu_Draw_Model(5 * MENU_ROW_HEIGHT);
-        break;
-    case 36:
-        Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
-        break;
-    case 4:
-        Menu_Draw_Sensor();
-        break;
-    case 5:
-        Menu_Draw_Ring(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        break;
-    case 51:
-        Menu_Draw_Ring(1 * MENU_ROW_HEIGHT);
-        break;
-    case 52:
-        Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
-        break;
-    case 53:
-        Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
-        break;
-    case 54:
-        Menu_Draw_Ring(4 * MENU_ROW_HEIGHT);
-        break;
-    case 55:
-        Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
-        break;
-    case 56:
-        Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);
-        break;
-    case 6:
-        Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
-        break;
-    case 61:
-        Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
-        break;
-    case 62:
-        Menu_Draw_Fly(2 * MENU_ROW_HEIGHT);
-        break;
-    case 63:
-        Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
-        break;
-    case 64:
-        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
-        break;
-    default:
-        break;
+        buff[pos++] = (char)('0' + (value / div));
+        value %= div;
+        div /= 10;
     }
+
+    while (pos < length)
+        buff[pos++] = ' ';
+    buff[length] = '\0';
+    ips114_show_string(x, y, buff);
 }
 
-static void Menu_Next_Back(void)
+/**
+ * @brief 菜单专用固定小数位浮点显示。
+ * @param x 显示起始横坐标。
+ * @param y 显示起始纵坐标。
+ * @param dat 待显示浮点数。
+ * @param num 整数显示宽度，最大 5 位。
+ * @param pointnum 小数位数，最大 3 位。
+ * @return 无。
+ */
+static void Menu_Show_Float(uint16 x, uint16 y, float dat, uint8 num, uint8 pointnum)
 {
-    int current_page;
-    int current_root;
-    int menu_id;
-    int target_root;
+    char buff[13];
+    uint8 pos;
+    uint8 i;
+    uint8 length;
+    uint16 div;
+    uint16 scale;
+    uint16 integer_part;
+    uint16 fraction_part;
+    float value;
 
-    current_page = display_codename;
-    current_root = Menu_Get_Page_Root(current_page);
-    menu_id = 0;
-    switch (menu_next_flag)
+    scale = (pointnum == 3)
+                ? 1000u
+                : ((pointnum == 2) ? 100u : ((pointnum == 1) ? 10u : 1u));
+    pos = 0;
+    if (dat < 0.0f)
     {
-    case -1:
-        Menu_Save_Page_Position(current_page, cursor_row);
-        display_codename /= 10;
-        if (display_codename == 0 && current_root != 0)
-            cursor_row = Menu_Normalize_Row(0, menu_entry_row[current_root]);
-        else
-            cursor_row = Menu_Load_Page_Position(display_codename);
-        Menu_Clear_Page();
-        break;
-    case 1:
-        Menu_Save_Page_Position(current_page, cursor_row);
-        menu_id = current_page * 10 + (cursor_row / MENU_ROW_HEIGHT);
-        if (Menu_Have_Sub_Menu(menu_id))
+        buff[pos++] = '-';
+        value = -dat;
+    }
+    else
+    {
+        buff[pos++] = ' ';
+        value = dat;
+    }
+
+    integer_part = (uint16)value;
+    fraction_part = (uint16)((value - (float)integer_part) * (float)scale + 0.5f);
+    if (fraction_part >= scale)
+    {
+        integer_part++;
+        fraction_part = 0;
+    }
+
+    div = 1;
+    /* 最高除数到万位，支持 10000 等 5 位整数正确显示。 */
+    while (div < 10000u && div <= integer_part / 10)
+        div *= 10;
+    while (div > 0)
+    {
+        buff[pos++] = (char)('0' + (integer_part / div));
+        integer_part %= div;
+        div /= 10;
+    }
+
+    if (pointnum != 0)
+    {
+        buff[pos++] = '.';
+        div = scale / 10;
+        for (i = 0; i < pointnum; i++)
         {
-            target_root = Menu_Get_Page_Root(menu_id);
-            menu_entry_row[target_root] = Menu_Normalize_Row(current_page, cursor_row);
-            display_codename = menu_id;
-            cursor_row = Menu_Load_Page_Position(display_codename);
-            Menu_Clear_Page();
+            buff[pos++] = (char)('0' + (fraction_part / div));
+            fraction_part %= div;
+            div /= 10;
         }
+    }
+
+    length = num + pointnum + 1;
+    if (pointnum != 0)
+        length++;
+    while (pos < length)
+        buff[pos++] = ' ';
+    buff[pos] = '\0';
+    ips114_show_string(x, y, buff);
+}
+
+/**
+ * @brief 绘制一个菜单行的当前值。
+ * @param item 菜单行描述。
+ * @param y 显示纵坐标。
+ * @return 无。
+ */
+static void Menu_Draw_Item_Value(const MenuItemDef *item, uint16 y)
+{
+    uint8 type;
+    uint8 width;
+    uint8 decimal;
+
+    type = Menu_Get_Item_Type(item);
+    if (type == MENU_ITEM_LINK)
+        return;
+
+    if (type == MENU_ITEM_TPL_CHANNEL)
+    {
+        if (!tpl0102_online(Menu_Get_Tpl_Channel_Device(item->action)))
+            ips114_show_string(112, y, " -- ");
+        else if ((item->action & 1u) == 0)
+            Menu_Show_Int32(112, y,
+                            tpl0102_get_a(Menu_Get_Tpl_Channel_Device(item->action)), 3);
+        else
+            Menu_Show_Int32(112, y,
+                            tpl0102_get_b(Menu_Get_Tpl_Channel_Device(item->action)), 3);
+        Menu_Show_Int32(160, y, (int16)Menu_Get_Tpl_Channel_Ad(item->action), 3);
+        return;
+    }
+    if (type == MENU_ITEM_TPL_SAVE)
+        return;
+
+    width = (uint8)((item->meta & MENU_WIDTH_MASK) >> MENU_WIDTH_SHIFT);
+    decimal = item->meta & MENU_DECIMAL_MASK;
+    if (type == MENU_ITEM_FLOAT)
+        Menu_Show_Float(112, y, *((float *)item->target), width, decimal);
+    else
+        Menu_Show_Int32(112, y, *((int16 *)item->target), width);
+}
+
+/**
+ * @brief 绘制传感器只读页面。
+ * @return 无。
+ */
+static void Menu_Draw_Sensor(void)
+{
+    char label[4];
+    uint8 i;
+
+    ips114_show_string(8, 0, "<<SENSOR");
+    ips114_show_string(64, 0, "NORM");
+    ips114_show_string(112, 0, "RAW");
+
+    Menu_Show_Int32(64, 1 * MENU_ROW_HEIGHT, ad1, 3);
+    Menu_Show_Int32(64, 2 * MENU_ROW_HEIGHT, ad2, 3);
+    Menu_Show_Int32(64, 3 * MENU_ROW_HEIGHT, ad3, 3);
+    Menu_Show_Int32(64, 4 * MENU_ROW_HEIGHT, ad4, 3);
+    Menu_Show_Int32(64, 5 * MENU_ROW_HEIGHT, ad5, 3);
+
+    label[0] = 'a';
+    label[1] = 'd';
+    label[3] = '\0';
+    for (i = 0; i < NUM; i++)
+    {
+        label[2] = (char)('1' + i);
+        ips114_show_string(16, (i + 1) * MENU_ROW_HEIGHT, label);
+        Menu_Show_Int32(112, (i + 1) * MENU_ROW_HEIGHT, RAW[i], 4);
+    }
+
+    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "Err");
+    Menu_Show_Float(48, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
+    ips114_show_string(112, 6 * MENU_ROW_HEIGHT, "cyl");
+    Menu_Show_Int32(144, 6 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+}
+
+/**
+ * @brief 绘制页面右侧实时状态。
+ * @return 无。
+ */
+static void Menu_Draw_Page_Extras(void)
+{
+    switch (menu_page)
+    {
+    case MENU_PAGE_HOME:
+        ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "Err");
+        ips114_show_string(105, 2 * MENU_ROW_HEIGHT, "steer");
+        ips114_show_string(105, 3 * MENU_ROW_HEIGHT, "gyro_z");
+        ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "V_bat");
+        ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "L_pwm");
+        ips114_show_string(105, 6 * MENU_ROW_HEIGHT, "R_pwm");
+        Menu_Show_Float(184, 1 * MENU_ROW_HEIGHT, Err, 3, 2);
+        Menu_Show_Float(184, 2 * MENU_ROW_HEIGHT, PID.steer.output, 3, 1);
+        Menu_Show_Float(184, 3 * MENU_ROW_HEIGHT, gyro_z, 3, 2);
+        Menu_Show_Float(184, 4 * MENU_ROW_HEIGHT, dianya, 4, 2);
+        Menu_Show_Float(184, 5 * MENU_ROW_HEIGHT, left_target, 4, 1);
+        Menu_Show_Float(184, 6 * MENU_ROW_HEIGHT, right_target, 4, 1);
+        break;
+    case MENU_PAGE_YUANSHU:
+        ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "S");
+        Menu_Show_Int32(120, 1 * MENU_ROW_HEIGHT, a_run_ring_get_state(), 1);
+        ips114_show_string(105, 2 * MENU_ROW_HEIGHT, "C");
+        Menu_Show_Int32(120, 2 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+        ips114_show_string(105, 3 * MENU_ROW_HEIGHT, "W");
+        Menu_Show_Int32(120, 3 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
+        ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "X");
+        Menu_Show_Int32(120, 4 * MENU_ROW_HEIGHT, a_run_track_element_get_expected_element(), 1);
+        ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "R");
+        Menu_Show_Int32(120, 5 * MENU_ROW_HEIGHT, a_run_cross_get_state(), 1);
+        break;
+    case MENU_PAGE_CYLINDER:
+        ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "C");
+        Menu_Show_Int32(184, 1 * MENU_ROW_HEIGHT, a_run_cylinder_get_state(), 1);
+        break;
+    case MENU_PAGE_WALL:
+        ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "W");
+        Menu_Show_Int32(184, 1 * MENU_ROW_HEIGHT, a_run_wall_get_state(), 1);
         break;
     default:
         break;
     }
+}
 
-    cursor_row = Menu_Normalize_Row(display_codename, cursor_row);
-    previous_cursor_row = -1;
-    menu_next_flag = 0;
-    Menu_Render_Current_Page();
+/**
+ * @brief 绘制当前编辑步长。
+ * @param item 当前编辑行。
+ * @return 无。
+ */
+static void Menu_Draw_Edit_Step(const MenuItemDef *item)
+{
+    uint8 type;
+    float float_unit;
+    int16 int_unit;
+
+    type = Menu_Get_Item_Type(item);
+    if (type == MENU_ITEM_BOOL)
+    {
+        ips114_show_string(MENU_STEP_X, 0, "0/1");
+    }
+    else if (type == MENU_ITEM_FLOAT)
+    {
+        float_unit = menu_float_steps[item->action] * (float)menu_change_multiplier;
+        Menu_Show_Float(MENU_STEP_X, 0, float_unit, 4, 3);
+    }
+    else if (type == MENU_ITEM_INT16)
+    {
+        int_unit = (int16)item->action * (int16)menu_change_multiplier;
+        Menu_Show_Int32(MENU_STEP_INT_X, 0, int_unit, 4);
+    }
+    else if (type == MENU_ITEM_TPL_CHANNEL)
+    {
+        Menu_Show_Int32(MENU_STEP_INT_X, 0, (int16)menu_change_multiplier, 4);
+    }
+    else if (type == MENU_ITEM_TPL_SAVE)
+    {
+        ips114_show_string(MENU_STEP_X, 0, "K3");
+    }
+}
+
+/**
+ * @brief 绘制当前页面、实时状态和光标。
+ * @return 无。
+ */
+static void Menu_Render_Page(void)
+{
+    const MenuPageDef *page;
+    const MenuItemDef *items;
+    const MenuItemDef *item;
+    uint8 i;
+    uint8 row;
+    uint16 y;
+
+    page = &menu_pages[menu_page];
+    if (menu_page == MENU_PAGE_SENSOR)
+    {
+        Menu_Draw_Sensor();
+        return;
+    }
+
+    items = Menu_Get_Items();
+    if (menu_page == MENU_PAGE_HOME)
+        ips114_show_string(MENU_CENTER_X, 0, page->title);
+    else
+        ips114_show_string(8, 0, page->title);
+
+    for (i = 0; i < page->item_count; i++)
+    {
+        item = &items[i];
+        y = (uint16)(i + 1) * MENU_ROW_HEIGHT;
+        ips114_show_string(16, y, item->label);
+        Menu_Draw_Item_Value(item, y);
+    }
+
+    Menu_Draw_Page_Extras();
+    row = menu_selected[menu_page];
+    if (menu_previous_row >= 0 && menu_previous_row != (int8)row)
+        ips114_show_string(0, (uint16)(menu_previous_row + 1) * MENU_ROW_HEIGHT, "  ");
+    ips114_show_string(0,
+                       (uint16)(row + 1) * MENU_ROW_HEIGHT,
+                       menu_editing ? ">>" : "> ");
+    menu_previous_row = (int8)row;
+
+    if (menu_editing)
+        Menu_Draw_Edit_Step(&items[row]);
+}
+
+/**
+ * @brief 切换页面并恢复该页记忆的光标。
+ * @param page 目标 MenuPageId。
+ * @return 无。
+ */
+static void Menu_Change_Page(uint8 page)
+{
+    menu_page = page;
+    menu_editing = 0u;
+    menu_previous_row = -1;
+    if (page == MENU_PAGE_TPL)
+    {
+        tpl0102_refresh(TPL0102_DEVICE_54);
+        tpl0102_refresh(TPL0102_DEVICE_56);
+    }
+    Menu_Clear_Page();
+    Menu_Render_Page();
     Menu_Clear_Pending_Key_Events();
 }
 
-static void Menu_Handle_Common_Key(int label)
+/**
+ * @brief 按当前倍率修改一个参数。
+ * @param item 当前编辑行。
+ * @param increase 1-增加，0-减少。
+ * @return 无。
+ */
+static void Menu_Apply_Item_Change(const MenuItemDef *item, uint8 increase)
 {
-    int current_root;
+    uint8 type;
+    int16 *int_value;
+    float *float_value;
+    int16 int_unit;
+    float float_unit;
 
-    switch (label)
+    type = Menu_Get_Item_Type(item);
+    if (type == MENU_ITEM_FLOAT)
     {
-    case KEYSTROKE_FOUR:
-    case KEYSTROKE_FOUR_LONG:
-        Menu_Save_Page_Position(display_codename, cursor_row);
-        current_root = Menu_Get_Page_Root(display_codename);
-        display_codename /= 10;
-        if (display_codename == 0 && current_root != 0)
-            cursor_row = Menu_Normalize_Row(0, menu_entry_row[current_root]);
+        float_value = (float *)item->target;
+        float_unit = menu_float_steps[item->action] * (float)menu_change_multiplier;
+        if (increase)
+            *float_value += float_unit;
         else
-            cursor_row = Menu_Load_Page_Position(display_codename);
-        Menu_Clear_Page();
-        previous_cursor_row = -1;
-        Menu_Render_Current_Page();
-        Menu_Clear_Pending_Key_Events();
-        break;
-    case KEYSTROKE_THREE:
-        keystroke_three_count++;
-        change_unit_multiplier = (keystroke_three_count % 3 == 0) ? 1 : ((keystroke_three_count % 3 == 1) ? 10 : 100);
-        if (keystroke_three_count >= 3)
-            keystroke_three_count = 0;
-        break;
-    default:
-        break;
+            *float_value -= float_unit;
+    }
+    else
+    {
+        int_value = (int16 *)item->target;
+        if (type == MENU_ITEM_BOOL)
+        {
+            *int_value = increase ? 1 : 0;
+        }
+        else
+        {
+            int_unit = (int16)item->action * (int16)menu_change_multiplier;
+            if (increase)
+                *int_value += int_unit;
+            else
+                *int_value -= int_unit;
+        }
+    }
+
+    control_apply_config();
+}
+
+/**
+ * @brief 按当前菜单倍率写入 TPL0102 的一个易失通道。
+ * @param item 当前 TPL 通道行。
+ * @param increase 1 表示增加，0 表示减少。
+ * @return 无。
+ * @note 写入仅发生在菜单服务路径，不进入 2ms 控制链路。
+ */
+static void Menu_Apply_Tpl_Channel_Change(const MenuItemDef *item, uint8 increase)
+{
+    uint8 device;
+    uint8 value;
+    int16 next_value;
+
+    device = Menu_Get_Tpl_Channel_Device(item->action);
+    if (!tpl0102_online(device))
+    {
+        return;
+    }
+
+    value = ((item->action & 1u) == 0) ? tpl0102_get_a(device) : tpl0102_get_b(device);
+    next_value = value;
+    if (increase)
+    {
+        next_value += (int16)menu_change_multiplier;
+        if (next_value > 255)
+        {
+            next_value = 255;
+        }
+    }
+    else
+    {
+        next_value -= (int16)menu_change_multiplier;
+        if (next_value < 0)
+        {
+            next_value = 0;
+        }
+    }
+
+    if ((item->action & 1u) == 0)
+    {
+        tpl0102_set_a(device, (uint8)next_value);
+    }
+    else
+    {
+        tpl0102_set_b(device, (uint8)next_value);
     }
 }
 
+/**
+ * @brief 处理参数编辑状态下的按键。
+ * @param event_code 按键事件编码。
+ * @return 无。
+ */
+static void Menu_Handle_Edit(uint8 event_code)
+{
+    const MenuItemDef *items;
+    const MenuItemDef *item;
+    uint8 type;
+    uint8 save_54;
+    uint8 save_56;
+
+    items = Menu_Get_Items();
+    item = &items[menu_selected[menu_page]];
+    type = Menu_Get_Item_Type(item);
+
+    switch (event_code)
+    {
+    case KEYSTROKE_ONE:
+    case KEYSTROKE_ONE_LONG:
+        if (type == MENU_ITEM_TPL_CHANNEL)
+            Menu_Apply_Tpl_Channel_Change(item, 1);
+        else if (type != MENU_ITEM_TPL_SAVE)
+            Menu_Apply_Item_Change(item, 1);
+        if (menu_page == MENU_PAGE_FLY && menu_selected[menu_page] == 0)
+            Menu_Clear_Page();
+        break;
+    case KEYSTROKE_TWO:
+    case KEYSTROKE_TWO_LONG:
+        if (type == MENU_ITEM_TPL_CHANNEL)
+            Menu_Apply_Tpl_Channel_Change(item, 0);
+        else if (type != MENU_ITEM_TPL_SAVE)
+            Menu_Apply_Item_Change(item, 0);
+        if (menu_page == MENU_PAGE_FLY && menu_selected[menu_page] == 0)
+            Menu_Clear_Page();
+        break;
+    case KEYSTROKE_THREE:
+        if (type == MENU_ITEM_TPL_SAVE)
+        {
+            menu_editing = 0;
+            save_54 = tpl0102_save(TPL0102_DEVICE_54);
+            save_56 = tpl0102_save(TPL0102_DEVICE_56);
+            Menu_Show_Tpl_Save_Result(save_54 && save_56);
+            Menu_Render_Page();
+            return;
+        }
+        menu_change_multiplier = (menu_change_multiplier == 1) ? 10u
+                                                               : ((menu_change_multiplier == 10) ? 100u : 1u);
+        break;
+    case KEYSTROKE_FOUR:
+    case KEYSTROKE_FOUR_LONG:
+        menu_editing = 0;
+        Menu_Clear_Page();
+        break;
+    default:
+        return;
+    }
+
+    Menu_Render_Page();
+}
+
+/**
+ * @brief 处理页面导航状态下的按键。
+ * @param event_code 按键事件编码。
+ * @return 无。
+ */
+static void Menu_Handle_Navigation(uint8 event_code)
+{
+    const MenuPageDef *page;
+    const MenuItemDef *items;
+    const MenuItemDef *item;
+    uint8 row;
+
+    page = &menu_pages[menu_page];
+    row = menu_selected[menu_page];
+    if (menu_page == MENU_PAGE_SENSOR && event_code == KEYSTROKE_THREE)
+    {
+        Menu_Change_Page(MENU_PAGE_TPL);
+        return;
+    }
+    if (page->item_count == 0 &&
+        event_code != KEYSTROKE_FOUR &&
+        event_code != KEYSTROKE_FOUR_LONG)
+    {
+        return;
+    }
+
+    switch (event_code)
+    {
+    case KEYSTROKE_ONE:
+    case KEYSTROKE_ONE_LONG:
+        menu_selected[menu_page] = (row == 0) ? (uint8)(page->item_count - 1) : (uint8)(row - 1);
+        break;
+    case KEYSTROKE_TWO:
+    case KEYSTROKE_TWO_LONG:
+        menu_selected[menu_page] = (row + 1 >= page->item_count) ? 0 : (uint8)(row + 1);
+        break;
+    case KEYSTROKE_THREE:
+        if (page->item_count == 0)
+            return;
+        items = Menu_Get_Items();
+        item = &items[row];
+        if (Menu_Get_Item_Type(item) == MENU_ITEM_LINK)
+        {
+            Menu_Change_Page(item->action);
+            return;
+        }
+        if (Menu_Get_Item_Type(item) == MENU_ITEM_TPL_CHANNEL &&
+            !tpl0102_online(Menu_Get_Tpl_Channel_Device(item->action)))
+        {
+            return;
+        }
+        menu_editing = 1;
+        Menu_Clear_Page();
+        break;
+    case KEYSTROKE_FOUR:
+    case KEYSTROKE_FOUR_LONG:
+        if (menu_page == MENU_PAGE_HOME)
+        {
+            config_save();
+            Menu_Show_Save_Prompt();
+            Menu_Render_Page();
+            return;
+        }
+        Menu_Change_Page(page->parent);
+        return;
+    default:
+        return;
+    }
+
+    Menu_Render_Page();
+}
+
+/**
+ * @brief 显示保存完成提示。
+ * @return 无。
+ */
 static void Menu_Show_Save_Prompt(void)
 {
     Menu_Clear_Page();
-    /* 保存完成后短暂停留，避免提示一闪而过看不清。 */
     ips114_show_string(MENU_CENTER_X - 16, 3 * MENU_ROW_HEIGHT, "save");
-    previous_cursor_row = -1;
     Menu_Clear_Pending_Key_Events();
     system_delay_ms(MENU_SAVE_PROMPT_DELAY_MS);
-    /* 提示结束后先清屏，避免返回首页时残留 save 字样。 */
     Menu_Clear_Page();
     Menu_Clear_Pending_Key_Events();
 }
 
-static void Menu_Draw_Home(void)
+/**
+ * @brief 显示一次 TPL0102 芯片 EEPROM 保存结果。
+ * @param success 非零表示芯片写入完成。
+ * @return 无。
+ */
+static void Menu_Show_Tpl_Save_Result(uint8 success)
 {
-    ips114_show_string(MENU_CENTER_X, 0, "MENU");
-
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "START");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "CTRL");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "MODEL");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "SENSOR");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "RING");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "FLY");
-
-    ips114_show_string(105, 1 * MENU_ROW_HEIGHT, "Err");
-    ips114_show_string(105, 2 * MENU_ROW_HEIGHT, "steer");
-    ips114_show_string(105, 3 * MENU_ROW_HEIGHT, "gyro_z");
-    ips114_show_string(105, 4 * MENU_ROW_HEIGHT, "V_bat");
-    ips114_show_string(105, 5 * MENU_ROW_HEIGHT, "L_tar");
-    ips114_show_string(105, 6 * MENU_ROW_HEIGHT, "R_tar");
-
-    ips114_show_float(184, 1 * MENU_ROW_HEIGHT, Err, 3, 2);
-    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, PID.steer.output, 3, 1);
-    ips114_show_float(184, 3 * MENU_ROW_HEIGHT, gyro_z, 3, 2);
-    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, dianya, 4, 2);
-    ips114_show_float(184, 5 * MENU_ROW_HEIGHT, left_target, 4, 1);
-    ips114_show_float(184, 6 * MENU_ROW_HEIGHT, right_target, 4, 1);
+    Menu_Clear_Page();
+    ips114_show_string(MENU_CENTER_X - 16, 3 * MENU_ROW_HEIGHT,
+                       success ? "save" : "FAIL");
+    Menu_Clear_Pending_Key_Events();
+    system_delay_ms(MENU_SAVE_PROMPT_DELAY_MS);
+    Menu_Clear_Page();
+    Menu_Clear_Pending_Key_Events();
 }
 
-static void Menu_Draw_Start(int edit_line)
-{
-    ips114_show_string(8, 0, "<<START");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "Start_Flag");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ring_en");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fuya_ground");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fuya_wall");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "gyro_fbN");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "trk_mode");
-
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.start.start_flag, 3);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.start.circle_flags, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.start.fuya_xili, 4, 1);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.start.fuya_wall_percent, 4, 1);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.gyro_feedback_scale, 4, 2);
-    ips114_show_int32(112, 6 * MENU_ROW_HEIGHT, app.start.track_mode, 3);
-
-    if (edit_line >= MENU_ROW_MIN)
-        ips114_show_string(0, edit_line, ">>");
-}
-
-static void Menu_Draw_Speed(int edit_line)
-{
-    ips114_show_string(8, 0, "<<CTRL");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "kp_Err");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "kd_Err");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "gyro_dmp");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "speed_run");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "limit_Err");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "kp2_Err");
-
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.speed.kp_Err, 3, 3);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.speed.kd_Err, 3, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.speed.gyro_damp_Err, 3, 3);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.speed.speed_run, 4, 1);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.speed.limiting_Err, 3, 3);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.speed.kp2_Err, 3, 3);
-
-    if (edit_line >= MENU_ROW_MIN)
-        ips114_show_string(0, edit_line, ">>");
-}
-
-static void Menu_Draw_Model(int edit_line)
-{
-    ips114_show_string(8, 0, "<<MODEL");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "kp_Ang");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "kd_Ang");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "lim_Ang");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "A_1");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "B_1");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "C_l");
-
-    ips114_show_float(112, 1 * MENU_ROW_HEIGHT, app.angle.kp_Angle, 3, 3);
-    ips114_show_float(112, 2 * MENU_ROW_HEIGHT, app.angle.kd_Angle, 3, 3);
-    ips114_show_float(112, 3 * MENU_ROW_HEIGHT, app.angle.limiting_Angle, 3, 2);
-    ips114_show_float(112, 4 * MENU_ROW_HEIGHT, app.angle.A_1, 3, 2);
-    ips114_show_float(112, 5 * MENU_ROW_HEIGHT, app.angle.B_1, 3, 2);
-    ips114_show_float(112, 6 * MENU_ROW_HEIGHT, app.angle.C_l, 3, 2);
-
-    if (edit_line >= MENU_ROW_MIN)
-        ips114_show_string(0, edit_line, ">>");
-}
-
-static void Menu_Draw_Sensor(void)
-{
-    ips114_show_string(8, 0, "<<SENSOR");
-    ips114_show_string(56, 0, "NORM");
-    ips114_show_string(112, 0, "RAW");
-    ips114_show_string(176, 0, "MAX");
-
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "ad1");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "ad2");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "ad3");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "ad4");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "Err");
-
-    ips114_show_int32(56, 1 * MENU_ROW_HEIGHT, ad1, 3);
-    ips114_show_int32(56, 2 * MENU_ROW_HEIGHT, ad2, 3);
-    ips114_show_int32(56, 3 * MENU_ROW_HEIGHT, ad3, 3);
-    ips114_show_int32(56, 4 * MENU_ROW_HEIGHT, ad4, 3);
-
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, RAW[0], 4);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, RAW[1], 4);
-    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, RAW[2], 4);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, RAW[3], 4);
-
-    ips114_show_int32(176, 1 * MENU_ROW_HEIGHT, MA[0], 4);
-    ips114_show_int32(176, 2 * MENU_ROW_HEIGHT, MA[1], 4);
-    ips114_show_int32(176, 3 * MENU_ROW_HEIGHT, MA[2], 4);
-    ips114_show_int32(176, 4 * MENU_ROW_HEIGHT, MA[3], 4);
-
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "cyl");
-    ips114_show_int32(56, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
-    ips114_show_string(112, 5 * MENU_ROW_HEIGHT, "qvz");
-    ips114_show_float(176, 5 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_vz(), 2, 3);
-
-    ips114_show_float(56, 6 * MENU_ROW_HEIGHT, Err, 4, 1);
-}
-
-static void Menu_Draw_Ring(int edit_line)
-{
-    ips114_show_string(8, 0, "<<RING");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "entry_E");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "pre_r_T");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "pre_r_Gz");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "in_r_Gz");
-    ips114_show_string(16, 5 * MENU_ROW_HEIGHT, "pre_o_T");
-    ips114_show_string(16, 6 * MENU_ROW_HEIGHT, "pre_o_Gz");
-
-    ips114_show_float(88, 1 * MENU_ROW_HEIGHT, app.ring.ring_entry_encoder, 3, 2);
-    ips114_show_float(88, 2 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyro_target, 3, 2);
-    ips114_show_float(88, 3 * MENU_ROW_HEIGHT, app.ring.pre_ring_Gyroz, 3, 2);
-    ips114_show_float(88, 4 * MENU_ROW_HEIGHT, app.ring.in_ring_Gyroz, 3, 2);
-    ips114_show_float(88, 5 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyro_target, 3, 2);
-    ips114_show_float(88, 6 * MENU_ROW_HEIGHT, app.ring.pre_out_ring_Gyroz, 3, 2);
-
-    /* 右侧只显示调参关键量，避免新增页面导致现场切换成本变高。 */
-    ips114_show_string(168, 1 * MENU_ROW_HEIGHT, "S");
-    ips114_show_int32(184, 1 * MENU_ROW_HEIGHT, a_run_mode_get_ring_state(), 1);
-    ips114_show_string(168, 2 * MENU_ROW_HEIGHT, "Yd");
-    ips114_show_float(184, 2 * MENU_ROW_HEIGHT, ring_data.yaw_delta_sum, 4, 0);
-    ips114_show_string(168, 3 * MENU_ROW_HEIGHT, "E");
-    ips114_show_float(184, 3 * MENU_ROW_HEIGHT, ring_data.encoder, 4, 0);
-    ips114_show_string(168, 4 * MENU_ROW_HEIGHT, "T");
-    ips114_show_float(184, 4 * MENU_ROW_HEIGHT, ring_data.diff_set, 4, 0);
-    ips114_show_string(168, 5 * MENU_ROW_HEIGHT, "X");
-    ips114_show_int32(184, 5 * MENU_ROW_HEIGHT, a_run_mode_get_expected_element(), 1);
-    ips114_show_string(168, 6 * MENU_ROW_HEIGHT, "C");
-    ips114_show_int32(184, 6 * MENU_ROW_HEIGHT, a_run_mode_get_cylinder_state(), 1);
-
-    if (edit_line >= MENU_ROW_MIN)
-        ips114_show_string(0, edit_line, ">>");
-}
-
-static void Menu_Draw_Fly(int edit_line)
-{
-    ips114_show_string(8, 0, "<<FLY");
-    ips114_show_string(16, 1 * MENU_ROW_HEIGHT, "fly_speed");
-    ips114_show_string(16, 2 * MENU_ROW_HEIGHT, "fly_time_1");
-    ips114_show_string(16, 3 * MENU_ROW_HEIGHT, "fly_time_2");
-    ips114_show_string(16, 4 * MENU_ROW_HEIGHT, "fly_en");
-
-    ips114_show_int32(112, 1 * MENU_ROW_HEIGHT, app.fly.count_fly_speed, 4);
-    ips114_show_int32(112, 2 * MENU_ROW_HEIGHT, app.fly.count_fly_time_1, 4);
-    ips114_show_int32(112, 3 * MENU_ROW_HEIGHT, app.fly.count_fly_time_2, 4);
-    ips114_show_int32(112, 4 * MENU_ROW_HEIGHT, app.fly.fly_ramp_enable, 4);
-
-    if (edit_line >= MENU_ROW_MIN)
-        ips114_show_string(0, edit_line, ">>");
-}
-
-static void Menu_Process_Special_Value(int16 *parameter)
-{
-    uint8 event_code;
-    uint8 changed;
-
-    changed = 0;
-    ips114_show_string(MENU_STEP_X, 0, "0/1");
-
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Handle_Common_Key(keystroke_label);
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        *parameter = 1;
-        changed = 1;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        *parameter = 0;
-        changed = 1;
-        break;
-    default:
-        break;
-    }
-
-    if (changed)
-        control_apply_config();
-}
-
-static void Menu_Process_Track_Mode(void)
-{
-    uint8 event_code;
-    uint8 changed;
-
-    changed = 0;
-    ips114_show_string(MENU_STEP_X, 0, "0-3");
-
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Handle_Common_Key(keystroke_label);
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        app.start.track_mode++;
-        if (app.start.track_mode > 3)
-        {
-            app.start.track_mode = 0;
-        }
-        changed = 1;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        app.start.track_mode--;
-        if (app.start.track_mode < 0)
-        {
-            app.start.track_mode = 3;
-        }
-        changed = 1;
-        break;
-    default:
-        break;
-    }
-
-    if (changed)
-        control_apply_config();
-}
-
-static void Menu_Process_Int_Value(int *parameter, int change_unit_min)
-{
-    uint8 event_code;
-    int unit;
-    uint8 changed;
-
-    unit = change_unit_min * change_unit_multiplier;
-    changed = 0;
-
-    ips114_show_int32(MENU_STEP_INT_X, 0, unit, 4);
-
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Handle_Common_Key(keystroke_label);
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        *parameter += unit;
-        changed = 1;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        *parameter -= unit;
-        changed = 1;
-        break;
-    default:
-        break;
-    }
-
-    if (changed)
-        control_apply_config();
-}
-
-static void Menu_Process_Float_Value(float *parameter, float change_unit_min)
-{
-    uint8 event_code;
-    float unit;
-    uint8 changed;
-
-    unit = change_unit_min * (float)change_unit_multiplier;
-    changed = 0;
-
-    ips114_show_float(MENU_STEP_X, 0, unit, 4, 3);
-
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Handle_Common_Key(keystroke_label);
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_ONE:
-    case KEYSTROKE_ONE_LONG:
-        *parameter += unit;
-        changed = 1;
-        break;
-    case KEYSTROKE_TWO:
-    case KEYSTROKE_TWO_LONG:
-        *parameter -= unit;
-        changed = 1;
-        break;
-    default:
-        break;
-    }
-
-    if (changed)
-        control_apply_config();
-}
-
-static void Keystroke_Menu_HOME(void)
-{
-    uint8 event_code;
-
-    Menu_Draw_Home();
-    Menu_Draw_Navigation_Cursor(MENU_HOME_ROW_MAX);
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    Menu_Cursor_Update(MENU_HOME_ROW_MAX);
-
-    if (menu_next_flag == 1)
-    {
-        Menu_Next_Back();
-    }
-    else if (menu_next_flag == -1 && EEPROM_MODE == 1)
-    {
-        config_save();
-        Menu_Show_Save_Prompt();
-        menu_next_flag = 0;
-    }
-}
-
-static void Menu_Start_Process(void)
-{
-    uint8 event_code;
-
-    switch (display_codename)
-    {
-    case 1:
-        Menu_Draw_Start(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 11:
-        Menu_Draw_Start(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Special_Value(&app.start.start_flag);
-        break;
-    case 12:
-        Menu_Draw_Start(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Special_Value(&app.start.circle_flags);
-        break;
-    case 13:
-        Menu_Draw_Start(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.start.fuya_xili, 1.0f);
-        break;
-    case 14:
-        Menu_Draw_Start(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.start.fuya_wall_percent, 1.0f);
-        break;
-    case 15:
-        Menu_Draw_Start(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.gyro_feedback_scale, 0.1f);
-        break;
-    case 16:
-        Menu_Draw_Start(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Track_Mode();
-        break;
-    default:
-        break;
-    }
-}
-
-static void Menu_Speed_Process(void)
-{
-    uint8 event_code;
-
-    switch (display_codename)
-    {
-    case 2:
-        Menu_Draw_Speed(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 21:
-        Menu_Draw_Speed(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kp_Err, 0.01f);
-        break;
-    case 22:
-        Menu_Draw_Speed(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kd_Err, 0.01f);
-        break;
-    case 23:
-        Menu_Draw_Speed(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.gyro_damp_Err, 0.001f);
-        break;
-    case 24:
-        Menu_Draw_Speed(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.speed_run, 1.0f);
-        break;
-    case 25:
-        Menu_Draw_Speed(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.limiting_Err, 0.01f);
-        break;
-    case 26:
-        Menu_Draw_Speed(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.speed.kp2_Err, 0.001f);
-        break;
-    default:
-        break;
-    }
-}
-
-static void Menu_Model_Process(void)
-{
-    uint8 event_code;
-
-    switch (display_codename)
-    {
-    case 3:
-        Menu_Draw_Model(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 31:
-        Menu_Draw_Model(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.kp_Angle, 0.01f);
-        break;
-    case 32:
-        Menu_Draw_Model(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.kd_Angle, 0.01f);
-        break;
-    case 33:
-        Menu_Draw_Model(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.limiting_Angle, 0.1f);
-        break;
-    case 34:
-        Menu_Draw_Model(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.A_1, 0.01f);
-        break;
-    case 35:
-        Menu_Draw_Model(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.B_1, 0.01f);
-        break;
-    case 36:
-        Menu_Draw_Model(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.angle.C_l, 0.01f);
-        break;
-    default:
-        break;
-    }
-}
-
-static void Menu_Sensor_Process(void)
-{
-    uint8 event_code;
-
-    Menu_Draw_Sensor();
-    event_code = Menu_Read_Key_Event();
-    if (event_code == 0)
-        return;
-
-    switch (keystroke_label)
-    {
-    case KEYSTROKE_FOUR:
-    case KEYSTROKE_FOUR_LONG:
-        menu_next_flag = -1;
-        break;
-    default:
-        break;
-    }
-
-    if (menu_next_flag != 0)
-        Menu_Next_Back();
-}
-
-static void Menu_Ring_Process(void)
-{
-    uint8 event_code;
-
-    switch (display_codename)
-    {
-    case 5:
-        Menu_Draw_Ring(0);
-        Menu_Draw_Navigation_Cursor(6 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(6 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 51:
-        Menu_Draw_Ring(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.ring_entry_encoder, 1.0f);
-        break;
-    case 52:
-        Menu_Draw_Ring(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyro_target, 10.0f);
-        break;
-    case 53:
-        Menu_Draw_Ring(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_ring_Gyroz, 10.0f);
-        break;
-    case 54:
-        Menu_Draw_Ring(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.in_ring_Gyroz, 10.0f);
-        break;
-    case 55:
-        Menu_Draw_Ring(5 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyro_target, 10.0f);
-        break;
-    case 56:
-        Menu_Draw_Ring(6 * MENU_ROW_HEIGHT);
-        Menu_Process_Float_Value(&app.ring.pre_out_ring_Gyroz, 10.0f);
-        break;
-    default:
-        break;
-    }
-}
-
-static void Menu_Fly_Process(void)
-{
-    uint8 event_code;
-
-    switch (display_codename)
-    {
-    case 6:
-        Menu_Draw_Fly(0);
-        Menu_Draw_Navigation_Cursor(4 * MENU_ROW_HEIGHT);
-        event_code = Menu_Read_Key_Event();
-        if (event_code == 0)
-            return;
-        Menu_Cursor_Update(4 * MENU_ROW_HEIGHT);
-        if (menu_next_flag != 0)
-            Menu_Next_Back();
-        break;
-    case 61:
-        Menu_Draw_Fly(1 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_speed, 1);
-        break;
-    case 62:
-        Menu_Draw_Fly(2 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_time_1, 1);
-        break;
-    case 63:
-        Menu_Draw_Fly(3 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.count_fly_time_2, 1);
-        break;
-    case 64:
-        Menu_Draw_Fly(4 * MENU_ROW_HEIGHT);
-        Menu_Process_Int_Value(&app.fly.fly_ramp_enable, 1);
-        break;
-    default:
-        break;
-    }
-}
-
+/**
+ * @brief 菜单主处理函数。
+ * @return 无。
+ */
 void Keystroke_Menu(void)
 {
+    uint8 event_code;
+
     if (!menu_service_enabled)
         return;
 
-    switch (display_codename)
-    {
-    case 0:
-        Keystroke_Menu_HOME();
-        break;
-    case 1:
-    case 11:
-    case 12:
-    case 13:
-    case 14:
-    case 15:
-    case 16:
-        Menu_Start_Process();
-        break;
-    case 2:
-    case 21:
-    case 22:
-    case 23:
-    case 24:
-    case 25:
-    case 26:
-        Menu_Speed_Process();
-        break;
-    case 3:
-    case 31:
-    case 32:
-    case 33:
-    case 34:
-    case 35:
-    case 36:
-        Menu_Model_Process();
-        break;
-    case 4:
-        Menu_Sensor_Process();
-        break;
-    case 5:
-    case 51:
-    case 52:
-    case 53:
-    case 54:
-    case 55:
-    case 56:
-        Menu_Ring_Process();
-        break;
-    case 6:
-    case 61:
-    case 62:
-    case 63:
-    case 64:
-        Menu_Fly_Process();
-        break;
-    default:
-        display_codename = 0;
-        Menu_Reset_Cursor();
-        break;
-    }
+    Menu_Render_Page();
+    event_code = Menu_Read_Key_Event();
+    if (event_code == 0)
+        return;
+
+    if (menu_editing)
+        Menu_Handle_Edit(event_code);
+    else
+        Menu_Handle_Navigation(event_code);
 }

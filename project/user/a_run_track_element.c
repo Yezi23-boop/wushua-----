@@ -1,161 +1,47 @@
 /**
  * @file a_run_track_element.c
- * @brief 环岛、圆桶与赛道元素仲裁状态机
+ * @brief 圆环、圆桶、跷跷板与墙面赛道元素仲裁状态机。
  * @details
- * 本模块收敛左圆环、圆桶和后续右圆环扩展入口。对外仍由 a_run_mode.c
- * 统一调配，保证主控制任务只依赖稳定的运行模式接口。
+ * 本文件只负责按 app.start.element_seq[] 串行开放元素识别，
+ * 具体左圆环、圆桶和墙面状态机分别放在对应模块中，避免单文件过长。
  */
 #include "zf_common_headfile.h"
+#include "a_run_ring.h"
+#include "a_run_cylinder.h"
+#include "a_run_wall.h"
+#include "a_run_cross.h"
 
-static void circle_check_l(uint8 allow_entry);
-
-/* --- 圆环入口参数（run_time_1 以 5ms 调用） --- */
-#define RING_ENTRY_CONFIRM_COUNT 3u /* 左环入口连续确认次数，5ms 调用下约 15ms */
-
-/* --- 赛道元素仲裁与圆筒状态参数（run_time_1 以 5ms 调用） --- */
-#define CYLINDER_TOP_GRAVITY_Z -0.3f     /* vz 到达该值以下，认为接近圆桶顶部，单位：g。 */
-#define CYLINDER_GROUND_GRAVITY_Z 0.3f   /* vz 回到该值以上，认为车身已回地，单位：g。 */
-#define CYLINDER_VZ_FILTER_ALPHA 0.05f   /* 圆桶 vz 一阶低通输入权重，等价于 0.95 旧值 + 0.05 新值。 */
-#define CYLINDER_TOP_CONFIRM_COUNT 3u    /* 5ms * 3 = 15ms，抑制单次冲击误判。 */
-#define CYLINDER_GROUND_CONFIRM_COUNT 3u /* 5ms * 3 = 15ms，回地同样做连续确认。 */
-#define CYLINDER_STABLE_DELAY_COUNT 50u  /* 5ms * 50 = 250ms，回地稳定后再恢复圆环识别。 */
-
-/**
- * @brief 环岛阶段枚举。
- * @details 描述左环识别、入环、环内和出环的各个状态。
- */
-enum RingStep
-{
-    no_ring,      // 未进入环岛流程
-    ring,         // 已识别到左环入口
-    pre_ring,     // 预入环阶段
-    in_ring,      // 环内阶段
-    pre_out_ring, // 预出环阶段
-    out_ring      // 出环确认阶段
-};
+#define ELEMENT_AFTER_RING_COOLDOWN_MS 500 /**< 圆环完成后到重新开放元素识别的冷却时间(ms)，避免出环电磁残留误判下一元素入口。 */
 
 enum TrackElement
 {
-    ELEMENT_NONE = 0,       /**< 无特殊元素；保留给后续模式切换或保护降级。 */
-    ELEMENT_LEFT_RING = 1,  /**< 左圆环流程，当前已接入左环->圆桶串行仲裁。 */
-    ELEMENT_RIGHT_RING = 2, /**< 右圆环流程预留位，后续左右圆环区分时直接接入。 */
-    ELEMENT_CYLINDER = 3    /**< 圆桶流程，保持菜单显示值 3 不变。 */
+    ELEMENT_NONE = TRACK_ELEMENT_NONE,                      /**< 无特殊元素；保留给后续模式切换或保护降级。 */
+    ELEMENT_LEFT_RING = TRACK_ELEMENT_LEFT_RING,            /**< 左圆环流程，接入序列表串行仲裁。 */
+    ELEMENT_RIGHT_RING = TRACK_ELEMENT_RIGHT_RING,          /**< 右圆环流程，复用圆环状态机并反向控制。 */
+    ELEMENT_LARGE_RING_LEFT = TRACK_ELEMENT_LARGE_RING_LEFT,  /**< 大圆环左流程，复用圆环状态机，参数取大圆环组。 */
+    ELEMENT_LARGE_RING_RIGHT = TRACK_ELEMENT_LARGE_RING_RIGHT, /**< 大圆环右流程，复用圆环状态机，参数取大圆环组。 */
+    ELEMENT_CYLINDER = TRACK_ELEMENT_CYLINDER,              /**< 圆桶流程。 */
+    ELEMENT_WALL = TRACK_ELEMENT_WALL,                      /**< 墙面流程。 */
+    ELEMENT_SEESAW = TRACK_ELEMENT_SEESAW,                  /**< 跷跷板流程，复用 a_run_fly 的弱磁/恢复状态机。 */
+    ELEMENT_DOUBLE_CROSS = TRACK_ELEMENT_DOUBLE_CROSS,      /**< 双十字流程，电感和命中后编码器积分退出。 */
+    ELEMENT_SINGLE_CROSS = TRACK_ELEMENT_SINGLE_CROSS       /**< 单十字流程，入口判定与双十字相同，仅序列区分。 */
 };
 
-enum CylinderStep
-{
-    CYL_IDLE = 0,
-    CYL_WAIT_TOP = 1,
-    CYL_WAIT_GROUND = 2,
-    CYL_STABLE_DELAY = 3
-};
+static int8 track_element_is_executable(int element);
+static void track_element_enter(enum TrackElement element);
+static void track_element_enter_from_index(uint8 start_index);
+static void track_element_reset_state(void);
 
-// 当前环岛状态机状态，由 `circle_check_l`（5ms 主环）写入，其他模块只读。
-static enum RingStep current_state = no_ring;
-
-// 环岛过程数据由状态机写入，菜单和调试界面允许直接读取。
-RingStruct ring_data = {0};
-static uint8 ring_entry_count = 0;                             /**< 左环入口连续确认计数，由 `circle_check_l` 在 5ms 上下文递增。 */
-static uint8 ring_finish_event = 0;                            /**< 环岛完成事件标志，由 `circle_check_l` 置位，由 `ring_take_finish_event` 消费。 */
-static enum TrackElement expected_element = ELEMENT_LEFT_RING; /**< 当前期望赛道元素，预留左右圆环与圆桶的分流位置。 */
-static enum CylinderStep cylinder_state = CYL_IDLE;            /**< 圆桶状态机阶段，由 `cylinder_update_5ms` 在 5ms 上下文推进。 */
-static uint8 cylinder_top_count = 0;                           /**< 圆桶顶部确认计数，连续 3 次（15ms）vz 低于阈值才认定过顶。 */
-static uint8 cylinder_ground_count = 0;                        /**< 圆桶回地确认计数，连续 3 次（15ms）vz 高于阈值才认定回地。 */
-static uint8 cylinder_stable_count = 0;                        /**< 圆桶回地稳定延时计数，50 次（250ms）后才允许恢复圆环识别。 */
-static float cylinder_vz_filter = 1.0f;                        /**< vz 一阶低通滤波值，用于圆桶顶部/回地阈值判断。 */
-static LowPassFilter_t cylinder_vz_low_pass = {0};             /**< 复用通用一阶低通状态，避免圆桶逻辑维护重复滤波公式。 */
-static uint8 cylinder_vz_filter_valid = 0;                     /**< vz 滤波是否已完成首次初始化，0-未初始化，1-已初始化。 */
-
-/**
- * @brief 根据环岛状态更新角速度目标。
- *
- * 仅在环岛阶段 `ring_data.diff_set` 非零时覆盖目标角速度，实现环内固定转向。
- * 出环后 `diff_set` 清零，控制链路自动恢复普通循迹角速度外环。
- *
- * @param angle_target 指向目标角速度的指针，由调用方提供上下文。
- *
- * @note 由 5ms 主控制环调用，避免在高频路径中引入额外分支判断。
- */
-void a_run_track_element_update_angle_target(float *angle_target)
-{
-    if (ring_data.diff_set != 0)
-    {
-        *angle_target = ring_data.diff_set;
-    }
-}
-
-/**
- * @brief 判断左环入口电感特征是否命中。
- *
- * 对称翻转原右环特征：入口处横向电感 ad1/ad4 较高、竖向电感 ad2/ad3 较低。
- * 左右阈值用于在弯道内侧提前确认进入环岛，而不是等车身完全进去再判断。
- *
- * @return int8 1-命中左环入口特征，0-未命中。
- */
-static int8 ring_is_left_entry_signal(void)
-{
-    if (ad1 > 40 &&
-        ad2 > 15 &&
-        ad3 > 15 &&
-        ad4 > 40 &&
-        ad1 < 70 &&
-        ad2 < 40 &&
-        ad3 < 40 &&
-        ad4 < 70)
-    {
-        return 1;
-    }
-
-    return 0;
-}
-
-/**
- * @brief 更新圆桶判断用重力向量 vz 滤波值。
- * @details
- * 圆桶判断使用四元数解算的重力向量 vz，并在同一 5ms 调用内完成限幅和低通滤波。
- * 这样能减少只调用一次的小函数跳转，同时保持首次采样直接初始化，避免从 0 慢慢爬升。
- */
-static void cylinder_update_vz_filter_5ms(void)
-{
-    float vz;
-
-    imu_update_gravity_vector_from_quaternion(0, 0, &vz);
-    if (vz < -1.0f)
-    {
-        vz = -1.0f;
-    }
-    else if (vz > 1.0f)
-    {
-        vz = 1.0f;
-    }
-
-    if (cylinder_vz_filter_valid == 0)
-    {
-        cylinder_vz_filter = vz;
-        cylinder_vz_low_pass.out_last = vz;
-        cylinder_vz_filter_valid = 1;
-    }
-    else
-    {
-        low_pass_filter_mt(&cylinder_vz_low_pass, &vz, CYLINDER_VZ_FILTER_ALPHA);
-        cylinder_vz_filter = vz;
-    }
-}
-
-/**
- * @brief 读取当前环岛状态机阶段。
- * @return int8 当前阶段编号：0-no_ring，1-ring，2-pre_ring，3-in_ring，4-pre_out_ring，5-out_ring。
- *
- * @note 仅供菜单和调试显示读取，不应由外部模块直接驱动状态迁移。
- */
-int8 a_run_track_element_get_ring_state(void)
-{
-    return (int8)current_state;
-}
+static enum TrackElement expected_element = ELEMENT_NONE; /**< 当前期望赛道元素，用于串行屏蔽非当前元素的入口识别。 */
+static uint8 element_index = 0;                           /**< 当前元素序列下标，只在 2ms 元素仲裁中更新。 */
+static uint8 element_sequence_started = 0;                /**< 元素识别开启后是否已经按 E1~E8 完成首元素初始化。 */
+static uint8 element_hold_active = 0;                      /**< 1-处于圆环后冷却期，屏蔽所有元素入口识别与序列推进。 */
+static uint32 element_hold_timer = 0;                      /**< 圆环后冷却计时，timeadd 以 10ms 粒度累加，500ms 到点推进序列。 */
 
 /**
  * @brief 读取当前期望赛道元素。
- * @return int8 0-无，1-左圆环，2-右圆环，3-圆桶。
+ * @return int8 0-无，1-左圆环，2-右圆环，3-大圆环左，4-大圆环右，
+ *              5-圆桶，6-墙面，7-跷跷板，8-双十字，9-单十字。
  */
 int8 a_run_track_element_get_expected_element(void)
 {
@@ -163,396 +49,338 @@ int8 a_run_track_element_get_expected_element(void)
 }
 
 /**
- * @brief 读取当前圆筒状态机阶段。
- * @return int8 0-空闲，1-等顶部，2-等回平，3-稳定延迟。
- */
-int8 a_run_track_element_get_cylinder_state(void)
-{
-    return (int8)cylinder_state;
-}
-
-/**
- * @brief 读取圆桶判断当前使用的重力向量 vz 滤波值。
- * @return float 经过 0.95/0.05 一阶滤波的 vz，来自四元数解算。
- */
-float a_run_track_element_get_cylinder_vz(void)
-{
-    return cylinder_vz_filter;
-}
-
-/**
- * @brief 取出并清除环岛完成事件。
+ * @brief 按当前激活元素覆盖转向环参数。
+ * @param kp 转向环比例系数指针，调用方需先写入全局默认值。
+ * @param kd 转向环微分系数指针。
+ * @param kp2 转向环非线性增强系数指针。
  *
- * 环岛完成只允许仲裁状态机消费一次，避免圆桶流程被同一次出环事件重复触发。
- *
- * @return uint8 1-存在待消费完成事件，0-无事件。
+ * 先回落全局默认值，再按当前激活元素覆盖。
+ * 优先级从高到低：单十字TIMING > 双十字TIMING > 圆桶DECEL > 圆环有效阶段。
+ * 圆桶与圆环由序列仲裁保证互斥，DECEL 优先于圆环是历史语义（else 分支保留）；
+ * 双/单十字状态机同时处于 TIMING 不可能发生，双分支保留原顺序兜底。
+ * 无元素激活时保持全局默认值。
  */
-static uint8 ring_take_finish_event(void)
+void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2)
 {
-    uint8 event;
+    *kp = app.speed.kp_Err;
+    *kd = app.speed.kd_Err;
+    *kp2 = app.speed.kp2_Err;
 
-    event = ring_finish_event;
-    ring_finish_event = 0;
-
-    return event;
-}
-
-/**
- * @brief 复位环岛状态机和环岛输出覆盖量。
- * @details 菜单关闭圆环时立即清掉阶段、计时和目标角速度覆盖，避免关闭后残留控制量继续影响主控链路。
- */
-static void ring_reset_state(void)
-{
-    timedestroy(&ring_data.time_l);
-    timedestroy(&ring_data.time_r);
-    timedestroy(&ring_data.ing_ring_time);
-    timedestroy(&ring_data.out_ring_time);
-
-    ring_data.flast_l = 0;
-    ring_data.flast_r = 0;
-    ring_data.last_yaw = 0;
-    ring_data.diff_set = 0;
-    ring_data.distance = 0;
-    ring_data.encoder = 0;
-    ring_data.gyro_flat = 0;
-    ring_data.yaw_delta_sum = 0;
-    ring_entry_count = 0;
-    ring_finish_event = 0;
-    current_state = no_ring;
-}
-
-/**
- * @brief 复位圆桶状态机。
- *
- * 圆桶流程会临时置位负压过顶标志，复位时必须同步恢复负压模块，
- * 避免退出仲裁后仍残留圆桶过顶状态。
- */
-static void cylinder_reset_state(void)
-{
-    cylinder_top_count = 0;
-    cylinder_ground_count = 0;
-    cylinder_stable_count = 0;
-    cylinder_state = CYL_IDLE;
-    fuya_restore_cylinder_peak_angle();
-}
-
-/**
- * @brief 启动圆桶等待过顶阶段。
- *
- * 左环完成后进入圆桶流程时清空所有确认计数，使顶部/回地判断只依赖当前圆桶段数据。
- */
-static void cylinder_start_wait_top(void)
-{
-    cylinder_top_count = 0;
-    cylinder_ground_count = 0;
-    cylinder_stable_count = 0;
-    cylinder_state = CYL_WAIT_TOP;
-    fuya_restore_cylinder_peak_angle();
-}
-
-/**
- * @brief 更新圆桶过顶/回地状态机。
- * @return uint8 1-圆桶流程完成，可恢复后续圆环识别；0-仍在圆桶流程中。
- * @details
- * 该函数由 5ms 主控制链路调用，只使用滤波后的 vz 判断顶部和回地。
- * 顶部、回地和稳定延时都通过计数去抖，避免单次冲击触发状态跳变。
- */
-static uint8 cylinder_update_5ms(void)
-{
-    float vz;
-
-    if (cylinder_state == CYL_IDLE)
+    if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
     {
-        cylinder_start_wait_top();
+        /* 圆桶减速阶段沿用圆桶专用Kp/Kd（默认与全局一致，现场可单独微调），Kp2保持全局值。 */
+        *kp = app.cylinder.kp_Err;
+        *kd = app.cylinder.kd_Err;
     }
-
-    vz = cylinder_vz_filter;
-
-    switch (cylinder_state)
+    else
     {
-    case CYL_WAIT_TOP:
-        if (vz <= CYLINDER_TOP_GRAVITY_Z)
-        {
-            cylinder_top_count++;
-            if (cylinder_top_count >= CYLINDER_TOP_CONFIRM_COUNT)
-            {
-                cylinder_top_count = 0;
-                cylinder_ground_count = 0;
-                cylinder_stable_count = 0;
-                fuya_apply_cylinder_peak_angle();
-                stop = 1;
-                cylinder_state = CYL_WAIT_GROUND;
-            }
-        }
-        else
-        {
-            cylinder_top_count = 0;
-        }
-        break;
-
-    case CYL_WAIT_GROUND:
-        if (vz >= CYLINDER_GROUND_GRAVITY_Z)
-        {
-            cylinder_ground_count++;
-            if (cylinder_ground_count >= CYLINDER_GROUND_CONFIRM_COUNT)
-            {
-                cylinder_ground_count = 0;
-                cylinder_stable_count = 0;
-                cylinder_state = CYL_STABLE_DELAY;
-            }
-        }
-        else
-        {
-            cylinder_ground_count = 0;
-        }
-        break;
-
-    case CYL_STABLE_DELAY:
-        cylinder_stable_count++;
-        if (cylinder_stable_count >= CYLINDER_STABLE_DELAY_COUNT)
-        {
-            cylinder_stable_count = 0;
-            fuya_restore_cylinder_peak_angle();
-            cylinder_state = CYL_IDLE;
-            return 1;
-        }
-        break;
-
-    default:
-        cylinder_reset_state();
-        break;
+        a_run_ring_apply_steer_params(kp, kd, kp2);
     }
+    if (a_run_cross_get_state() == CROSS_STATE_TIMING)
+    {
+        *kp = app.cross.kp_Err;
+        *kd = app.cross.kd_Err;
+        *kp2 = app.cross.kp2_Err;
+    }
+    if (a_run_cross_single_get_state() == CROSS_STATE_TIMING)
+    {
+        *kp = app.cross_single.kp_Err;
+        *kd = app.cross_single.kd_Err;
+        *kp2 = app.cross_single.kp2_Err;
+    }
+}
 
+/**
+ * @brief 解析电感差比和解算的ABC权重：先回落全局默认值，再按元素覆盖。
+ * @param a_value 横向主差分权重指针。
+ * @param b_value 竖向差分权重指针。
+ * @param c_value 分母补偿权重指针。
+ *
+ * 顺序覆盖、后写生效，优先级从高到低：
+ * 圆环有效阶段 > 单十字TIMING > 双十字TIMING > 跷跷板居中 > 圆桶DECEL。
+ * 圆环最后施加优先级最高，保持原语义（进出环必须严格跟随专用权重）；
+ * 只改本次解算局部权重，不动 app.angle，异常退出后全局值自动恢复。
+ * 无元素激活时保持全局默认值。
+ */
+void a_run_track_element_apply_adc_params(float *a_value, float *b_value, float *c_value)
+{
+    *a_value = app.angle.A_1;
+    *b_value = app.angle.B_1;
+    *c_value = app.angle.C_l;
+
+    if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
+    {
+        /* 圆桶窗口确认后才切专用ABC，避免序列轮到圆桶但尚未识别时削弱普通循迹。 */
+        *a_value = app.cylinder.adc_a_1;
+        *b_value = app.cylinder.adc_b_1;
+        *c_value = app.cylinder.adc_c_l;
+    }
+    if (seesaw_centering_active != 0)
+    {
+        /* 释放期使用接近全局的权重，仅轻微压低竖向差分，避免刚起步被竖向差分带偏。 */
+        *a_value = app.fly.center_a_1;
+        *b_value = app.fly.center_b_1;
+        *c_value = app.fly.center_c_l;
+    }
+    if (a_run_cross_get_state() == CROSS_STATE_TIMING)
+    {
+        *a_value = app.cross.adc_a_1;
+        *b_value = app.cross.adc_b_1;
+        *c_value = app.cross.adc_c_l;
+    }
+    if (a_run_cross_single_get_state() == CROSS_STATE_TIMING)
+    {
+        *a_value = app.cross_single.adc_a_1;
+        *b_value = app.cross_single.adc_b_1;
+        *c_value = app.cross_single.adc_c_l;
+    }
+    a_run_ring_apply_adc_params(a_value, b_value, c_value);
+}
+
+/**
+ * @brief 判断元素编号当前是否可由仲裁状态机执行。
+ * @param element 元素编号，来源于 app.start.element_seq。
+ * @return int8 1-可执行，0-应跳过。
+ */
+static int8 track_element_is_executable(int element)
+{
+    if (element == ELEMENT_LEFT_RING ||
+        element == ELEMENT_RIGHT_RING ||
+        element == ELEMENT_LARGE_RING_LEFT ||
+        element == ELEMENT_LARGE_RING_RIGHT ||
+        element == ELEMENT_CYLINDER ||
+        element == ELEMENT_WALL ||
+        element == ELEMENT_SEESAW ||
+        element == ELEMENT_DOUBLE_CROSS ||
+        element == ELEMENT_SINGLE_CROSS)
+    {
+        return 1;
+    }
     return 0;
+}
+
+/**
+ * @brief 进入指定赛道元素并清理其他元素残留状态。
+ * @param element 目标元素编号，通常来自当前元素序列槽位。
+ */
+static void track_element_enter(enum TrackElement element)
+{
+    /* 圆环出环释放期间不清状态机，否则释放过程会被元素切换打断。 */
+    if (a_run_ring_get_state() != RING_STATE_RELEASE)
+    {
+        a_run_ring_reset();
+    }
+    if (element == ELEMENT_NONE ||
+        element == ELEMENT_CYLINDER ||
+        a_run_cylinder_get_state() != CYLINDER_STATE_RELEASE)
+    {
+        a_run_cylinder_reset();
+    }
+    a_run_wall_reset();
+    a_run_cross_reset();
+    a_run_cross_single_reset();
+    /*
+     * 跷跷板完成事件只推进元素序列，RELEASE 还要继续释放速度。
+     * 切到任意后续元素时都不能清掉 seesaw_release_speed，否则会一拍回到巡线速度。
+     */
+    if (element == ELEMENT_NONE || a_run_seesaw_get_state() != SEESAW_STATE_RELEASE)
+    {
+        a_run_seesaw_reset();
+    }
+
+    expected_element = element;
+    if (element == ELEMENT_NONE)
+    {
+        element_index = 0;
+        return;
+    }
+}
+
+/**
+ * @brief 从指定序列下标开始寻找并进入第一个可执行元素。
+ * @param start_index 起始扫描下标，超过有效范围时会从 0 折回。
+ *
+ * 有效长度由 element_seq 中首个 NONE(0) 终止符动态确定。
+ */
+static void track_element_enter_from_index(uint8 start_index)
+{
+    uint8 scan_count;
+    uint8 index;
+    uint8 element_len;
+    int element;
+
+    // 动态扫描有效长度：遇到第一个 NONE 终止
+    element_len = 0;
+    while (element_len < TRACK_ELEMENT_SEQUENCE_MAX && app.start.element_seq[element_len] != TRACK_ELEMENT_NONE)
+    {
+        element_len++;
+    }
+
+    if (element_len == 0)
+    {
+        track_element_enter(ELEMENT_NONE);
+        return;
+    }
+
+    index = start_index;
+    for (scan_count = 0; scan_count < element_len; scan_count++)
+    {
+        if (index >= element_len)
+        {
+            index = 0;
+        }
+
+        element = app.start.element_seq[index];
+        if (track_element_is_executable(element) != 0)
+        {
+            element_index = index;
+            track_element_enter((enum TrackElement)element);
+            return;
+        }
+
+        index++;
+    }
+
+    track_element_enter(ELEMENT_NONE);
 }
 
 /**
  * @brief 复位赛道元素仲裁状态机。
  *
- * 菜单关闭圆环识别时，仲裁、环岛和圆桶必须同步回到初始状态，
- * 否则重新开启时可能从上一次的中间阶段继续运行。
+ * 菜单关闭元素识别时，仲裁、圆环、圆桶、跷跷板和墙面必须同步回到初始状态。
  */
 static void track_element_reset_state(void)
 {
-    expected_element = ELEMENT_LEFT_RING;
-    ring_reset_state();
-    cylinder_reset_state();
+    element_sequence_started = 0;
+    element_hold_active = 0;
+    timedestroy(&element_hold_timer);
+    track_element_enter(ELEMENT_NONE);
 }
 
 /**
  * @brief 更新赛道元素仲裁状态机。
  *
- * 5ms 调用，根据 `expected_element` 当前期望元素开放左圆环或圆筒识别。
- * 左环与圆筒为串行流程：左环完成后进入圆筒，圆筒完成后回到左环。
- * 右环功能在代码中标记为未实现，运行时按模式 0 执行。
+ * `app.start.element_enable` 作为整体元素识别开关；开启后按 `expected_element` 开放当前元素流程。
+ * 元素顺序由 `app.start.element_seq[]` 决定，遇到首个 NONE 截止；0/不可执行槽位会跳过。
  *
- * @note 由 5ms 主控制环调用，函数内部自行管理圆桶滤波和环岛状态迁移。
+ * @param speed 2ms 主控制链路当前目标速度，保留小数速度设定；跷跷板和完成后释放阶段可能覆盖该值。
+ * @param angle_target 转向外环输出的目标角速度，圆环和跷跷板阶段可能覆盖该值。
  */
-void a_run_track_element_update_gate(void)
+void a_run_track_element_update_gate(float *speed, float *angle_target)
 {
-    uint8 cylinder_done;
-
-    cylinder_update_vz_filter_5ms();
-
-    if (app.start.circle_flags != 1)
+    if (app.start.element_enable != 1)
     {
         track_element_reset_state();
         return;
     }
 
-    if (expected_element == ELEMENT_LEFT_RING)
+    if (element_sequence_started == 0)
     {
-        circle_check_l(1);
-        if (ring_take_finish_event() != 0)
+        track_element_enter_from_index(0);
+        element_sequence_started = 1;
+    }
+
+    /* 圆桶/圆环/跷跷板释放只提供基础速度，当前元素在 switch 中的阶段写入优先级更高。 */
+    a_run_cylinder_update_release_speed(speed);
+    a_run_ring_update_release_speed(speed);
+    a_run_seesaw_update_release_speed(speed);
+
+    /* 圆环完成后进入 500ms 冷却：期间只保留释放阶梯收尾，屏蔽入口识别与序列推进。 */
+    if (element_hold_active != 0)
+    {
+        if (timeadd(&element_hold_timer, ELEMENT_AFTER_RING_COOLDOWN_MS))
         {
-            expected_element = ELEMENT_CYLINDER;
-            cylinder_start_wait_top();
+            element_hold_active = 0;
+            timedestroy(&element_hold_timer);
+            track_element_enter_from_index((uint8)(element_index + 1));
         }
         return;
     }
 
-    if (expected_element == ELEMENT_CYLINDER)
+    switch (expected_element)
     {
-        circle_check_l(0);
-        (void)ring_take_finish_event();
-        cylinder_done = cylinder_update_5ms();
-        if (cylinder_done != 0)
+    case ELEMENT_LEFT_RING:
+        if (a_run_ring_update_2ms(1, &app.ring.small_profile) != 0)
         {
-            expected_element = ELEMENT_LEFT_RING;
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
         }
-        return;
-    }
+        break;
 
-    expected_element = ELEMENT_LEFT_RING;
-}
-
-/**
- * @brief 左环状态机更新。
- * @details 根据电感特征、编码器累计和角速度累计结果推进左环流程。
- * 注意此部分为高层状态机，不涉及高频浮点解算，但条件判断需防抖。
- *
- * @param allow_entry 1-允许入口识别，0-只维持/清理已有环岛流程。
- */
-static void circle_check_l(uint8 allow_entry)
-{
-    if (app.start.circle_flags != 1)
-    {
-        if (ring_entry_count != 0 || current_state != no_ring ||
-            ring_data.diff_set != 0 || ring_data.distance != 0 ||
-            ring_data.gyro_flat != 0 || ring_data.flast_l != 0 ||
-            ring_data.flast_r != 0)
+    case ELEMENT_RIGHT_RING:
+        if (a_run_ring_update_2ms(-1, &app.ring.small_profile) != 0)
         {
-            ring_reset_state();
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
         }
-        return;
-    }
+        break;
 
-    /* 状态机每次只推进一步，确保计时与传感器判定可追踪 */
-    switch (current_state)
-    {
-    case no_ring:
-        /* 1. 根据电感特征识别左环入口 (对称翻转原右环特征) */
-        if (allow_entry != 0 &&
-            ring_is_left_entry_signal() != 0)
+    case ELEMENT_LARGE_RING_LEFT:
+        if (a_run_ring_update_2ms(1, &app.ring.large_profile) != 0)
         {
-            ring_entry_count++;
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
+        }
+        break;
+
+    case ELEMENT_LARGE_RING_RIGHT:
+        if (a_run_ring_update_2ms(-1, &app.ring.large_profile) != 0)
+        {
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
+        }
+        break;
+
+    case ELEMENT_CYLINDER:
+        if (a_run_cylinder_update_2ms(speed) != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_WALL:
+        if (a_run_wall_update_2ms(speed) != 0)
+        {
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        break;
+
+    case ELEMENT_SEESAW:
+        if (app.fly.seesaw_mode == 0)
+        {
+            /* 飞坡模式 */
+            a_run_fly_update_speed(speed, 1);
         }
         else
         {
-            ring_entry_count = 0;
-            timedestroy(&ring_data.time_l);
+            /* 停止等待模式 */
+            a_run_seesaw_update_speed(speed, 1);
         }
-
-        /* 2. 在限定时间内连续命中多次才确认进入环岛 */
-        if (ring_entry_count > 0)
+        if (a_run_seesaw_take_finish_event() != 0)
         {
-            /* 在 1000ms 窗口内达到连续确认次数，判定左环成立。 */
-            if (ring_entry_count >= RING_ENTRY_CONFIRM_COUNT)
-            {
-                ring_entry_count = 0;
-                timedestroy(&ring_data.time_l); // 清空左环识别定时器
-                ring_data.flast_l = 1;          // 置位左环过程标志
-                /* 从入口识别切到 ring，后续进入距离累计阶段 */
-                current_state = ring; // 切换到环岛准备阶段
-            }
-            /* 超过 1000ms 仍未满足次数，丢弃本次识别 */
-            else if (timeadd(&ring_data.time_l, 1000))
-            {
-                ring_entry_count = 0;
-                timedestroy(&ring_data.time_l);
-            }
+            track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
-    case ring:
-        /* 入环前先恢复普通循迹角速度目标，开始累计入口距离。 */
-        ring_data.diff_set = 0;
-        ring_data.distance = 1; // 允许累计编码器里程
-        ring_data.yaw_delta_sum = 0;
-
-        /* 累计距离达到阈值后进入预入环阶段 */
-        if (ring_data.encoder >= app.ring.ring_entry_encoder)
+    case ELEMENT_DOUBLE_CROSS:
+        if (a_run_cross_update_2ms() != 0)
         {
-            ring_data.distance = 0;
-            ring_data.encoder = 0;
-            ring_data.last_yaw = imu660rc_yaw; // 记录预入环阶段初始航向角
-            ring_data.gyro_flat = 1;
-            ring_data.yaw_delta_sum = 0;
-            current_state = pre_ring; // 切换到预入环阶段
+            track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
-    case pre_ring:
-        /* 给定预入环固定目标角速度，左环累计 yaw 角增量为负。 */
-        ring_data.diff_set = app.ring.pre_ring_Gyro_target;
-
-        /* 相对预入环起点的偏航角累计达到入环阈值并确认 50ms 后，认为已真正入环。 */
-        /* 由于累加的角度自带符号，这里直接取绝对值判断是否转够30度即可，不论左右环。 */
-        if (ring_data.yaw_delta_sum < -app.ring.pre_ring_Gyroz && timeadd(&ring_data.ing_ring_time, 50))
+    case ELEMENT_SINGLE_CROSS:
+        if (a_run_cross_single_update_2ms() != 0)
         {
-            ring_data.diff_set = 0;
-            timedestroy(&ring_data.ing_ring_time);
-            current_state = in_ring;
+            track_element_enter_from_index((uint8)(element_index + 1));
         }
         break;
 
-    case in_ring:
-        /* 左环累计 yaw 角增量为负，必须达到负向环内阈值后才进入预出环。 */
-        if (ring_data.yaw_delta_sum <= -app.ring.in_ring_Gyroz)
-        {
-            current_state = pre_out_ring;
-        }
-        break;
-
-    case pre_out_ring:
-        /* 给定预出环固定目标角速度，继续沿左环方向修正车身。 */
-        ring_data.diff_set = app.ring.pre_out_ring_Gyro_target;
-
-        /* 预出环继续沿左环方向打到更大的出环角度，避免过早回线导致压线不稳。 */
-        if (ring_data.yaw_delta_sum < -app.ring.pre_out_ring_Gyroz && timeadd(&ring_data.out_ring_time, 50))
-        {
-            ring_data.diff_set = 0;
-            timedestroy(&ring_data.out_ring_time);
-            ring_data.gyro_flat = 0;
-            ring_data.yaw_delta_sum = 0;
-            current_state = out_ring;
-        }
-        break;
-
-    case out_ring:
-        /* 1000ms 内电感重新平衡，则认为已完全驶离环岛 */
-        if (func_abs((int)ad1 - (int)ad4) < 10 && timeadd(&ring_data.out_ring_time, 100))
-        {
-            timedestroy(&ring_data.out_ring_time); // 清空出环确认定时器
-            ring_data.flast_l = 0;                 // 清除左环过程标志
-            ring_data.last_yaw = 0;                // 清除初始航向角缓存
-            ring_data.diff_set = 0;                // 清零环岛目标角速度覆盖
-            ring_data.distance = 0;                // 关闭里程累计
-            ring_data.encoder = 0;                 // 清零里程累计量
-            ring_data.gyro_flat = 0;               // 关闭相对偏航角更新
-            ring_data.yaw_delta_sum = 0;           // 清零相对偏航角差
-            current_state = no_ring;               // 返回普通巡线状态
-            ring_finish_event = 1;
-        }
+    default:
+        /* 当前处于 ELEMENT_NONE 或未知状态，不执行任何元素逻辑 */
         break;
     }
-}
 
-/**
- * @brief 更新环岛判定所需的里程与偏航量。
- * @details
- * `encoder` 继续按速度估计累计里程；`yaw_delta_sum` 使用前后两次 yaw 的差值进行增量累加。
- * 这种方式可以避免跨0点跳变，并且累加出来的是实际转过的总角度量，符合转角触发阈值。
- *
- * @note 该函数依赖进入 `pre_ring` 时已经正确记录 `last_yaw`。
- */
-void a_run_track_element_update_integrals(void)
-{
-    float delta_yaw;
-
-    /* 环岛阶段只关心相对转过多少角，通过前后两次yaw的差值进行增量累加。 */
-    if (ring_data.gyro_flat == 1)
-    {
-        delta_yaw = imu660rc_yaw - ring_data.last_yaw;
-
-        /* 处理跨越0点（或360点）的情况，将角差折返到 -180~180。 */
-        if (delta_yaw > 180.0f)
-        {
-            delta_yaw -= 360.0f;
-        }
-        else if (delta_yaw < -180.0f)
-        {
-            delta_yaw += 360.0f;
-        }
-
-        ring_data.yaw_delta_sum += delta_yaw;
-        ring_data.last_yaw = imu660rc_yaw;
-    }
-
-    /* 编码器累计使能时，累加当前前进距离估计 */
-    if (ring_data.distance == 1)
-    {
-        /* 0.01 系数与当前速度单位配套，保持里程判据量级稳定 */
-        ring_data.encoder += (speed_l + speed_r) * 0.005; // 用于判断是否达到环岛距离阈值
-    }
+    a_run_ring_apply_speed(speed);
+    a_run_ring_update_angle_target(angle_target);
 }

@@ -59,6 +59,7 @@
 #include "zf_driver_spi.h"
 #include "zf_driver_timer.h"
 #include "zf_driver_pwm.h"
+#include "zf_driver_soft_iic.h"
 
 #include "zf_driver_exti.h"
 #include "zf_driver_delay.h"
@@ -97,7 +98,12 @@
 #include "a_run_mode.h"
 #include "a_run_fly.h"
 #include "a_run_track_element.h"
+#include "a_run_ring.h"
+#include "a_run_cylinder.h"
+#include "a_run_wall.h"
+#include "a_run_cross.h"
 #include "soft_timer.h"
 #include "../user/ADC.h"
 #include "debug_view.h"
+#include "tpl0102.h"
 #endif

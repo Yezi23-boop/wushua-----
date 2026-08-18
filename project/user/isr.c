@@ -116,16 +116,19 @@ void INT1_IRQHandler(void) interrupt 2
 
 /**
  * @brief PIT0 定时器中断 (系统控制环中断)
- * @details 触发核心控制环任务 run_time_1，周期见 int_user.c 的 TIME_0 定义（通常为 5ms）。
+ * @details 触发核心控制环任务 run_time_1，周期见 int_user.c 的 TIME_0 定义（通常为 2ms）。
  * 注意：此函数必须保持极低耗时，不可执行阻塞操作。
  */
 void TM0_IRQHandler() interrupt 1
 {
     TIM0_CLEAR_FLAG;
- a_run_apply_iap_guard();
+#if MAIN_ENABLE_ISR_PWM
+a_run_apply_iap_guard();
+imu_update_gyro_z_from_imu660rc();  
 /* 1. 获取编码器实时速度反馈 */
  Encoder_get(&PID.left_speed, &PID.right_speed);
- motor_output(3000, 4000);
+ motor_output(3000, 5000);
+#endif
 #if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
     test_diff_func();
 #endif

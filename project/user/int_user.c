@@ -4,16 +4,13 @@
 #include "../service/menu.h"
 
 /* 定时器中断周期定义（单位：ms） */
-#define TIME_0 5  /* 主控控制环周期 */
+#define TIME_0 2  /* 主控控制环周期 */
 #define TIME_1 10 /* 按键与菜单服务周期 */
 
 /* 内部私有初始化函数声明 */
 static void hardware_init(void);
 static void control_init(void);
 static void app_init(void);
-static void clamp_steer_output(PID_Steer *pid);
-static float clamp_gyro_feedback_scale(float value);
-static float clamp_config_percent(float value);
 static void timer1_service_10ms(void);
 
 /**
@@ -21,7 +18,6 @@ static void timer1_service_10ms(void);
  */
 void int_user(void)
 {
-    //	gpio_init(IO_P36, GPO, 1, GPO_PUSH_PULL);
     hardware_init(); /* 1. 硬件平台初始化 */
     control_init();  /* 2. 控制算法参数初始化 */
     app_init();      /* 3. 应用逻辑初始化 */
@@ -46,6 +42,10 @@ static void hardware_init(void)
 
     tim1_irq_handler = timer1_service_10ms;
 
+    /* P36/P43 都按准双向口直接写端口锁存，减少 GPIO 初始化对现场接线状态的影响。 */
+    P36 = 1;
+    P43 = 1;
+
     /* 编码器接口初始化 */
     encoder_dir_init(TIM3_ENCOEDER, IO_P46, TIM3_ENCOEDER_P04);
     encoder_dir_init(TIM4_ENCOEDER, IO_P42, TIM4_ENCOEDER_P06);
@@ -56,11 +56,16 @@ static void hardware_init(void)
     adc_init(ADC_CH1_P11, ADC_12BIT); /* 电感 2 */
     adc_init(ADC_CH8_P00, ADC_12BIT); /* 电感 3 */
     adc_init(ADC_CH9_P01, ADC_12BIT); /* 电感 4 */
+    adc_init(ADC_CH2_P12, ADC_12BIT); /* 电感 5 中横 P1.2 */
 
     /* 应用层模块 */
     motor_Init();         /* 电机驱动 PWM 输出 */
-    fuya_Init();          /* 负压风扇 PWM */
+    fuya_init();          /* 负压风扇 PWM */
     wireless_uart_init(); /* 无线串口（用于调试/上位机） */
+
+    /* TPL0102 使用 P3.4/P3.5 软件 I2C，驱动内部会恢复按键口模式。 */
+    tpl0102_init(TPL0102_DEVICE_54);
+    tpl0102_init(TPL0102_DEVICE_56);
 }
 
 static void timer1_service_10ms(void)
@@ -80,8 +85,8 @@ static void timer1_service_10ms(void)
 static void control_init(void)
 {
     /* 速度环初始化，默认提供一组安全基础参数 */
-    pid_speed_init(&PID.left_speed, 120.0f, 25.0f, 0.0f, 9000.0f, 9000.0f);
-    pid_speed_init(&PID.right_speed, 120.0f, 25.0f, 0.0f, 9000.0f, 9000.0f);
+    pid_speed_init(&PID.left_speed, 120.0f, 10.0f, 0.0f, 9500.0f, 9500.0f);
+    pid_speed_init(&PID.right_speed, 120.0f, 10.0f, 0.0f, 9500.0f, 9500.0f);
 
     /* 转向差速控制器先清零，具体参数由 apply_config 从 EEPROM 同步 */
     pid_steer_init(&PID.steer, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
@@ -110,13 +115,6 @@ void control_apply_config(void)
 {
     float angle_limit;
 
-    app.start.fuya_xili = clamp_config_percent(app.start.fuya_xili);
-    app.start.fuya_wall_percent = clamp_config_percent(app.start.fuya_wall_percent);
-    if (app.start.track_mode < 0 || app.start.track_mode > 3)
-    {
-        app.start.track_mode = 0;
-    }
-
     /* 1. 同步转向环，包含二次校正项 */
     PID.steer.Kp = app.speed.kp_Err;
     PID.steer.Kd = app.speed.kd_Err;
@@ -124,11 +122,9 @@ void control_apply_config(void)
     PID.steer.gyro_damp = app.speed.gyro_damp_Err;
     PID.steer.max_output = app.speed.limiting_Err;
     PID.steer.min_output = app.speed.limiting_Err;
-    clamp_steer_output(&PID.steer);
 
     /* 2. 同步角速度内环，直接使用独立限幅参数 */
     angle_limit = app.angle.limiting_Angle;
-    app.angle.gyro_feedback_scale = clamp_gyro_feedback_scale(app.angle.gyro_feedback_scale);
 
     PID.angle.Kp = app.angle.kp_Angle;
     PID.angle.Kd = app.angle.kd_Angle;
@@ -136,7 +132,6 @@ void control_apply_config(void)
     PID.angle.gyro_damp = 0.0f;
     PID.angle.max_output = angle_limit;
     PID.angle.min_output = angle_limit;
-    clamp_steer_output(&PID.angle);
 }
 
 /**
@@ -146,6 +141,8 @@ void config_save(void)
 {
     control_apply_config();
     eeprom_flash();
+    tpl0102_save(TPL0102_DEVICE_54);
+    tpl0102_save(TPL0102_DEVICE_56);
 }
 
 /**
@@ -155,33 +152,4 @@ void config_load(void)
 {
     eeprom_init();
     control_apply_config();
-}
-
-/**
- * @brief 限制转向输出幅值
- */
-static void clamp_steer_output(PID_Steer *pid)
-{
-    if (pid->output > pid->max_output)
-        pid->output = pid->max_output;
-    else if (pid->output < -pid->min_output)
-        pid->output = -pid->min_output;
-}
-
-static float clamp_config_percent(float value)
-{
-    if (value < 0.0f)
-        return 0.0f;
-    if (value > 100.0f)
-        return 100.0f;
-    return value;
-}
-
-static float clamp_gyro_feedback_scale(float value)
-{
-    if (value < 1.0f)
-        return 1.0f;
-    if (value > 50.0f)
-        return 50.0f;
-    return value;
 }

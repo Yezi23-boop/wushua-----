@@ -1,8 +1,17 @@
 #include "motor.h"
 
+#define MOTOR_STALL_PWM_THRESHOLD 6000   /* 堵转判定的实际输出 PWM 下限，低于该值时不认为电机已强驱。 */
+#define MOTOR_STALL_SPEED_THRESHOLD 2.0f /* 堵转判定的编码器速度上限，单位同 PID.left_speed.speed。 */
+#define MOTOR_STALL_CONFIRM_COUNT 80     /* 10ms 检测周期计数，80 次约 0.8s，用于过滤发车瞬间和瞬时卡顿。 */
+
 /* 全局控制标志位 */
 volatile uint8 stop = 0;   /* 停车标志位，1 表示紧急停车保护 */
 volatile float dianya = 0; /* 当前电池电压值 */
+
+static int32 motor_last_lpwm_limited = 0;
+static int32 motor_last_rpwm_limited = 0;
+static int16 motor_left_stall_count = 0;
+static int16 motor_right_stall_count = 0;
 
 /**
  * @brief 电机及相关硬件初始化
@@ -27,20 +36,73 @@ void motor_Init(void)
 }
 
 /**
- * @brief 输出 PWM 限幅
- * @details 将输出限制在 ±MOTOR_OUTPUT_PWM_LIMIT，避免过驱
+ * @brief 按指定上限等比例限制左右 PWM 输出。
+ * @param lpwm 已经过全局限幅的左轮目标 PWM 指针。
+ * @param rpwm 已经过全局限幅的右轮目标 PWM 指针。
+ * @param limit 本次允许的最大 PWM 绝对值，单位：占空比。
+ *
+ * 不能把左右轮分别截到同一个上限，否则会抹掉差速转向量；
+ * 这里按较大一侧缩放两轮输出，在限制冲击的同时保留转向比例。
  */
-static int32 motor_limit_output_pwm(int32 pwm)
+static void motor_limit_pwm_pair_to(int32 *lpwm, int32 *rpwm, int32 limit)
 {
-    if (pwm > MOTOR_OUTPUT_PWM_LIMIT)
+    int32 left_abs;
+    int32 right_abs;
+    int32 max_abs;
+
+    if (limit <= 0)
     {
-        return MOTOR_OUTPUT_PWM_LIMIT;
+        return;
     }
-    if (pwm < -MOTOR_OUTPUT_PWM_LIMIT)
+
+    left_abs = func_abs(*lpwm);
+    right_abs = func_abs(*rpwm);
+    max_abs = (left_abs > right_abs) ? left_abs : right_abs;
+
+    if (max_abs <= limit)
     {
-        return -MOTOR_OUTPUT_PWM_LIMIT;
+        return;
     }
-    return pwm;
+
+    *lpwm = (*lpwm * limit) / max_abs;
+    *rpwm = (*rpwm * limit) / max_abs;
+}
+
+/**
+ * @brief 10ms 周期检测电机堵转并触发停车保护。
+ *
+ * 由 10ms 状态环调用。发车瞬间速度未建立造成的误判由
+ * 0.8s 确认窗口过滤，不再依赖起步限幅状态。
+ */
+void motor_stall_check_10ms(void)
+{
+    if ((motor_last_lpwm_limited > MOTOR_STALL_PWM_THRESHOLD || motor_last_lpwm_limited < -MOTOR_STALL_PWM_THRESHOLD) &&
+        PID.left_speed.speed < MOTOR_STALL_SPEED_THRESHOLD)
+    {
+        motor_left_stall_count++;
+    }
+    else
+    {
+        motor_left_stall_count = 0;
+    }
+
+    if ((motor_last_rpwm_limited > MOTOR_STALL_PWM_THRESHOLD || motor_last_rpwm_limited < -MOTOR_STALL_PWM_THRESHOLD) &&
+        PID.right_speed.speed < MOTOR_STALL_SPEED_THRESHOLD)
+    {
+        motor_right_stall_count++;
+    }
+    else
+    {
+        motor_right_stall_count = 0;
+    }
+
+    if (motor_left_stall_count >= MOTOR_STALL_CONFIRM_COUNT ||
+        motor_right_stall_count >= MOTOR_STALL_CONFIRM_COUNT)
+    {
+        stop = 1;
+        motor_left_stall_count = 0;
+        motor_right_stall_count = 0;
+    }
 }
 
 /**
@@ -54,13 +116,26 @@ void motor_output(int32 lpwm, int32 rpwm)
     int32 lpwm_limited;
     int32 rpwm_limited;
 
-    lpwm_limited = motor_limit_output_pwm(lpwm);
-    rpwm_limited = motor_limit_output_pwm(rpwm);
+    lpwm_limited = func_limit(lpwm, MOTOR_OUTPUT_PWM_LIMIT);
+    rpwm_limited = func_limit(rpwm, MOTOR_OUTPUT_PWM_LIMIT);
 
-    /* 检查停车标志位，stop 为 0 时正常运行 */
+    /* 检查停车标志位，stop 为 0 时正常运行；起步阶梯已取消，发车即全功率。 */
     if (stop == 0)
     {
-        /* --- 右电机控制逻辑 (硬件映射可能交叉) --- */
+        if (seesaw_pwm_output_limit > 0)
+        {
+            motor_limit_pwm_pair_to(&lpwm_limited, &rpwm_limited, seesaw_pwm_output_limit);
+        }
+        if (lpwm_limited == 0 && rpwm_limited == 0)
+        {
+            /* 零输出拍清理堵转判定历史，避免恢复后残留计数误触发。 */
+            motor_left_stall_count = 0;
+            motor_right_stall_count = 0;
+        }
+        motor_last_lpwm_limited = lpwm_limited;
+        motor_last_rpwm_limited = rpwm_limited;
+
+        /* --- 左电机控制逻辑（lpwm_limited → P13/P14） --- */
         if (lpwm_limited > 0)
         {
             P14 = 1;                                  /* 设置方向：正转 */
@@ -76,7 +151,7 @@ void motor_output(int32 lpwm, int32 rpwm)
             pwm_set_duty(PWMB_CH2_P13, 0); /* 停止输出 */
         }
 
-        /* --- 左电机控制逻辑 --- */
+        /* --- 右电机控制逻辑（rpwm_limited → P52/P53） --- */
         if (rpwm_limited > 0)
         {
             P53 = 1; /* 设置方向：正转 */
@@ -106,17 +181,17 @@ void motor_output(int32 lpwm, int32 rpwm)
 
 /**
  * @brief 丢线保护逻辑
- * @details 当四路电感传感器采集值连续多次低于阈值时判定为丢线
+ * @details 当四路电感连续低于阈值且飞坡未临时屏蔽保护时判定为丢线。
  */
 void lost_lines(void)
 {
     static int8 count = 0; /* 丢线确认计数器 */
 
     /*
-     * ad1~ad4 为全局电感采样值
-     * 阈值 3 为根据实际环境标定的最小有效电感强度
+     * 跷跷板高风险窗口会主动屏蔽丢线；若释放期超时仍未恢复，
+     * 状态机复位时会释放该屏蔽，让真实丢线重新触发停车保护。
      */
-    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && flat_fly == 0)
+    if (ad1 < 3 && ad2 < 3 && ad3 < 3 && ad4 < 3 && seesaw_lost_line_blocked == 0)
     {
         count++;
     }
@@ -139,7 +214,6 @@ void lost_lines(void)
  */
 void dianya_jiance(void)
 {
-    static int32 dianya_count = 0; /* 欠压持续计数 */
     uint16 adc_raw;
 
     /* 执行 ADC 转换 */
@@ -147,83 +221,5 @@ void dianya_jiance(void)
     /* 转换公式：ADC值 * 转换系数（0.0092 需要根据分压电路电阻比例计算） */
     dianya = (float)adc_raw * 0.0092f;
 
-    /* 锂电池欠压判定：低于 11.3V（假设为 3S 锂电） */
-    if (dianya < 11.2f)
-    {
-        dianya_count++;
-    }
-    else
-    {
-        dianya_count = 0;
-    }
-
-    /* 持续欠压 3000 次（软件滤波，防止启动大电流导致电压跌落误判） */
-    if (dianya_count > 1000)
-    {
-        stop = 1; /* 锁定停车，保护电池 */
-    }
-}
-
-/* --- 电机前馈控制查表数据 --- */
-/* 速度测试点（单位：cm/s 或 编码器原始单位） */
-static const float ff_speed_points[] = {
-    0.0f, 5.4f, 13.0f, 18.4f, 22.2f, 27.6f, 34.2f, 38.0f,
-    45.8f, 49.6f, 57.2f, 64.8f, 67.8f, 76.0f, 81.8f, 88.4f, 93.8f};
-
-/* 对应速度点所需的 PWM 占空比 */
-static const int16 ff_duty_points[] = {
-    0, 500, 1000, 1500, 2000, 2500, 3000, 3500,
-    4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000};
-
-/**
- * @brief 速度前馈查表（线性插值）
- * @details 绕过 PID 积分项缓慢累加过程，直接根据目标速度给定基础 PWM 占空比
- * @param speed 目标速度值
- * @return 对应的 PWM 基础占空比
- */
-int32 motor_speed_to_duty(float speed)
-{
-    float s;    /* 速度绝对值 */
-    int i;      /* 循环索引 */
-    int32 duty; /* 插值计算结果 */
-
-    if (speed > 0.0f)
-        s = speed;
-    else if (speed < 0.0f)
-        s = -speed;
-    else
-        return 0;
-
-    /* 遍历查找速度所在的区间 */
-    for (i = 0; i < 16; i++)
-    {
-        if (s <= ff_speed_points[i + 1])
-        {
-            float x0 = ff_speed_points[i];
-            float x1 = ff_speed_points[i + 1];
-            int32 y0 = (int32)ff_duty_points[i];
-            int32 y1 = (int32)ff_duty_points[i + 1];
-
-            /* 线性插值公式：y = y0 + (s - x0) * (y1 - y0) / (x1 - x0) */
-            float t = (s - x0) / (x1 - x0);
-            duty = (int32)(y0 + t * (float)(y1 - y0));
-
-            /* 恢复速度符号并限幅输出 */
-            if (speed < 0.0f)
-                duty = -duty;
-
-            if (duty > PWM_DUTY_MAX)
-                duty = PWM_DUTY_MAX;
-            if (duty < -PWM_DUTY_MAX)
-                duty = -PWM_DUTY_MAX;
-
-            return duty;
-        }
-    }
-
-    /* 速度超过表格最大值，返回最大占空比 */
-    duty = (int32)ff_duty_points[16];
-    if (speed < 0.0f)
-        duty = -duty;
-    return duty;
+    /* 锂电池欠压判定已移除，当前仅保留电压采样供调试显示。 */
 }

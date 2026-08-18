@@ -24,21 +24,22 @@ static uint16 adtemp = 0;                         /* 排序交换临时变量 */
 static uint32 ad_sum[NUM] = {0};                  /* 累加和 */
 static uint16 ad_ave[NUM] = {0};                  /* 平均值 */
 static uint16 AD_V[NUM] = {0};                    /* 当前周期的处理后值 */
-static uint8 adc_measure_enable = 1;              /* 默认开启最大值动态记录 */
+static uint8 adc_measure_enable = 1;              /* 默认记录原始采样极值，仅供调试显示和手动标定参考。 */
 
-/* 默认标定参数（若无 EEPROM 加载则使用此值） */
-static const uint16 MIN_Err[NUM] = {0, 0, 0, 0};
-static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
+/* 当前归一化固定使用该区间；MA/MI 只做显示参考，不参与实时映射。 */
+static const uint16 MIN_Err[NUM] = {0, 0, 0, 0, 0};
+static const uint16 MAX_Err[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 static const int limit = 10;
 
 /* 全局导出变量：这些变量将在定时器中断和主循环菜单/串口任务间共享，故用 volatile 修饰 */
 volatile uint16 RAW[NUM] = {0};
 volatile uint16 MA[NUM] = {0};
-volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
+volatile uint16 MI[NUM] = {ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX, ADC_RAW_MAX};
 volatile uint16 ad1 = 0;
 volatile uint16 ad2 = 0;
 volatile uint16 ad3 = 0;
 volatile uint16 ad4 = 0;
+volatile uint16 ad5 = 0; /**< 第五路横向中间电感，归一化值 0~100 */
 volatile float Err = 0.0f;
 
 /* 内部私有函数声明 */
@@ -58,17 +59,47 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 {
     float denom;
     float numer;
-    int16 diff23;
+    float a_value;
+    float b_value;
+    float c_value;
+    float left_signal;
+    float left_middle_signal;
+    float right_middle_signal;
+    float right_signal;
+    float middle_diff;
+    float middle_diff_abs;
+
+    /*
+     * 元素专用ABC权重覆盖统一由仲裁模块按优先级施加
+     * （圆环>单十字>双十字>跷跷板居中>圆桶DECEL）；
+     * 只切换本次解算局部权重，避免修改 app.angle 导致异常退出后参数无法恢复。
+     */
+    a_run_track_element_apply_adc_params(&a_value, &b_value, &c_value);
+
+    left_signal = (float)ad11;
+    left_middle_signal = (float)ad22;
+    right_middle_signal = (float)ad33;
+    right_signal = (float)ad44;
+    /* 圆环模块只修改局部解算值，真实ad1~ad4继续供识别和菜单显示。 */
+    a_run_ring_apply_adc_bias(&left_signal,
+                              &left_middle_signal,
+                              &right_middle_signal,
+                              &right_signal);
 
     /* 1) 先计算竖向差分，供分母修正项复用 */
-    diff23 = (int16)ad22 - (int16)ad33;
+    middle_diff = left_middle_signal - right_middle_signal;
+    middle_diff_abs = middle_diff;
+    if (middle_diff_abs < 0.0f)
+    {
+        middle_diff_abs = -middle_diff_abs;
+    }
 
     /* 2) 计算归一化偏差，输出范围由 limit 控制在可调区间内 */
-    numer = app.angle.A_1 * (float)ad11 - (float)ad44 +
-            app.angle.B_1 * (float)ad22 - (float)ad33;
+    numer = a_value * (left_signal - right_signal) +
+            b_value * middle_diff;
     /* 3) 计算归一化分母：主亮度 + 竖向修正，防止弱信号时偏差失真 */
-    denom = app.angle.A_1 * (float)ad11 + (float)ad44 +
-            app.angle.C_l * (float)func_abs(diff23);
+    denom = a_value * (left_signal + right_signal) +
+            c_value * middle_diff_abs;
 
     /* 4) 分母过小时直接归零，避免瞬态噪声被异常放大 */
     if (denom < 1.0f)
@@ -80,7 +111,9 @@ static void dispose(uint16 ad11, uint16 ad22, uint16 ad33, uint16 ad44)
 }
 
 /**
- * @brief 动态扫描电感的最大/最小值（用于自动标定）
+ * @brief 扫描电感原始采样的最大/最小值。
+ *
+ * MA/MI 只用于调试页观察和现场人工记录，不会改变 read_AD() 的固定归一化区间。
  */
 void scan_track_max_value(void)
 {
@@ -175,13 +208,14 @@ void read_AD(void)
     ad2 = AD_ONE[1];
     ad3 = AD_ONE[2];
     ad4 = AD_ONE[3];
+    ad5 = AD_ONE[4];
 
     /* 6. 执行偏差解算 */
     dispose(ad1, ad2, ad3, ad4);
 }
 
 /**
- * @brief 使能或禁止动态最大值记录
+ * @brief 使能或禁止原始采样极值记录。
  */
 void adc_measure_set_enable(uint8 enable)
 {
@@ -189,7 +223,7 @@ void adc_measure_set_enable(uint8 enable)
 }
 
 /**
- * @brief 重置标定记录
+ * @brief 重置原始采样极值记录。
  */
 void adc_measure_reset(void)
 {
@@ -214,6 +248,11 @@ static void adc_read_channels(uint16 *raw_buffer)
     raw_buffer[1] = adc_convert(ADC_CH0_P10); /* 左竖电感 */
     raw_buffer[2] = adc_convert(ADC_CH8_P00); /* 右横电感 */
     raw_buffer[3] = adc_convert(ADC_CH9_P01); /* 右竖电感 */
+    raw_buffer[4] = adc_convert(ADC_CH2_P12); /* 中横电感 P1.2 */
+    //    raw_buffer[0] = adc_convert(ADC_CH0_P10); /* 左横电感 */
+    //    raw_buffer[1] = adc_convert(ADC_CH1_P11); /* 左竖电感 */
+    //    raw_buffer[2] = adc_convert(ADC_CH9_P01); /* 右横电感 */
+    //    raw_buffer[3] = adc_convert(ADC_CH8_P00); /* 右竖电感 */
 }
 
 /**

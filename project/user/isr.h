@@ -10,13 +10,14 @@
  */
 /* --- 功能模块开关控制 --- */
 #define MAIN_ENABLE_VOFA 0       /**< 是否使能 VOFA+ 串口交互 (可能耗费主循环时间) */
-#define MAIN_ENABLE_MENU 0       /* 是否使能 IPS 屏幕菜单交互系统 */
-#define MAIN_ENABLE_SPEED_TEST 1 /* 是否使能串口打印速度环测试数据 */
+#define MAIN_ENABLE_MENU 1       /* 是否使能 IPS 屏幕菜单交互系统 */
+#define MAIN_ENABLE_SPEED_TEST 0 /* 是否使能串口打印速度环测试数据 */
 
+#define MAIN_ENABLE_ISR_PWM 0             /* 是否使能 IPS 屏幕菜单交互系统 */
 #define MAIN_ENABLE_ISR_TEST_DIFF_FUNC 0  /* 1: 在 TM0 中断中运行 test_diff_func() */
-#define MAIN_ENABLE_ISR_TEST_SPEED_FUNC 0    /* 1: 在 TM0 中断中运行 test_speed_func() */
-#define MAIN_ENABLE_ISR_RUN_TIME_1 0      /* 1: 在 TM0 中断中运行主控制环 run_time_1() */
-#define MAIN_ENABLE_ISR_RUN_TIME_2 0      /* 1: 在 TM1 中断中运行状态环 run_time_2() */
+#define MAIN_ENABLE_ISR_TEST_SPEED_FUNC 0 /* 1: 在 TM0 中断中运行 test_speed_func() */
+#define MAIN_ENABLE_ISR_RUN_TIME_1 1      /* 1: 在 TM0 中断中运行主控制环 run_time_1() */
+#define MAIN_ENABLE_ISR_RUN_TIME_2 1      /* 1: 在 TM1 中断中运行状态环 run_time_2() */
 
 /**
  * @brief 中断服务函数声明文件

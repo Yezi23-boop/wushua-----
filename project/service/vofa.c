@@ -267,14 +267,12 @@ void vofa_service_legacy(void)
 #if MAIN_ENABLE_ISR_TEST_DIFF_FUNC
     printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value, PID.left_speed.Kp, PID.left_speed.Ki);
 #endif
-    // printf("%f,%f,%f,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     /* legacy 模式下只做旧命令兼容，不走新调参组件 */
     vofa_parse_from_fifo();
 
     while (vofa_get_command(vofa_cmd, 32))
     {
         vofa_handle_legacy_command(vofa_cmd);
-        //     printf("%f,%f,,%f,,%f,%f\n", PID.left_speed.speed, PID.right_speed.speed, test_speed_value,PID.left_speed.Kp,PID.left_speed.Ki);
     }
 }
 

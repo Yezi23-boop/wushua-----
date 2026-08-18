@@ -1,31 +1,23 @@
-import importlib.util
-import pathlib
 import sys
 
 
-MODULE_PATH = (
-    pathlib.Path(__file__).resolve().parents[1]
-    / "project"
-    / "speed_loop_autotune"
-    / "host"
-    / "vofa_autotune.py"
+MESSAGE = (
+    "当前仓库未包含 project/speed_loop_autotune，旧版 VOFA 自动调参入口已不可用。"
+    "当前固件只保留 project/service/vofa.c 中的 legacy 命令解析。"
 )
 
 
-def _load_module():
-    spec = importlib.util.spec_from_file_location("project_speed_loop_autotune", MODULE_PATH)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("Unable to load project/speed_loop_autotune/host/vofa_autotune.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
 
+    if len(argv) > 0 and argv[0] in ("-h", "--help"):
+        print(MESSAGE)
+        return 0
 
-_MODULE = _load_module()
-globals().update(
-    {name: getattr(_MODULE, name) for name in dir(_MODULE) if not name.startswith("_")}
-)
+    print(MESSAGE, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
-    sys.exit(_MODULE.main())
+    sys.exit(main())

@@ -3,7 +3,6 @@
  * @brief IMU 姿态辅助计算与角速度桥接
  * @details
  * 本模块对 IMU660RC 输出进行轻量转换，向控制环提供：
- * - 基于四元数的重力向量分量；
  * - 统一量纲后的 gyro_z 实时反馈；
  * - 若干数学辅助函数（快速平方根、反平方根、atan2 兼容实现）。
  *
@@ -12,18 +11,19 @@
 #include "zf_common_headfile.h"
 #include "math.h"
 #include "imu.h"
-
 #ifndef M_PI
 #define M_PI 3.14159265358979f
 #endif
 
-/**< Z 轴陀螺仪向外输出前缩放乘数：由底盘转向几何、硬件灵敏度及控制目标共同决定的经验值 */
+/**< Z 轴陀螺仪输出缩放系数 0.005f：将 IMU660RC 原始角速度(dps)转为控制环使用的统一量纲。\n     * 数值 = 硬件灵敏度系数 × 底盘转向几何修正，由实测标定确定；\n     * 过大会导致转向环震荡，过小则 yaw 反馈不足、弯道响应迟钝。 */
 #define IMU_GYRO_Z_SCALE (0.005f)
+#define IMU_GYRO_Z_SIGN (1.0f)     /* 驱动 gyro_z 顺时针为负；控制差速约定左转为正，需在桥接层翻转。 */
+#define IMU_GYRO_Z_LPF_ALPHA 0.80f /* gyro_z 一阶低通滤波系数 a：越大越跟手、越小越平滑。 */
 #define IMU_GYRO_ZERO_CALIB_SAMPLES (64)
 #define IMU_GYRO_ZERO_CALIB_DELAY_MS (4)
-
 volatile float gyro_z = 0.0f;
 static float imu_gyro_z_zero_bias = 0.0f;
+static LowPassFilter_t imu_gyro_z_filter = {0}; /* gyro_z 一阶低通滤波状态。 */
 
 /**
  * @brief 上电标定 gyro_z 零偏
@@ -58,45 +58,12 @@ void imu_calibrate_gyro_z_zero_drift(void)
         imu_gyro_z_zero_bias = 0.0f;
     }
     gyro_z = 0.0f;
-}
-
-/**
- * @brief 由四元数计算重力向量分量
- * @details
- * 驱动层四元数顺序为 [y, x, z, w]，此处先重排为标准 (w,x,y,z) 再计算。
- * 允许按需传入空指针以跳过不关心分量，减少不必要写操作。
- */
-void imu_update_gravity_vector_from_quaternion(float *vx, float *vy, float *vz)
-{
-    float qw;
-    float qx;
-    float qy;
-    float qz;
-
-    /* 1) 驱动当前导出的顺序为 [y, x, z, w]，先重排到标准四元数 */
-    qx = imu660rc_quarternion[1];
-    qy = imu660rc_quarternion[0];
-    qz = imu660rc_quarternion[2];
-    qw = imu660rc_quarternion[3];
-
-    /* 2) 按需输出各分量，空指针表示上层不关心该轴 */
-    if (0 != vx)
-    {
-        *vx = 2.0f * (qx * qz - qw * qy);
-    }
-    if (0 != vy)
-    {
-        *vy = 2.0f * (qw * qx + qy * qz);
-    }
-    if (0 != vz)
-    {
-        *vz = qw * qw - qx * qx - qy * qy + qz * qz;
-    }
+    imu_gyro_z_filter.out_last = 0.0f; /* 滤波状态一并归零，避免上电首拍从旧值跳变。 */
 }
 
 /**
  * @brief 更新控制环使用的 Z 轴角速度
- * @details 将驱动原始值转换为控制器统一量纲，避免各模块重复转换。
+ * @details 将驱动原始值转换为控制器统一量纲，并统一为左转/逆时针正，避免控制环分散处理符号。
  */
 void imu_update_gyro_z_from_imu660rc(void)
 {
@@ -104,7 +71,9 @@ void imu_update_gyro_z_from_imu660rc(void)
 
     /* 统一在此处做量纲转换，其他模块直接读 gyro_z */
     gyro_z_now = imu660rc_gyro_transition(imu660rc_gyro_z);
-    gyro_z = (gyro_z_now - imu_gyro_z_zero_bias) * IMU_GYRO_Z_SCALE;
+    gyro_z = (gyro_z_now - imu_gyro_z_zero_bias) * IMU_GYRO_Z_SCALE * IMU_GYRO_Z_SIGN;
+    /* 一阶低通：抑制角速度噪声与高频抖动，系数由 IMU_GYRO_Z_LPF_ALPHA 宏调节。 */
+    low_pass_filter_mt(&imu_gyro_z_filter, &gyro_z, IMU_GYRO_Z_LPF_ALPHA);
 }
 
 /**

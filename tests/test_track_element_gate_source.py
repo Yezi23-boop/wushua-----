@@ -8,136 +8,158 @@ A_RUN_FLY_C = ROOT / "project" / "user" / "a_run_fly.c"
 A_RUN_FLY_H = ROOT / "project" / "user" / "a_run_fly.h"
 A_RUN_TRACK_ELEMENT_C = ROOT / "project" / "user" / "a_run_track_element.c"
 A_RUN_TRACK_ELEMENT_H = ROOT / "project" / "user" / "a_run_track_element.h"
+A_RUN_RING_C = ROOT / "project" / "user" / "a_run_ring.c"
+A_RUN_RING_H = ROOT / "project" / "user" / "a_run_ring.h"
+A_RUN_CYLINDER_C = ROOT / "project" / "user" / "a_run_cylinder.c"
+A_RUN_CYLINDER_H = ROOT / "project" / "user" / "a_run_cylinder.h"
+A_RUN_WALL_C = ROOT / "project" / "user" / "a_run_wall.c"
+A_RUN_WALL_H = ROOT / "project" / "user" / "a_run_wall.h"
+A_RUN_CROSS_C = ROOT / "project" / "user" / "a_run_cross.c"
+A_RUN_CROSS_H = ROOT / "project" / "user" / "a_run_cross.h"
+IMU_C = ROOT / "project" / "user" / "imu.c"
+ADC_C = ROOT / "project" / "user" / "ADC.c"
 A_RUN_C = ROOT / "project" / "user" / "a_run.c"
 FUYA_C = ROOT / "project" / "user" / "FUYA.c"
 FUYA_H = ROOT / "project" / "user" / "FUYA.h"
 EEPROM_H = ROOT / "project" / "service" / "eeprom.h"
 EEPROM_C = ROOT / "project" / "service" / "eeprom.c"
 MENU_C = ROOT / "project" / "service" / "menu.c"
+MOTOR_C = ROOT / "project" / "service" / "motor.c"
+PID_C = ROOT / "project" / "service" / "pid.c"
 
 
 def _read(path):
     return path.read_text(encoding="utf-8")
 
 
-def test_track_element_gate_contract_is_wired():
-    header = _read(A_RUN_MODE_H)
+def _function_body(source, start_sig, next_sig):
+    start = source.index(start_sig)
+    end = source.index(next_sig, start)
+    return source[start:end]
+
+
+def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
+    mode_header = _read(A_RUN_MODE_H)
     mode_source = _read(A_RUN_MODE_C)
-    source = _read(A_RUN_TRACK_ELEMENT_C)
+    track_source = _read(A_RUN_TRACK_ELEMENT_C)
     track_header = _read(A_RUN_TRACK_ELEMENT_H)
     runner = _read(A_RUN_C)
 
-    assert "void circle_check_l(uint8 allow_entry);" not in header
-    assert "RingStruct" not in header
-    assert "ring_data" not in header
-    assert "FlyState" not in header
-    assert "FLY_STATE_" not in header
-    assert "void a_run_mode_update_track_element_gate(void);" in header
-    assert "int8 a_run_mode_get_expected_element(void);" in header
-    assert "int8 a_run_mode_get_cylinder_state(void);" in header
-    assert "a_run_mode_get_ring_yaw_delta_sum" not in header
-    assert "a_run_mode_get_ring_encoder" not in header
-    assert "a_run_mode_get_ring_diff_set" not in header
+    assert "void a_run_mode_update_track_element_gate" not in mode_header
+    assert "void a_run_track_element_update_gate(float *speed, float *angle_target);" in track_header
+    assert "int8 a_run_track_element_get_expected_element(void);" in track_header
+    assert "static enum TrackElement expected_element = ELEMENT_NONE;" in track_source
 
-    assert "typedef struct" in track_header
-    assert "} RingStruct;" in track_header
-    assert "extern RingStruct ring_data;" in track_header
-    assert "RingStruct ring_data = {0};" in source
-    assert "static RingStruct ring_data" not in source
-    assert "enum TrackElement" in source
-    assert "ELEMENT_LEFT_RING = 1" in source
-    assert "ELEMENT_RIGHT_RING = 2" in source
-    assert "ELEMENT_CYLINDER = 3" in source
-    assert "static enum TrackElement expected_element = ELEMENT_LEFT_RING;" in source
-    assert "enum CylinderStep" in source
-    assert "ring_finish_event = 1;" in source
-    assert "static uint8 ring_take_finish_event(void)" in source
-    assert "void a_run_track_element_update_gate(void)" in source
-    assert "static void circle_check_l(uint8 allow_entry)" in source
-    assert "circle_check_l(1);" in source
-    assert "circle_check_l(0);" in source
-    assert "if (app.start.circle_flags != 1)" in source
-    assert "start_state != START_STATE_2 || app.start.circle_flags != 1" not in source
-    assert "void a_run_track_element_update_gate(void);" in track_header
-    assert "void a_run_track_element_update_integrals(void);" in track_header
-    assert "a_run_track_element_get_ring_yaw_delta_sum" not in track_header
-    assert "a_run_track_element_get_ring_encoder" not in track_header
-    assert "a_run_track_element_get_ring_diff_set" not in track_header
-    assert "a_run_track_element_update_gate();" in mode_source
-    assert "a_run_track_element_update_integrals();" in mode_source
-    assert "a_run_track_element_get_ring_yaw_delta_sum" not in mode_source
-    assert "a_run_track_element_get_ring_encoder" not in mode_source
-    assert "a_run_track_element_get_ring_diff_set" not in mode_source
+    run_time_1_body = _function_body(
+        runner, "void run_time_1(void)", "void run_time_2(void)")
+    run_time_2_body = _function_body(
+        runner, "void run_time_2(void)", "void run_time_3(void)")
 
-    run_time_1_body = runner[runner.index("void run_time_1(void)"):runner.index("void run_time_2(void)")]
-    run_time_2_body = runner[runner.index("void run_time_2(void)"):runner.index("void run_time_3(void)")]
-
-    assert "a_run_mode_update_track_element_gate();" in run_time_1_body
-    assert "gyro_integrals();" in run_time_1_body
-    assert run_time_1_body.index("a_run_mode_update_track_element_gate();") < run_time_1_body.index("gyro_integrals();")
-    assert "track_gate_div_10" not in runner
-    assert "a_run_mode_update_track_element_gate();" not in run_time_2_body
-    assert "gyro_integrals();" not in run_time_2_body
+    assert "read_AD();" in run_time_1_body
+    assert "Encoder_get(&PID.left_speed, &PID.right_speed);" in run_time_1_body
+    assert "imu_update_gyro_z_from_imu660rc();" in run_time_1_body
+    assert "if (steer_div_10 >= 3)" in run_time_1_body
+    assert "if (steer_div_10 >= 2)" not in run_time_1_body
+    assert "pid_steer_update(&PID.steer, Err, 0.0f);" in run_time_1_body
+    assert "static float speed_active = 0.0f;" in runner
+    assert "static int speed_active" not in runner
+    assert "speed_active = app.speed.speed_run;" in run_time_1_body
+    assert "a_run_track_element_update_gate(&speed_active, &PID.steer.output);" in run_time_1_body
+    assert "pid_angle_update(&PID.angle, PID.steer.output, gyro_z * app.angle.gyro_feedback_scale);" in run_time_1_body
+    assert run_time_1_body.index("pid_steer_update(&PID.steer, Err, 0.0f);") < run_time_1_body.index(
+        "a_run_track_element_update_gate(&speed_active, &PID.steer.output);"
+    )
+    assert "a_run_track_element_update_gate" not in mode_source
+    assert "a_run_track_element_update_gate" not in run_time_2_body
 
 
-def test_cylinder_peak_angle_api_is_split_from_element_state_machine():
-    fuya_header = _read(FUYA_H)
+def test_main_control_uses_linear_differential_and_keeps_diff_function_unused():
+    pid_source = _read(PID_C)
+    pid_header = _read(ROOT / "project" / "service" / "pid.h")
+    runner = _read(A_RUN_C)
+    run_time_1_body = _function_body(
+        runner, "void run_time_1(void)", "void run_time_2(void)")
+
+    # 非线性差速分配函数保留备用，但主控制链不再调用，只用基础线性差速。
+    assert "void Pid_Differential(float speed_run, float diff_output," in pid_source
+    assert "void Pid_Differential(float speed_run, float diff_output," in pid_header
+    assert "Pid_Differential(" not in run_time_1_body
+    assert "diff_enable" not in run_time_1_body
+    assert "left_target = speed_active - PID.angle.output;" in run_time_1_body
+    assert "right_target = speed_active + PID.angle.output;" in run_time_1_body
+
+
+def test_imu_drops_wall_pitch_history_after_wall_uses_adc_only():
+    imu_source = _read(IMU_C)
+    imu_header = _read(ROOT / "project" / "user" / "imu.h")
+
+    assert "IMU_PITCH_WALL_WINDOW_MS" not in imu_header
+    assert "imu_get_pitch_current_x10" not in imu_header
+    assert "imu_get_pitch_wall_window_ago_x10" not in imu_header
+    assert "imu_pitch_history" not in imu_source
+    assert "imu_get_pitch_current_x10" not in imu_source
+    assert "imu_get_pitch_wall_window_ago_x10" not in imu_source
+
+
+def test_imu_and_fuya_match_current_fixed_output_strategy():
+    imu_source = _read(IMU_C)
+    imu_header = _read(ROOT / "project" / "user" / "imu.h")
     fuya_source = _read(FUYA_C)
-    track_source = _read(A_RUN_TRACK_ELEMENT_C)
+    fuya_header = _read(FUYA_H)
+    runner = _read(A_RUN_C)
 
-    assert "void fuya_apply_cylinder_peak_angle(void);" in fuya_header
-    assert "void fuya_restore_cylinder_peak_angle(void);" in fuya_header
-    assert "void fuya_apply_cylinder_peak_angle(void)" in fuya_source
-    assert "void fuya_restore_cylinder_peak_angle(void)" in fuya_source
+    assert "#define IMU_GYRO_Z_SIGN (1.0f)" in imu_source
+    assert "imu_update_gravity_vz_from_roll" not in imu_source
+    assert "imu_get_gravity_vz" not in imu_source
+    assert "imu_roll_delta_deg" not in imu_source
+    assert "extern float acc_1;" not in imu_header
+    assert "imu_update_gravity_vz_from_roll" not in imu_header
+    assert "imu_get_gravity_vz" not in imu_header
+    assert "imu_update_gravity_vz_from_roll" not in runner
+    assert "imu_update_gravity_vz_from_quaternion" not in imu_source
+    assert "imu_update_gravity_vz_from_quaternion" not in imu_header
 
-    assert "fuya_apply_cylinder_peak_angle();" in track_source
-    assert "fuya_restore_cylinder_peak_angle();" in track_source
-    assert "#define CYLINDER_TOP_GRAVITY_Z -0.3f" in track_source
-    assert "#define CYLINDER_GROUND_GRAVITY_Z 0.3f" in track_source
-    assert "CYLINDER_STABLE_DELAY_COUNT 50u" in track_source
-    assert "LowPassFilter_t cylinder_vz_low_pass" in track_source
-    assert "low_pass_filter_mt(&cylinder_vz_low_pass" in track_source
-    assert "CYLINDER_VZ_FILTER_OLD" not in track_source
-    assert "CYLINDER_VZ_FILTER_NEW" not in track_source
-
-
-def test_fly_ramp_logic_is_split_behind_run_mode_wrapper():
-    mode_source = _read(A_RUN_MODE_C)
-    fly_source = _read(A_RUN_FLY_C)
-    fly_header = _read(A_RUN_FLY_H)
-
-    assert "void a_run_fly_update_speed(int *speed);" in fly_header
-    assert "static int8 fly_is_acc_z_ramp_pose(void)" in fly_source
-    assert "static int8 fly_is_ramp_lost_signal(void)" in fly_source
-    assert "static int8 fly_is_center_line(void)" in fly_source
-    assert "static void fly_reset_state(void)" in fly_source
-    assert "void a_run_fly_update_speed(int *speed)" in fly_source
-    assert "} FlyState;" in fly_header
-    assert "FLY_STATE_IDLE = 0" in fly_header
-    assert "enum FlyState" not in fly_source
-
-    assert "void a_run_mode_update_fly_speed(int *speed)" in mode_source
-    assert "a_run_fly_update_speed(speed);" in mode_source
-    assert "fly_is_ramp_lost_signal" not in mode_source
+    assert "void fuya_set_percent(float percent);" in fuya_header
+    assert "void fuya_stop(void);" in fuya_header
+    assert "fuya_percent_to_pwm" in fuya_source
+    assert "pwm_init(PWMA_CH2N_P03, 50, FUYA_PWM_MIN);" in fuya_source
+    assert "void fuya_apply_cylinder_peak_angle" not in fuya_header
+    assert "void fuya_apply_cylinder_peak_angle" not in fuya_source
+    assert "fuya_set_percent(app.start.fuya_xili);" in runner
 
 
-def test_track_mode_config_and_menu_are_present():
-    eeprom_header = _read(EEPROM_H)
-    eeprom_source = _read(EEPROM_C)
+def test_fly_menu_draw_puts_seesaw_mode_on_first_editable_row():
     menu_source = _read(MENU_C)
 
-    assert "int16 track_mode;" in eeprom_header
-    assert "config->start.track_mode = 0;" in eeprom_source
-    assert "config->start.track_mode = (int16)read_int(" in eeprom_source
-    assert "save_int(config->start.track_mode" in eeprom_source
+    assert '{"<<SEESAW", menu_fly_items' in menu_source
+    assert '"mode:"' not in menu_source
+    assert menu_source.count('"seesaw_mode", &app.fly.seesaw_mode') == 2
+    assert 'MENU_META(MENU_ITEM_BOOL, 1, 0)' in menu_source
+    assert '"fly_speed", &app.fly.fly_speed' in menu_source
+    assert '"seesaw_spd", &app.fly.seesaw_speed' in menu_source
 
-    assert '"trk_mode"' in menu_source
-    assert "app.start.track_mode" in menu_source
-    assert "a_run_mode_get_expected_element()" in menu_source
-    assert "a_run_mode_get_cylinder_state()" in menu_source
-    assert "ring_data.yaw_delta_sum" in menu_source
-    assert "ring_data.encoder" in menu_source
-    assert "ring_data.diff_set" in menu_source
-    assert "a_run_mode_get_ring_yaw_delta_sum" not in menu_source
-    assert "a_run_mode_get_ring_encoder" not in menu_source
-    assert "a_run_mode_get_ring_diff_set" not in menu_source
+
+def test_fly_menu_exposes_land_confirm_count_in_fly_mode():
+    menu_source = _read(MENU_C)
+
+    assert '"land_cnt", &app.fly.fly_land_confirm_count' in menu_source
+    assert 'MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}' in menu_source
+
+
+def test_cross_menu_entry_is_reachable_and_has_subpage():
+    menu_source = _read(MENU_C)
+
+    assert '{"CROSS", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_CROSS}' in menu_source
+    assert '{"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU}' in menu_source
+    assert '"enc_target", &app.cross.encoder_target' in menu_source
+    assert '"adc_a_1", &app.cross.adc_a_1' in menu_source
+    assert '"adc_b_1", &app.cross.adc_b_1' in menu_source
+    assert '"adc_c_l", &app.cross.adc_c_l' in menu_source
+
+
+def test_eeprom_fly_config_no_longer_uses_readback_guards():
+    eeprom_source = _read(EEPROM_C)
+
+    assert "if (config->fly.seesaw_mode != 0)" not in eeprom_source
+    assert "if (config->fly.seesaw_speed < 0 || config->fly.seesaw_speed > 200)" not in eeprom_source
+    assert "if (config->fly.seesaw_release_step < 0.0f || config->fly.seesaw_release_step > 10.0f)" not in eeprom_source

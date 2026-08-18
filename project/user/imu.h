@@ -7,8 +7,7 @@
  * @file imu.h
  * @brief IMU 姿态辅助接口声明
  * @details
- * 对外提供重力向量计算、角速度更新与基础数学工具函数，
- * 供主控制环、负压控制与调试链路复用。
+ * 对外提供角速度更新与基础数学工具函数，供主控制环复用。
  */
 
 extern volatile float gyro_z; /* 当前 Z 轴角速度反馈量 (中断与主循环共享) */
@@ -18,14 +17,6 @@ extern volatile float gyro_z; /* 当前 Z 轴角速度反馈量 (中断与主循
  * @details 在静止状态下采样均值，用于后续去零飘。
  */
 void imu_calibrate_gyro_z_zero_drift(void);
-
-/**
- * @brief 由四元数更新重力向量
- * @param vx 输出重力向量 X 分量，可为 0 表示不需要
- * @param vy 输出重力向量 Y 分量，可为 0 表示不需要
- * @param vz 输出重力向量 Z 分量，可为 0 表示不需要
- */
-void imu_update_gravity_vector_from_quaternion(float *vx, float *vy, float *vz);
 
 /**
  * @brief 更新并计算用于控制的 Z 轴角速度率 (gyro_z)

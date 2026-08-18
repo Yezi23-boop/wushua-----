@@ -20,6 +20,12 @@ void motor_Init(void);
 void motor_output(int32 lpwm, int32 rpwm);
 
 /**
+ * @brief 10ms 周期电机堵转检测
+ * @details 由 10ms 状态环调用，根据最近一次实际 PWM 和编码器速度触发 stop 保护。
+ */
+void motor_stall_check_10ms(void);
+
+/**
  * @brief 丢线检测保护函数
  * @details 当所有电感传感器均未检测到信号时，触发紧急停车
  */
@@ -30,13 +36,6 @@ void lost_lines(void);
  * @details 实时监测电池电压，防止锂电池过放电
  */
 void dianya_jiance(void);
-
-/**
- * @brief 速度转占空比的前馈查表函数
- * @param speed 目标物理速度
- * @return 对应的 PWM 基础占空比
- */
-int32 motor_speed_to_duty(float speed);
 
 /* --- 全局变量声明 --- */
 extern volatile uint8 stop;   /**< 停车标志位：1 表示停止，0 表示运行 */

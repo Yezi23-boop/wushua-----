@@ -1,13 +1,10 @@
 #include "pid.h"
 
-///* 左右轮编码器组合滤波状态：符号纠错 + 3 点中值 + EMA(1/2) */
-// static EncoderMedian3EmaFilterState encoder_filter_left;
-// static EncoderMedian3EmaFilterState encoder_filter_right;
 LowPassFilter_t encoder_filter_left;
 LowPassFilter_t encoder_filter_right;
 /* 内部中间变量 */
-float speed_l = 0; /* 左轮当前速度反馈 */
-float speed_r = 0; /* 右轮当前速度反馈 */
+float speed_l = 0;        /* 左轮当前速度反馈，取绝对值，经低通滤波后供普通速度环使用。 */
+float speed_r = 0;        /* 右轮当前速度反馈，取绝对值，经低通滤波后供普通速度环使用。 */
 
 /* 实例化全局控制器聚合结构 */
 PID_Controllers PID;
@@ -35,6 +32,15 @@ void pid_speed_init(PID_Speed *pid, float kp, float ki, float kd, float max_out,
     pid->min_output = min_out;
 }
 
+/**
+ * @brief 清零速度环运行时状态（增量式 PID 历史误差和输出）
+ *
+ * 在元素切换（跷跷板刹车/恢复、圆环进出等）或状态机复位时调用，
+ * 避免上一段控制残差（error/prev_error/prev2_error/output）影响新阶段响应。
+ * 不清除 Kp/Ki/Kd 和限幅参数，仅复位运行时累积量。
+ *
+ * @param pid 速度环 PID 结构指针，指向 PID.left_speed 或 PID.right_speed。
+ */
 void pid_speed_reset(PID_Speed *pid)
 {
     pid->error = 0.0f;
@@ -68,21 +74,21 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
 
 /**
  * @brief 读取并处理编码器数据
- * @details 读取硬件编码器计数值，执行组合滤波后再转换为速度
+ * @details 读取硬件编码器计数值，执行低通滤波后再转换为速度
  * @param left 左轮 PID 结构指针
  * @param right 右轮 PID 结构指针
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
-    //    int32 fixed_left_count;
-    //    int32 fixed_right_count;
-
-    //    fixed_left_count = FilterEncoderCountMedian3EmaHalf((int32)encoder_get_count(TIM4_ENCOEDER),
-    //                                                        &encoder_filter_left);
-    //    fixed_right_count = FilterEncoderCountMedian3EmaHalf(-(int32)encoder_get_count(TIM3_ENCOEDER),
-    //                                                         &encoder_filter_right);
-    speed_l = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.2f;
-    speed_r = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.2f;
+    float speed_l_signed; /* 左轮带符号未滤波速度，仅作 speed_l 取绝对值的源。 */
+    float speed_r_signed; /* 右轮带符号未滤波速度，仅作 speed_r 取绝对值的源。 */
+    static float encoder_sum = 0.0f; /* 上电后左右轮平均累计里程，单位沿用项目标尺 cm。 */
+    /* 编码器脉冲→速度转换系数 0.175f：轮周长(cm) / 编码器线数 / 减速比 / 采样周期(s)，
+     * 需根据实际硬件标定。右轮取反是因为编码器安装方向与左轮相反。 */
+    speed_r_signed = (int32)encoder_get_count(TIM4_ENCOEDER) * 0.175f;
+    speed_l_signed = -(int32)encoder_get_count(TIM3_ENCOEDER) * 0.175f;
+    speed_r = speed_r_signed;
+    speed_l = speed_l_signed;
     if (speed_l < 0)
     {
         speed_l = -speed_l;
@@ -91,10 +97,16 @@ void Encoder_get(PID_Speed *left, PID_Speed *right)
     {
         speed_r = -speed_r;
     }
-    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.5f);
-    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.5f);
-    //    speed_l = (float)fixed_left_count * 0.2f;
-    //    speed_r = (float)fixed_right_count * 0.2f;
+    /* 低通滤波 alpha=0.25f：一阶 IIR 滤波器系数，y[n]=alpha*x[n]+(1-alpha)*y[n-1]。
+     * 0.40 约对应 2ms 周期下 ~5ms 的阶跃响应时间常数，平衡响应速度与平滑度。 */
+    low_pass_filter_mt(&encoder_filter_left, &speed_l, 0.40f);
+    low_pass_filter_mt(&encoder_filter_right, &speed_r, 0.40f);
+
+    encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
+    if (encoder_sum >= app.start.encoder_stop_distance_cm)
+    {
+        stop = 1;
+    }
 
     left->speed = speed_l;
     right->speed = speed_r;
@@ -121,8 +133,6 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
     delta_output = pid->Kp * (pid->error - pid->prev_error) + pid->Ki * pid->error + pid->Kd * (pid->error - 2.0f * pid->prev_error + pid->prev2_error);
     pid->output += delta_output;
 
-    // 更新输出并限幅
-    //   pid->output += delta_output;
     if (pid->output > pid->max_output)
     {
         pid->output = pid->max_output;
@@ -132,7 +142,6 @@ void pid_speed_update(PID_Speed *pid, float target, float actual)
         pid->output = -pid->max_output;
     }
 
-    // 更新误差历史
     pid->prev2_error = pid->prev_error;
     pid->prev_error = pid->error;
 }
@@ -173,10 +182,10 @@ void pid_steer_update(PID_Steer *pid, float error, float gyro_feedback)
 }
 
 /**
- * @brief 角度环 PID 更新（位置式算法）
+ * @brief 角速度环 PID 更新（位置式算法）
  * @details Uses the calibrated gyro_z feedback to suppress yaw oscillation or support turn control
  * @param pid PID 结构指针
- * @param error 目标偏差（通常是 目标角度 - 当前角度）
+ * @param error 目标偏差（通常是 目标角速度 - 当前角速度）
  * @param gyro Calibrated steering feedback value
  */
 void pid_angle_update(PID_Steer *pid, float error, float gyro)
@@ -202,39 +211,48 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
 
 /**
  * @brief 差速分配函数
- * @details 将转向控制器的输出转化为左右轮的目标速度差
+ * @details 大弯主要降低内轮；负压提供额外抓地力，允许外轮小幅增速以保持转弯力度。
+ * 备用：当前主控制链不使用非线性差速分配，保留以备后续调参启用。
  * @param speed_run 基础运行速度（直道速度）
+ * @param diff_output 角速度内环输出的差速控制量
  * @param left_target 输出：左轮目标速度
  * @param right_target 输出：右轮目标速度
- * @param Scope 差速系数映射范围（通常根据赛道宽度和车体特性标定）
+ * @param scope 差速归一化范围，正式控制链传入角速度内环限幅
+ * @param inner_gain 内轮减速增益
+ * @param outer_gain 外轮增速增益
  */
-void Pid_Differential(float speed_run, float *left_target, float *right_target, float Scope)
+void Pid_Differential(float speed_run, float diff_output,
+                      float *left_target, float *right_target,
+                      float scope, float inner_gain, float outer_gain)
 {
-    float k;
-    float delta = PID.steer.output; /* 获取当前转向差速控制输出 */
+    float ratio;
+    float inner_scale;
+    float outer_scale;
 
-    /* Scope 作为教程版 eleOut->k 的归一化范围，默认按 -100~100 处理 */
-    if (Scope < 0.001f)
-        Scope = 100.0f;
-
-    k = delta / Scope;
-
-    /* 教程版差速限幅：将 k 限制在 -0.65 ~ 0.65，避免转向过猛 */
-    if (k > 0.65f)
-        k = 0.65f;
-    else if (k < -0.65f)
-        k = -0.65f;
-
-    if (k >= 0.0f) /* 左转：左轮减速更多，右轮只做小幅补偿 */
+    if (scope < 1.0f)
     {
-        *left_target = speed_run * (1.0f - k);
-        *right_target = speed_run * (1.0f + k * 0.2f);
+        scope = 1.0f;
     }
-    else /* 右转：右轮减速更多，左轮只做小幅补偿 */
-    {
-        k = -k;
 
-        *left_target = speed_run * (1.0f + k * 0.2f);
-        *right_target = speed_run * (1.0f - k);
+    ratio = func_abs(diff_output) / scope;
+    if (ratio > 1.0f)
+    {
+        ratio = 1.0f;
+    }
+
+    /* 小弯保持柔和，大弯快速增强内外轮差速。 */
+    ratio = ratio * (0.6f + 0.4f * ratio);
+    inner_scale = 1.0f - inner_gain * ratio;
+    outer_scale = 1.0f + outer_gain * ratio;
+
+    if (diff_output >= 0.0f)
+    {
+        *left_target = speed_run * inner_scale;
+        *right_target = speed_run * outer_scale;
+    }
+    else
+    {
+        *left_target = speed_run * outer_scale;
+        *right_target = speed_run * inner_scale;
     }
 }
