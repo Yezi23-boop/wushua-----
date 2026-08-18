@@ -27,19 +27,6 @@ extern volatile uint16 ad5; /**< 第五路横向中间电感，归一化值 0~10
 extern volatile float Err;
 
 /**
- * @brief 强信号区标志：四路电感和超过阈值时为1，转向外环据此锁定姿态。
- */
-extern volatile uint8 adc_strong_signal;
-
-/**
- * @brief 最近三次有效解算的Err符号历史（-1/0/+1，[0]为最新）。
- *
- * 历史随每拍解算实时更新，强信号区内Err符号即拖拽方向，
- * 转向外环据此多数表决十字拖拽方向。
- */
-extern volatile int8 adc_err_sign_hist[3];
-
-/**
  * @brief 电感原始采样最大值记录
  *
  * 仅用于调试页观察和现场手动标定参考，不参与当前归一化计算。

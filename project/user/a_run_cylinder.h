@@ -1,7 +1,7 @@
 #ifndef __A_RUN_CYLINDER_H__
 #define __A_RUN_CYLINDER_H__
 
-#include "a_run_track_element.h"
+#include "zf_common_typedef.h"
 
 /**
  * @brief 圆桶状态机阶段。

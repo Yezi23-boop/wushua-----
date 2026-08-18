@@ -21,6 +21,7 @@ static FlyState fly_state = FLY_STATE_IDLE;          /**< 飞坡模式状态机�
 static SeesawState seesaw_state = SEESAW_STATE_IDLE; /**< 停止等待状态机阶段，兼作两种模式的释放期标记。 */
 static uint8 seesaw_finish_event = 0;                /* 跷跷板恢复完成事件，由元素仲裁在 2ms 链路中单次消费。 */
 static float seesaw_release_speed = 0.0f;            /* 释放阶梯增速当前输出值，保留 app.speed.speed_run 的小数精度。 */
+static float seesaw_release_start_speed = 0.0f;      /* 进入 RELEASE 时的起步速度，用于 PWM 上限随速度插值。 */
 volatile uint8 seesaw_lost_line_blocked = 0;         /* 飞坡/跷跷板高风险窗口屏蔽丢线。 */
 volatile int32 seesaw_pwm_output_limit = 0;          /* 释放期间限制最终 PWM 占空比，0 表示不额外限制。 */
 
@@ -28,12 +29,7 @@ volatile int32 seesaw_pwm_output_limit = 0;          /* 释放期间限制最终
 static uint8 fly_land_confirm_count = 0; /* 飞坡落地回升连续确认计数，单位为 2ms 周期。 */
 
 /* --- 入口判定窗口共用变量，两种模式互斥运行故复用 --- */
-static int entry_detect_count = 0;    /* 入口窗口内累计有效命中次数，单位为 2ms 周期。 */
-static int entry_window_count = 0;    /* 入口确认窗口计数，单位为 2ms 周期。 */
-static uint16 entry_last_ad1 = 0;     /* 上一拍 ad1，供飞坡模式递减检查。 */
-static uint16 entry_last_ad4 = 0;     /* 上一拍 ad4，供飞坡模式递减检查。 */
-static uint16 entry_last_ad5 = 0;     /* 上一拍 ad5，供飞坡模式递减检查。 */
-static uint8 entry_last_ad_valid = 0; /* 上一拍 ad1/ad4/ad5 是否可用于递减比较。 */
+static int entry_detect_count = 0; /* 入口连续弱磁命中计数，单位为 2ms 周期。 */
 
 /* --- 停止等待模式内部变量 --- */
 static int seesaw_brake_count = 0;           /**< 零速闭环刹车计数，单位为 2ms 周期。 */
@@ -42,61 +38,63 @@ static float seesaw_creep_distance = 0.0f;   /**< 零速刹车后前挪里程积
 volatile uint8 seesaw_zero_brake_active = 0; /**< 零速闭环刹车窗口，主控链路用 signed 速度反馈压到 0。 */
 volatile uint8 seesaw_centering_active = 0;  /**< 跷跷板前挪/恢复期临时居中权重开关。 */
 
+/* --- 入口判定共用阈值（飞坡与停止等待两模式统一，取停止等待数值） --- */
+#define SEESAW_ENTRY_SIDE_TH 20u  /* 入口横向电感 ad1/ad4 弱磁阈值 */
+#define SEESAW_ENTRY_CENTER_TH 3u /* 入口竖向电感 ad2/ad3 弱磁阈值 */
+#define SEESAW_ENTRY_AD5_TH 8u    /* 入口中横电感 ad5 弱磁阈值 */
+
 /* --- 飞坡模式专用阈值 --- */
-#define FLY_DETECT_SIDE_TH 20u    /* 飞坡入口横向电感阈值 */
-#define FLY_DETECT_CENTER_TH 3u   /* 飞坡入口竖向电感阈值 */
 #define FLY_LAND_SIDE_TH 20u      /* 飞坡落地横向电感回升阈值 */
 #define FLY_ENTRY_WINDOW_COUNT 10 /* 飞坡入口确认窗口，10 * 2ms = 20ms。 */
 
 /* --- 停止等待模式专用阈值 --- */
-#define SEESAW_DETECT_SIDE_TH 20u    /* 停止等待入口横向电感阈值 */
-#define SEESAW_DETECT_CENTER_TH 8u   /* 停止等待入口竖向电感阈值 */
 #define SEESAW_LAND_SIDE_TH 25u      /* CHECK 阶段横向电感恢复阈值 */
 #define SEESAW_LAND_CENTER_TH 10u    /* CHECK 阶段竖向电感恢复阈值 */
 #define SEESAW_ENTRY_WINDOW_COUNT 20 /* 停止等待入口确认窗口，20 * 2ms = 40ms。 */
-#define SEESAW_BRAKE_COUNT 10        /* 10 * 2ms = 20ms，用零速闭环先抵消上板惯性。 */
+#define SEESAW_BRAKE_COUNT 20        /* 10 * 2ms = 20ms，用零速闭环先抵消上板惯性。 */
 
 /* --- 释放阶段共用限制 --- */
-#define FLY_PWM_LIMIT_RECOVER_LATE 4000 /* 释放阶段 PWM 上限，给循迹留出纠偏能力。 */
+#define FLY_PWM_LIMIT_RECOVER_START 6000             /* 释放起步 PWM 上限，给低速回线留纠偏余量。 */
+#define FLY_PWM_LIMIT_RECOVER_END MOTOR_OUTPUT_PWM_LIMIT /* 释放爬满速度时的上限，回到全局限幅(9000)。 */
 
 /**
  * @brief 更新飞坡/停止等待模式共用的入口判定窗口。
  *
- * 两种模式共用弱磁窗口和计数状态（互斥运行）；飞坡额外要求
- * ad1/ad4/ad5 递减，停止等待直接累计弱磁命中。
+ * 两种模式互斥运行，共用同一套弱磁命中计数：连续弱磁拍累计，
+ * 达到设定次数后入口成立；任一拍非弱磁即清零重来。窗口上限只作
+ * 兜底，防止菜单命中数配置过大时入口窗口无限拉长。
  *
  * @param allow_entry 当前元素仲裁是否允许开启入口检测。
  * @param side_th 横向电感弱磁阈值。
  * @param center_th 竖向电感弱磁阈值。
- * @param hit_limit 窗口内需要累计到的有效命中次数。
- * @param window_limit 入口统计窗口长度，单位为 2ms 周期。
- * @param require_decrease 1-要求 ad1/ad4/ad5 递减；0-弱磁拍直接计为命中。
+ * @param ad5_th 中横电感弱磁阈值。
+ * @param hit_limit 入口成立所需的连续弱磁命中次数。
+ * @param window_limit 入口统计窗口上限，单位为 2ms 周期。
  * @return uint8 1-入口成立，0-入口未成立。
  */
 static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
                                          uint16 side_th,
                                          uint16 center_th,
+                                         uint16 ad5_th,
                                          int hit_limit,
-                                         int window_limit,
-                                         uint8 require_decrease)
+                                         int window_limit)
 {
     uint8 weak_line;
-    uint8 entry_hit;
 
     weak_line = (uint8)(allow_entry != 0 &&
                         ad1 <= side_th &&
                         ad2 <= center_th &&
                         ad3 <= center_th &&
                         ad4 <= side_th &&
-                        ad5 < 8u);
-    entry_hit = 0;
+                        ad5 < ad5_th);
+
     if (weak_line != 0)
     {
         /*
          * 只在首次进入弱磁窗口时检查速度门槛，窗口期间不再检查。
          * 原因：上板后速度自然下降，连续检查会导致窗口断裂。
          */
-        if (entry_window_count == 0 && entry_detect_count == 0)
+        if (entry_detect_count == 0)
         {
             /*
              * 0.6f 速度门槛：要求当前速度不低于目标速度的 60%，避免起步/低速段
@@ -108,58 +106,21 @@ static uint8 a_run_fly_update_entry_gate(uint8 allow_entry,
                 return 0;
             }
         }
-        if (require_decrease == 0)
-        {
-            entry_hit = 1;
-        }
-        else if (entry_last_ad_valid != 0 &&
-                 ad1 <= entry_last_ad1 &&
-                 ad4 <= entry_last_ad4 &&
-                 ad5 <= entry_last_ad5)
-        {
-            entry_hit = 1;
-            entry_last_ad1 = ad1;
-            entry_last_ad4 = ad4;
-            entry_last_ad5 = ad5;
-        }
-        else if (entry_last_ad_valid == 0)
-        {
-            entry_last_ad1 = ad1;
-            entry_last_ad4 = ad4;
-            entry_last_ad5 = ad5;
-            entry_last_ad_valid = 1;
-        }
 
-        if (entry_hit != 0)
-        {
-            entry_window_count++;
-            entry_detect_count++;
-
-            if (entry_detect_count >= hit_limit)
-            {
-                entry_detect_count = 0;
-                entry_window_count = 0;
-                entry_last_ad_valid = 0;
-                return 1;
-            }
-        }
-        else if (entry_window_count > 0)
-        {
-            entry_window_count++;
-        }
-
-        if (entry_window_count >= window_limit)
+        entry_detect_count++;
+        if (entry_detect_count >= hit_limit)
         {
             entry_detect_count = 0;
-            entry_window_count = 0;
-            entry_last_ad_valid = 0;
+            return 1;
+        }
+        if (entry_detect_count >= window_limit)
+        {
+            entry_detect_count = 0;
         }
     }
     else
     {
         entry_detect_count = 0;
-        entry_window_count = 0;
-        entry_last_ad_valid = 0;
     }
 
     return 0;
@@ -212,11 +173,6 @@ void a_run_seesaw_reset(void)
     seesaw_state = SEESAW_STATE_IDLE;
     fly_land_confirm_count = 0;
     entry_detect_count = 0;
-    entry_window_count = 0;
-    entry_last_ad1 = 0;
-    entry_last_ad4 = 0;
-    entry_last_ad5 = 0;
-    entry_last_ad_valid = 0;
     seesaw_brake_count = 0;
     seesaw_wait_count = 0;
     seesaw_creep_distance = 0.0f;
@@ -226,6 +182,7 @@ void a_run_seesaw_reset(void)
     seesaw_finish_event = 0;
     seesaw_pwm_output_limit = 0;
     seesaw_release_speed = 0.0f;
+    seesaw_release_start_speed = 0.0f;
 }
 
 /**
@@ -249,15 +206,15 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
     {
     case SEESAW_STATE_IDLE:
         /*
-         * 普通赛道也可能出现单拍弱磁，跷跷板入口要求在 40ms 窗口内多次出现
-         * 五路弱磁，窗口内累计达到设定次数后刹车，不要求各路逐拍递减。
+         * 普通赛道也可能出现单拍弱磁，跷跷板入口要求在 40ms 窗口内连续多次
+         * 出现五路弱磁，累计达到设定次数后刹车。
          */
         if (a_run_fly_update_entry_gate(allow_entry,
-                                        SEESAW_DETECT_SIDE_TH,
-                                        SEESAW_DETECT_CENTER_TH,
+                                        SEESAW_ENTRY_SIDE_TH,
+                                        SEESAW_ENTRY_CENTER_TH,
+                                        SEESAW_ENTRY_AD5_TH,
                                         app.fly.seesaw_detect_count,
-                                        SEESAW_ENTRY_WINDOW_COUNT,
-                                        0) != 0)
+                                        SEESAW_ENTRY_WINDOW_COUNT) != 0)
         {
             seesaw_brake_count = 0;
             pid_speed_reset(&PID.left_speed);
@@ -347,8 +304,9 @@ void a_run_seesaw_update_speed(float *speed, uint8 allow_entry)
             stop = 0;
             seesaw_centering_active = 1;
             seesaw_release_speed = (float)app.fly.seesaw_speed;
+            seesaw_release_start_speed = seesaw_release_speed;
             seesaw_finish_event = 1;
-            seesaw_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
+            seesaw_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_START;
             seesaw_state = SEESAW_STATE_RELEASE;
         }
         break;
@@ -399,6 +357,19 @@ void a_run_seesaw_update_release_speed(float *speed)
     {
         seesaw_release_speed = target_speed;
     }
+
+    /* PWM 上限随释放速度线性爬升：起步 6000 留纠偏余量，爬到 speed_run 时回到全局限幅。 */
+    if (seesaw_release_start_speed < target_speed)
+    {
+        float release_ratio = (seesaw_release_speed - seesaw_release_start_speed) /
+                              (target_speed - seesaw_release_start_speed);
+        if (release_ratio > 1.0f)
+        {
+            release_ratio = 1.0f;
+        }
+        seesaw_pwm_output_limit = (int32)(FLY_PWM_LIMIT_RECOVER_START +
+            (FLY_PWM_LIMIT_RECOVER_END - FLY_PWM_LIMIT_RECOVER_START) * release_ratio);
+    }
 }
 
 /**
@@ -417,16 +388,15 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
     {
     case FLY_STATE_IDLE:
         /*
-         * 墙面后和普通赛道过渡段也可能出现短暂弱磁。
-         * 飞坡入口要求在短窗口内多次出现四路弱磁，且 ad1/ad4 持续递减，
-         * 确认整车正在真正离开电磁线后再切到 LOW，避免在跷跷板前提前误触发。
+         * 飞坡入口要求短窗口内连续多次出现五路弱磁后切到 LOW；
+         * 弱磁段按 fly_speed 低速通过，落地回升双路确认后进释放。
          */
         if (a_run_fly_update_entry_gate(allow_entry,
-                                        FLY_DETECT_SIDE_TH,
-                                        FLY_DETECT_CENTER_TH,
+                                        SEESAW_ENTRY_SIDE_TH,
+                                        SEESAW_ENTRY_CENTER_TH,
+                                        SEESAW_ENTRY_AD5_TH,
                                         app.fly.fly_detect_count,
-                                        FLY_ENTRY_WINDOW_COUNT,
-                                        1) != 0)
+                                        FLY_ENTRY_WINDOW_COUNT) != 0)
         {
             seesaw_lost_line_blocked = 1;
             fly_state = FLY_STATE_LOW;
@@ -464,8 +434,9 @@ void a_run_fly_update_speed(float *speed, uint8 allow_entry)
                  * 因此这里直接从正的恢复速度起步，和停车模式保持同口径。
                  */
                 seesaw_release_speed = (float)app.fly.fly_recover_speed;
+                seesaw_release_start_speed = seesaw_release_speed;
                 seesaw_finish_event = 1;
-                seesaw_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_LATE;
+                seesaw_pwm_output_limit = FLY_PWM_LIMIT_RECOVER_START;
                 seesaw_state = SEESAW_STATE_RELEASE;
             }
         }

@@ -82,25 +82,21 @@ void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2)
 }
 
 /**
- * @brief 圆环有效阶段使用独立角速度环和差速分配参数。
+ * @brief 解析角速度内环参数：先回落全局默认值，圆环有效阶段再覆盖。
  * @param kp 角速度内环比例系数指针。
  * @param kd 角速度内环微分系数指针。
- * @param inner_gain 内轮减速增益指针。
- * @param outer_gain 外轮增速增益指针。
  */
-void a_run_ring_apply_angle_diff_params(float *kp,
-                                        float *kd,
-                                        float *inner_gain,
-                                        float *outer_gain)
+void a_run_ring_apply_angle_params(float *kp, float *kd)
 {
+    *kp = app.angle.kp_Angle;
+    *kd = app.angle.kd_Angle;
+
     if (ring_state == RING_STATE_PRE_RING ||
         ring_state == RING_STATE_IN_RING ||
         ring_state == RING_STATE_OUT_RING)
     {
         *kp = ring_profile_active->kp_Angle;
         *kd = ring_profile_active->kd_Angle;
-        *inner_gain = ring_profile_active->diff_inner_gain;
-        *outer_gain = ring_profile_active->diff_outer_gain;
     }
 }
 
@@ -347,7 +343,7 @@ uint8 a_run_ring_update_2ms(int8 ring_dir, const AppRingProfileConfig *profile)
         break;
 
     case RING_STATE_OUT_RING:
-        if (timeadd(&ring_data.out_ring_timer, 100))
+        if (timeadd(&ring_data.out_ring_timer, 60))
         {
             /*
              * 环速不低于巡线速度时出环无需加速过渡，直接复位；

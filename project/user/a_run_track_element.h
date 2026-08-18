@@ -27,10 +27,10 @@
 void a_run_track_element_update_gate(float *speed, float *angle_target);
 
 /**
- * @brief 按当前激活元素覆盖转向环参数，无元素激活时不写指针。
+ * @brief 解析转向环参数：先回落全局默认值，再按当前激活元素覆盖。
  * @details
- * 调用方先把三个指针置为全局默认值，本函数只做元素覆盖；
- * 优先级：单十字TIMING > 双十字TIMING > 圆桶DECEL > 圆环有效阶段。
+ * 优先级：单十字TIMING > 双十字TIMING > 圆桶DECEL > 圆环有效阶段；
+ * 无元素激活时保持全局默认值。
  *
  * @param kp 转向环比例系数指针。
  * @param kd 转向环微分系数指针。
@@ -39,11 +39,10 @@ void a_run_track_element_update_gate(float *speed, float *angle_target);
 void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2);
 
 /**
- * @brief 按当前激活元素覆盖电感解算ABC权重，无元素激活时不写指针。
+ * @brief 解析电感解算ABC权重：先回落全局默认值，再按当前激活元素覆盖。
  * @details
- * 调用方先把三个指针置为全局默认值，本函数只做元素覆盖；
  * 顺序覆盖后写生效，优先级：圆环有效阶段 > 单十字TIMING > 双十字TIMING >
- * 跷跷板居中 > 圆桶DECEL。
+ * 跷跷板居中 > 圆桶DECEL；无元素激活时保持全局默认值。
  *
  * @param a_value 横向主差分权重指针。
  * @param b_value 竖向差分权重指针。

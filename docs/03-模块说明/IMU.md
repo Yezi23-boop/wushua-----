@@ -26,7 +26,7 @@
 
 ## 关键运行数据
 
-- `gyro_z`：角速度相关实时值
+- `gyro_z`：角速度相关实时值，输出经一阶低通滤波（系数宏 `IMU_GYRO_Z_LPF_ALPHA` 调节）
 - `Gyr_filt`
 - `Acc_filt`
 - `Att_Angle`

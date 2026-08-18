@@ -5,8 +5,8 @@
 ## 存储模型
 
 - 配置表 `eeprom_config_items[]` 用 `EEPROM_INT/FLOAT(member, slot, default)` 宏描述"字段 → 槽位"映射，运行时统一从全局结构体 `AppConfig app` 读写。
-- 每个槽位 4 字节；RAM 缓冲区 `date_buff[432]` 覆盖槽位 0~107，整体映射到 Flash 配置扇区 `0x200`（512 字节扇区，432 字节不跨扇区）。
-- 槽位 107 为初始化标志（`EEPROM_INIT_FLAG_SLOT`），位于缓冲区末尾：标志随整包最后写入，读到标志有效即整包参数已写完。首次上电、Flash 被擦除或写中途掉电时，加载默认值并整包刷写。
+- 每个槽位 4 字节；RAM 缓冲区 `date_buff[400]` 覆盖槽位 0~99，整体映射到 Flash 配置扇区 `0x200`（512 字节扇区，400 字节不跨扇区）。
+- 槽位 99 为初始化标志（`EEPROM_INIT_FLAG_SLOT`），位于缓冲区末尾：标志随整包最后写入，读到标志有效即整包参数已写完。首次上电、Flash 被擦除或写中途掉电时，加载默认值并整包刷写。
 - 全部 float 参数读取时统一过 `eeprom_float_is_abnormal()` NaN 检测，脏数据逐项回退默认值，防止污染控制链。
 - 现场烧录为整片重新烧录（EEPROM 配置扇区一并擦除重写），因此修改槽位布局或默认值无需旧数据版本迁移；现场调参后需重新保存。
 
@@ -34,9 +34,6 @@
 | `speed_run` | 赛道基础运行速度 |
 | `limiting_Err` | 转向输出限幅 |
 | `kp2_Err` | 转向环二次项非线性增强系数 |
-| `diff_enable` | 非线性内外轮差速开关：1-开启，0-线性差速 |
-| `diff_inner_gain` | 差速分配内轮减速增益 |
-| `diff_outer_gain` | 差速分配外轮增速增益 |
 
 ### `angle`（AppAngleConfig，电感偏差解算/角速度内环）
 
@@ -49,9 +46,6 @@
 | `A_1` | 横向主差分权重 |
 | `B_1` | 竖向差分权重，斜入/斜出姿态修正 |
 | `C_l` | 分母补偿权重，弱信号时抑制偏差放大 |
-| `strong_signal_sum` | 强信号姿态锁定阈值，四路电感和超过即锁定航向 |
-| `strong_correct_angle` | 强信号区反向修正角速度，带符号 |
-| `strong_signal_enable` | 强信号姿态锁定总开关：1-开启，0-关闭 |
 
 ### `ring`（AppRingConfig）
 
@@ -71,7 +65,6 @@
 | `adc_a_1` / `adc_b_1` / `adc_c_l` | 圆环阶段横向主差分 / 辅助电感差分 / 分母补偿权重 |
 | `kp_Err` / `kd_Err` / `kp2_Err` | 圆环阶段方向环比例 / 微分 / 非线性增强系数 |
 | `kp_Angle` / `kd_Angle` | 圆环阶段角速度内环比例 / 微分系数 |
-| `diff_inner_gain` / `diff_outer_gain` | 圆环阶段内轮减速 / 外轮增速增益 |
 
 ### `fly`（AppFlyConfig，飞坡 + 停止等待）
 
@@ -88,6 +81,7 @@
 | `seesaw_wait_count` | 停车等待时间（×2ms） |
 | `seesaw_creep_cm` | 停止等待前挪距离（cm） |
 | `seesaw_release_step` | 停止等待 COOLDOWN 调节步长 |
+| `center_a_1` / `center_b_1` / `center_c_l` | 释放期居中 ABC 权重（两模式共用） |
 
 ### `cylinder`（AppCylinderConfig，圆桶）
 
@@ -103,8 +97,7 @@
 
 | 字段 | 含义 |
 | --- | --- |
-| `slow_speed` | 墙面阶段降速目标值 |
-| `slow_time` | 墙面阶段降速持续时间（×2ms） |
+| `entry_speed` | 墙面全程目标速度，低于 speed_run 减速、高于则加速 |
 | `timing_count` | 墙面阶段下墙计时（×2ms） |
 | `encoder_target` | 墙面退出编码器积分阈值 |
 
@@ -126,19 +119,18 @@
 | 9~13 | START |
 | 14~19 | CTRL |
 | 20~25 | MODEL |
-| 26~31 | DIFF |
-| 32~50 | 小圆环 RING |
-| 51~69 | 大圆环 RING（紧跟小圆环，与菜单 RING 页顺序一致） |
-| 70~77 | CYLINDER |
-| 78~81 | WALL |
-| 82~92 | FLY |
-| 93~99 | CROSS（双十字） |
-| 100~106 | CROSSS（单十字） |
-| 107 | 初始化标志 |
+| 26~42 | 小圆环 RING |
+| 43~59 | 大圆环 RING（紧跟小圆环，与菜单 RING 页顺序一致） |
+| 60~67 | CYLINDER |
+| 68~70 | WALL |
+| 71~84 | FLY |
+| 85~91 | CROSS（双十字） |
+| 92~98 | CROSSS（单十字） |
+| 99 | 初始化标志 |
 
 ## 存储流程
 
-- `eeprom_init()`：读配置扇区到 `date_buff` → 检查槽位 107 标志 → 无效则先加载默认值、写标志、`eeprom_flash()` 整包刷写；有效则按表读入 `app`。
+- `eeprom_init()`：读配置扇区到 `date_buff` → 检查槽位 99 标志 → 无效则先加载默认值、写标志、`eeprom_flash()` 整包刷写；有效则按表读入 `app`。
 - `eeprom_flash()`：把 `app` 按表序列化到 `date_buff` 后单次 IAP 刷写。菜单保存参数时调用，Flash 擦写耗时长，严禁在运行态（电机未断脱）调用。
 - 新增持久化参数 = 在对应结构体加字段 + 参数表加一行（槽位 + 默认值），读写/默认值加载全部由表驱动完成。
 

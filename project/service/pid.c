@@ -3,10 +3,8 @@
 LowPassFilter_t encoder_filter_left;
 LowPassFilter_t encoder_filter_right;
 /* 内部中间变量 */
-float speed_l = 0;        /* 左轮当前速度反馈，带符号，经低通滤波后供普通速度环使用。 */
-float speed_r = 0;        /* 右轮当前速度反馈，带符号，经低通滤波后供普通速度环使用。 */
-float speed_l_signed = 0; /* 左轮带符号速度反馈（未滤波），跷跷板零速刹车和里程方向判断使用。 */
-float speed_r_signed = 0; /* 右轮带符号速度反馈（未滤波），跷跷板零速刹车和里程方向判断使用。 */
+float speed_l = 0;        /* 左轮当前速度反馈，取绝对值，经低通滤波后供普通速度环使用。 */
+float speed_r = 0;        /* 右轮当前速度反馈，取绝对值，经低通滤波后供普通速度环使用。 */
 
 /* 实例化全局控制器聚合结构 */
 PID_Controllers PID;
@@ -82,6 +80,8 @@ void pid_steer_init(PID_Steer *pid, float kp, float kd, float Kp2, float gyro_da
  */
 void Encoder_get(PID_Speed *left, PID_Speed *right)
 {
+    float speed_l_signed; /* 左轮带符号未滤波速度，仅作 speed_l 取绝对值的源。 */
+    float speed_r_signed; /* 右轮带符号未滤波速度，仅作 speed_r 取绝对值的源。 */
     static float encoder_sum = 0.0f; /* 上电后左右轮平均累计里程，单位沿用项目标尺 cm。 */
     /* 编码器脉冲→速度转换系数 0.175f：轮周长(cm) / 编码器线数 / 减速比 / 采样周期(s)，
      * 需根据实际硬件标定。右轮取反是因为编码器安装方向与左轮相反。 */
@@ -212,6 +212,7 @@ void pid_angle_update(PID_Steer *pid, float error, float gyro)
 /**
  * @brief 差速分配函数
  * @details 大弯主要降低内轮；负压提供额外抓地力，允许外轮小幅增速以保持转弯力度。
+ * 备用：当前主控制链不使用非线性差速分配，保留以备后续调参启用。
  * @param speed_run 基础运行速度（直道速度）
  * @param diff_output 角速度内环输出的差速控制量
  * @param left_target 输出：左轮目标速度

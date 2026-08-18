@@ -17,7 +17,7 @@
 #define KEYSTROKE_TWO_LONG 6
 #define KEYSTROKE_FOUR_LONG 8
 
-#define MENU_ROW_HEIGHT 18
+#define MENU_ROW_HEIGHT 17 /* 135px 屏高、16px 字模，17px 行距可容标题+7 项满屏。 */
 #define MENU_CENTER_X (12 * 8)
 #define MENU_STEP_X (14 * 8)
 #define MENU_STEP_INT_X (15 * 8)
@@ -69,7 +69,6 @@ typedef enum
     MENU_PAGE_START,
     MENU_PAGE_SPEED,
     MENU_PAGE_MODEL,
-    MENU_PAGE_DIFF,
     MENU_PAGE_YUANSHU,
     MENU_PAGE_SENSOR,
     MENU_PAGE_RING,
@@ -84,6 +83,7 @@ typedef enum
     MENU_PAGE_CYLINDER,
     MENU_PAGE_WALL,
     MENU_PAGE_FLY,
+    MENU_PAGE_FLY_CENTER,
     MENU_PAGE_CROSS,
     MENU_PAGE_CROSS_SINGLE,
     MENU_PAGE_ELEMENT,
@@ -132,7 +132,6 @@ static const MenuItemDef menu_home_items[] = {
     {"START", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_START},
     {"CTRL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_SPEED},
     {"MODEL", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_MODEL},
-    {"DIFF", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_DIFF},
     {"YUANSHU", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_YUANSHU},
     {"SENSOR", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_SENSOR}};
 
@@ -162,19 +161,6 @@ static const MenuItemDef menu_model_items[] = {
     {"A_1", &app.angle.A_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
     {"B_1", &app.angle.B_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
     {"C_l", &app.angle.C_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
-
-static const MenuItemDef menu_diff_items[] = {
-    {"diff_en", &app.speed.diff_enable, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
-    {"inner_g", &app.speed.diff_inner_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
-    {"outer_g", &app.speed.diff_outer_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
-    /* 强信号修正两项借 DIFF 页空位安放，MODEL 页保持标题+6 项满屏上限。 */
-    {"strong_sm", &app.angle.strong_signal_sum,
-     MENU_META(MENU_ITEM_FLOAT, 3, 0), MENU_FLOAT_STEP_1},
-    {"sc_angle", &app.angle.strong_correct_angle,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
-    {"strong_en", &app.angle.strong_signal_enable, MENU_META(MENU_ITEM_BOOL, 1, 0), 0}};
 
 static const MenuItemDef menu_yuanshu_items[] = {
     {"RING", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_RING},
@@ -241,11 +227,7 @@ static const MenuItemDef menu_ring_small_drive_items[] = {
     {"kp_Ang", &app.ring.small_profile.kp_Angle,
      MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
     {"kd_Ang", &app.ring.small_profile.kd_Angle,
-     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
-    {"inner_g", &app.ring.small_profile.diff_inner_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
-    {"outer_g", &app.ring.small_profile.diff_outer_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001}};
 
 static const MenuItemDef menu_ring_large_entry_items[] = {
     {"gain", &app.ring.large_profile.bias_entry_gain,
@@ -281,11 +263,7 @@ static const MenuItemDef menu_ring_large_drive_items[] = {
     {"kp_Ang", &app.ring.large_profile.kp_Angle,
      MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
     {"kd_Ang", &app.ring.large_profile.kd_Angle,
-     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001},
-    {"inner_g", &app.ring.large_profile.diff_inner_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001},
-    {"outer_g", &app.ring.large_profile.diff_outer_gain,
-     MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_001}};
+     MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_001}};
 
 static const MenuItemDef menu_cylinder_items[] = {
     {"cyl_enc", &app.cylinder.encoder_target,
@@ -299,10 +277,8 @@ static const MenuItemDef menu_cylinder_items[] = {
      MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}};
 
 static const MenuItemDef menu_wall_items[] = {
-    {"wall_spd", &app.wall.slow_speed,
+    {"wall_spd", &app.wall.entry_speed,
      MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
-    {"wall_slow_t", &app.wall.slow_time,
-     MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10},
     {"wall_timing", &app.wall.timing_count,
      MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10},
     {"wall_enc", &app.wall.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1}};
@@ -317,8 +293,7 @@ static const MenuItemDef menu_fly_items[] = {
      MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
     {"release_stp", &app.fly.fly_release_step,
      MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
-    {"land_cnt", &app.fly.fly_land_confirm_count,
-     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1}};
+    {"CENTER", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_FLY_CENTER}};
 
 static const MenuItemDef menu_seesaw_items[] = {
     {"seesaw_mode", &app.fly.seesaw_mode, MENU_META(MENU_ITEM_BOOL, 1, 0), 0},
@@ -329,8 +304,22 @@ static const MenuItemDef menu_seesaw_items[] = {
     {"wait_cnt", &app.fly.seesaw_wait_count,
      MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
     {"creep_cm", &app.fly.seesaw_creep_cm, MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"CENTER", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_FLY_CENTER}};
+
+/* CENTER 页按模式动态切换：各带 1 个释放收尾参数 + 3 个释放期居中 ABC 权重。 */
+static const MenuItemDef menu_fly_center_items[] = {
+    {"land_cnt", &app.fly.fly_land_confirm_count,
+     MENU_META(MENU_ITEM_INT16, 4, 0), MENU_INT_STEP_1},
+    {"c_a_1", &app.fly.center_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_b_1", &app.fly.center_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_l", &app.fly.center_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
+
+static const MenuItemDef menu_seesaw_center_items[] = {
     {"release_stp", &app.fly.seesaw_release_step,
-     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01}};
+     MENU_META(MENU_ITEM_FLOAT, 4, 2), MENU_FLOAT_STEP_01},
+    {"c_a_1", &app.fly.center_a_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_b_1", &app.fly.center_b_1, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01},
+    {"c_l", &app.fly.center_c_l, MENU_META(MENU_ITEM_FLOAT, 3, 2), MENU_FLOAT_STEP_01}};
 
 static const MenuItemDef menu_cross_items[] = {
     {"enc_target", &app.cross.encoder_target, MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1},
@@ -352,17 +341,17 @@ static const MenuItemDef menu_cross_single_items[] = {
     {"kp2_Err", &app.cross_single.kp2_Err,
      MENU_META(MENU_ITEM_FLOAT, 3, 3), MENU_FLOAT_STEP_0001}};
 
-/* 元素序列 8 槽位超出标题+6 项满屏上限，拆两页：ELEM 放 E1~E4 并链接 ELEM2。 */
+/* 8 槽位按满屏 7 项拆两页：ELEM 放 E1~E6 并链接 ELEM2，E7~E8 在 ELEM2。 */
 static const MenuItemDef menu_element_items[] = {
     {"E1", &app.start.element_seq[0], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E2", &app.start.element_seq[1], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E3", &app.start.element_seq[2], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E4", &app.start.element_seq[3], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E5", &app.start.element_seq[4], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
+    {"E6", &app.start.element_seq[5], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"NEXT", 0, MENU_META(MENU_ITEM_LINK, 0, 0), MENU_PAGE_ELEMENT2}};
 
 static const MenuItemDef menu_element2_items[] = {
-    {"E5", &app.start.element_seq[4], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
-    {"E6", &app.start.element_seq[5], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E7", &app.start.element_seq[6], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1},
     {"E8", &app.start.element_seq[7], MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1}};
 
@@ -380,7 +369,6 @@ static const MenuPageDef menu_pages[] = {
     {"<<START", menu_start_items, MENU_ITEM_COUNT(menu_start_items), MENU_PAGE_HOME},
     {"<<CTRL", menu_speed_items, MENU_ITEM_COUNT(menu_speed_items), MENU_PAGE_HOME},
     {"<<MODEL", menu_model_items, MENU_ITEM_COUNT(menu_model_items), MENU_PAGE_HOME},
-    {"<<DIFF", menu_diff_items, MENU_ITEM_COUNT(menu_diff_items), MENU_PAGE_HOME},
     {"<<YUANSHU", menu_yuanshu_items, MENU_ITEM_COUNT(menu_yuanshu_items), MENU_PAGE_HOME},
     {"<<SENSOR", 0, 0, MENU_PAGE_HOME},
     {"<<RING", menu_ring_items, MENU_ITEM_COUNT(menu_ring_items), MENU_PAGE_YUANSHU},
@@ -404,6 +392,8 @@ static const MenuPageDef menu_pages[] = {
      MENU_ITEM_COUNT(menu_cylinder_items), MENU_PAGE_YUANSHU},
     {"<<WALL", menu_wall_items, MENU_ITEM_COUNT(menu_wall_items), MENU_PAGE_YUANSHU},
     {"<<SEESAW", menu_fly_items, MENU_ITEM_COUNT(menu_fly_items), MENU_PAGE_YUANSHU},
+    {"<<CENTER", menu_fly_center_items,
+     MENU_ITEM_COUNT(menu_fly_center_items), MENU_PAGE_FLY},
     {"<<CROSS", menu_cross_items, MENU_ITEM_COUNT(menu_cross_items), MENU_PAGE_YUANSHU},
     {"<<CROSSS", menu_cross_single_items,
      MENU_ITEM_COUNT(menu_cross_single_items), MENU_PAGE_YUANSHU},
@@ -512,12 +502,15 @@ static uint8 Menu_Read_Key_Event(void)
  * @brief 获取当前页面使用的行描述。
  * @return const MenuItemDef * 当前行描述首地址。
  *
- * FLY 页面根据 seesaw_mode 动态选择飞坡或停止等待参数集。
+ * FLY/CENTER 页面根据 seesaw_mode 动态选择飞坡或停止等待参数集。
  */
 static const MenuItemDef *Menu_Get_Items(void)
 {
     if (menu_page == MENU_PAGE_FLY && app.fly.seesaw_mode != 0)
         return menu_seesaw_items;
+
+    if (menu_page == MENU_PAGE_FLY_CENTER && app.fly.seesaw_mode != 0)
+        return menu_seesaw_center_items;
 
     return menu_pages[menu_page].items;
 }

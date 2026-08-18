@@ -12,7 +12,7 @@
 - `pid_steer_update()`
 - `pid_angle_update()`
 - `Encoder_get()`
-- `Pid_Differential()`
+- `Pid_Differential()`（保留备用，当前主控制链未使用）
 - `Pure_Pursuit_Gyro_Control()`
 
 ## 依赖与被依赖关系

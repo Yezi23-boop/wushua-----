@@ -29,9 +29,6 @@ typedef struct
     float speed_run;       /**< 赛道基础运行速度（cm/s 或编码器脉冲数） */
     float limiting_Err;    /**< 转向输出限幅值（防止舵机/电机过载） */
     float kp2_Err;         /**< 二次项系数（用于处理大角度弯道的非线性增强） */
-    int16 diff_enable;     /**< 非线性内外轮差速开关：1-开启，0-使用线性差速 */
-    float diff_inner_gain; /**< 差速分配内轮减速增益 */
-    float diff_outer_gain; /**< 差速分配外轮增速增益 */
 } AppSpeedConfig;
 
 /**
@@ -47,9 +44,6 @@ typedef struct
     float A_1;                  /**< 主亮度权重，用于横向主差分归一化 */
     float B_1;                  /**< 竖向差分权重，用于斜入/斜出姿态修正 */
     float C_l;                  /**< 分母补偿权重，用于弱信号时抑制偏差放大 */
-    float strong_signal_sum;    /**< 强信号姿态锁定阈值：四路电感和超过该值时转向外环锁定当前航向 */
-    float strong_correct_angle; /**< 强信号区反向修正角速度，带符号，方向与冻结Err相反，负值反向 */
-    int16 strong_signal_enable; /**< 强信号姿态锁定总开关：1-开启（四路和超阈锁定航向），0-关闭 */
 } AppAngleConfig;
 
 /**
@@ -75,8 +69,6 @@ typedef struct
     float kp2_Err;                /**< 圆环阶段方向环非线性增强系数 */
     float kp_Angle;               /**< 圆环阶段角速度内环比例系数 */
     float kd_Angle;               /**< 圆环阶段角速度内环微分系数 */
-    float diff_inner_gain;        /**< 圆环阶段内轮减速增益 */
-    float diff_outer_gain;        /**< 圆环阶段外轮增速增益 */
 } AppRingProfileConfig;
 
 /**
@@ -110,6 +102,9 @@ typedef struct
     float seesaw_release_step; /**< 停止等待 COOLDOWN 步长 */
     /* 共用 */
     int16 seesaw_mode; /**< 0=飞坡，1=停止等待 */
+    float center_a_1;  /**< 释放期居中横向主差分权重，两模式共用。 */
+    float center_b_1;  /**< 释放期居中竖向差分权重，略低于全局 B_1 抑制起步串道。 */
+    float center_c_l;  /**< 释放期居中分母补偿权重，两模式共用。 */
 } AppFlyConfig;
 
 /**
@@ -132,8 +127,7 @@ typedef struct
  */
 typedef struct
 {
-    int slow_speed;       /**< 墙面阶段降速目标值。 */
-    int slow_time;        /**< 墙面阶段降速持续时间，单位为 2ms 主控制周期。 */
+    int entry_speed;      /**< 墙面全程目标速度，低于 speed_run 减速、高于则加速。 */
     int timing_count;     /**< 墙面阶段下墙计时，单位为 2ms 主控制周期。 */
     float encoder_target; /**< 墙面退出编码器积分阈值。 */
 } AppWallConfig;
@@ -184,7 +178,7 @@ typedef struct
 } AppConfig;
 
 /* --- 全局变量声明 --- */
-extern uint8 date_buff[432]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 107。 */
+extern uint8 date_buff[400]; /**< EEPROM 数据读写缓冲区，覆盖到逻辑槽位 99。 */
 extern AppConfig app;        /**< 全局配置对象实例，运行时参数均从此读取 */
 
 /**

@@ -1,7 +1,7 @@
 #ifndef __A_RUN_RING_H__
 #define __A_RUN_RING_H__
 
-#include "a_run_track_element.h"
+#include "zf_common_typedef.h"
 #include "eeprom.h"
 
 /**
@@ -85,16 +85,11 @@ void a_run_ring_apply_adc_params(float *a_value, float *b_value, float *c_value)
 void a_run_ring_apply_steer_params(float *kp, float *kd, float *kp2);
 
 /**
- * @brief 圆环有效阶段使用独立角速度环和差速分配参数。
+ * @brief 解析角速度内环参数：先回落全局默认值，圆环有效阶段再覆盖。
  * @param kp 角速度内环比例系数指针。
  * @param kd 角速度内环微分系数指针。
- * @param inner_gain 内轮减速增益指针。
- * @param outer_gain 外轮增速增益指针。
  */
-void a_run_ring_apply_angle_diff_params(float *kp,
-                                        float *kd,
-                                        float *inner_gain,
-                                        float *outer_gain);
+void a_run_ring_apply_angle_params(float *kp, float *kd);
 
 /**
  * @brief 圆环有效阶段使用圆环参数组的目标速度。

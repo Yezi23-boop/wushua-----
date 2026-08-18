@@ -11,10 +11,6 @@
 #include "a_run_wall.h"
 #include "a_run_cross.h"
 
-#define ADC_SEESAW_CENTER_A_1 1.50f /* 跷跷板前挪/恢复期横向主差分权重，强调左右主电感居中。 */
-#define ADC_SEESAW_CENTER_B_1 0.50f /* 跷跷板前挪/恢复期降低竖向差分影响，减少启动串道。 */
-#define ADC_SEESAW_CENTER_C_L 1.00f /* 跷跷板前挪/恢复期弱信号分母补偿，抑制偏差突变。 */
-
 enum TrackElement
 {
     ELEMENT_NONE = TRACK_ELEMENT_NONE,                      /**< 无特殊元素；保留给后续模式切换或保护降级。 */
@@ -51,16 +47,21 @@ int8 a_run_track_element_get_expected_element(void)
 /**
  * @brief 按当前激活元素覆盖转向环参数。
  * @param kp 转向环比例系数指针，调用方需先写入全局默认值。
- * @param kd 转向环微分系数指针，调用方需先写入全局默认值。
- * @param kp2 转向环非线性增强系数指针，调用方需先写入全局默认值。
+ * @param kd 转向环微分系数指针。
+ * @param kp2 转向环非线性增强系数指针。
  *
+ * 先回落全局默认值，再按当前激活元素覆盖。
  * 优先级从高到低：单十字TIMING > 双十字TIMING > 圆桶DECEL > 圆环有效阶段。
  * 圆桶与圆环由序列仲裁保证互斥，DECEL 优先于圆环是历史语义（else 分支保留）；
  * 双/单十字状态机同时处于 TIMING 不可能发生，双分支保留原顺序兜底。
- * 无元素激活时不写指针，全局默认值直接生效。
+ * 无元素激活时保持全局默认值。
  */
 void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2)
 {
+    *kp = app.speed.kp_Err;
+    *kd = app.speed.kd_Err;
+    *kp2 = app.speed.kp2_Err;
+
     if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
     {
         /* 圆桶减速阶段沿用圆桶专用Kp/Kd，Kp2保持全局值。 */
@@ -86,19 +87,23 @@ void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2)
 }
 
 /**
- * @brief 按当前激活元素覆盖电感差比和解算的ABC权重。
- * @param a_value 横向主差分权重指针，调用方需先写入全局默认值。
- * @param b_value 竖向差分权重指针，调用方需先写入全局默认值。
- * @param c_value 分母补偿权重指针，调用方需先写入全局默认值。
+ * @brief 解析电感差比和解算的ABC权重：先回落全局默认值，再按元素覆盖。
+ * @param a_value 横向主差分权重指针。
+ * @param b_value 竖向差分权重指针。
+ * @param c_value 分母补偿权重指针。
  *
  * 顺序覆盖、后写生效，优先级从高到低：
  * 圆环有效阶段 > 单十字TIMING > 双十字TIMING > 跷跷板居中 > 圆桶DECEL。
  * 圆环最后施加优先级最高，保持原语义（进出环必须严格跟随专用权重）；
  * 只改本次解算局部权重，不动 app.angle，异常退出后全局值自动恢复。
- * 无元素激活时不写指针，全局默认值直接生效。
+ * 无元素激活时保持全局默认值。
  */
 void a_run_track_element_apply_adc_params(float *a_value, float *b_value, float *c_value)
 {
+    *a_value = app.angle.A_1;
+    *b_value = app.angle.B_1;
+    *c_value = app.angle.C_l;
+
     if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
     {
         /* 圆桶窗口确认后才切专用ABC，避免序列轮到圆桶但尚未识别时削弱普通循迹。 */
@@ -108,10 +113,10 @@ void a_run_track_element_apply_adc_params(float *a_value, float *b_value, float 
     }
     if (seesaw_centering_active != 0)
     {
-        /* 前挪和落地恢复阶段优先贴主横向中线，降低刚起步时竖向差分把车带向旁线的风险。 */
-        *a_value = ADC_SEESAW_CENTER_A_1;
-        *b_value = ADC_SEESAW_CENTER_B_1;
-        *c_value = ADC_SEESAW_CENTER_C_L;
+        /* 释放期使用接近全局的权重，仅轻微压低竖向差分，避免刚起步被竖向差分带偏。 */
+        *a_value = app.fly.center_a_1;
+        *b_value = app.fly.center_b_1;
+        *c_value = app.fly.center_c_l;
     }
     if (a_run_cross_get_state() == CROSS_STATE_TIMING)
     {
@@ -269,9 +274,10 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         element_sequence_started = 1;
     }
 
-    /* 圆桶/圆环释放只提供基础速度上限，当前元素可在后续 switch 中覆盖更低速度。 */
+    /* 圆桶/圆环/跷跷板释放只提供基础速度，当前元素在 switch 中的阶段写入优先级更高。 */
     a_run_cylinder_update_release_speed(speed);
     a_run_ring_update_release_speed(speed);
+    a_run_seesaw_update_release_speed(speed);
 
     switch (expected_element)
     {
@@ -353,7 +359,6 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
         break;
     }
 
-    a_run_seesaw_update_release_speed(speed);
     a_run_ring_apply_speed(speed);
     a_run_ring_update_angle_target(angle_target);
 }

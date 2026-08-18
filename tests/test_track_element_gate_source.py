@@ -73,29 +73,18 @@ def test_track_element_gate_is_wired_directly_in_2ms_control_chain():
     assert "a_run_track_element_update_gate" not in run_time_2_body
 
 
-def test_main_control_uses_stable_nonlinear_differential_distribution():
+def test_main_control_uses_linear_differential_and_keeps_diff_function_unused():
     pid_source = _read(PID_C)
     pid_header = _read(ROOT / "project" / "service" / "pid.h")
     runner = _read(A_RUN_C)
-    differential_body = pid_source[pid_source.index("void Pid_Differential("):]
     run_time_1_body = _function_body(
         runner, "void run_time_1(void)", "void run_time_2(void)")
 
+    # 非线性差速分配函数保留备用，但主控制链不再调用，只用基础线性差速。
     assert "void Pid_Differential(float speed_run, float diff_output," in pid_source
-    assert "float scope, float inner_gain, float outer_gain)" in pid_source
     assert "void Pid_Differential(float speed_run, float diff_output," in pid_header
-    assert "float scope, float inner_gain, float outer_gain);" in pid_header
-    assert "PID.steer.output" not in differential_body
-    assert "ratio = func_abs(diff_output) / scope;" in differential_body
-    assert "ratio = ratio * (0.6f + 0.4f * ratio);" in differential_body
-    assert "inner_scale = 1.0f - inner_gain * ratio;" in differential_body
-    assert "outer_scale = 1.0f + outer_gain * ratio;" in differential_body
-    assert "app.speed.diff_inner_gain" not in differential_body
-    assert "app.speed.diff_outer_gain" not in differential_body
-    assert "if (app.speed.diff_enable != 0)" in run_time_1_body
-    assert "Pid_Differential(speed_active, PID.angle.output," in run_time_1_body
-    assert "app.angle.limiting_Angle," in run_time_1_body
-    assert "diff_inner_gain, diff_outer_gain);" in run_time_1_body
+    assert "Pid_Differential(" not in run_time_1_body
+    assert "diff_enable" not in run_time_1_body
     assert "left_target = speed_active - PID.angle.output;" in run_time_1_body
     assert "right_target = speed_active + PID.angle.output;" in run_time_1_body
 

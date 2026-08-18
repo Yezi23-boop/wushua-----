@@ -50,31 +50,32 @@ def test_menu_page_counts_and_parent_links_are_complete():
     compact_source = _without_whitespace(source)
 
     expected_counts = {
-        "menu_home_items": 6,
+        "menu_home_items": 5,
         "menu_start_items": 6,
         "menu_speed_items": 6,
         "menu_model_items": 6,
-        "menu_diff_items": 6,
         "menu_yuanshu_items": 6,
         "menu_tpl_items": 5,
         "menu_ring_items": 2,
         "menu_ring_small_items": 5,
         "menu_ring_large_items": 5,
-        # ENTRY/CROSS/CROSSS 页为 7 项，超出标题+6 项满屏上限，待后续拆页。
+        # ENTRY/CROSS/CROSSS 页为 7 项，即满屏上限（行距 17）。
         "menu_ring_small_entry_items": 7,
         "menu_ring_small_in_items": 6,
-        "menu_ring_small_drive_items": 4,
+        "menu_ring_small_drive_items": 2,
         "menu_ring_large_entry_items": 7,
         "menu_ring_large_in_items": 6,
-        "menu_ring_large_drive_items": 4,
+        "menu_ring_large_drive_items": 2,
         "menu_cylinder_items": 6,
-        "menu_wall_items": 4,
+        "menu_wall_items": 3,
         "menu_fly_items": 6,
         "menu_seesaw_items": 6,
+        "menu_fly_center_items": 4,
+        "menu_seesaw_center_items": 4,
         "menu_cross_items": 7,
         "menu_cross_single_items": 7,
-        "menu_element_items": 5,
-        "menu_element2_items": 4,
+        "menu_element_items": 7,
+        "menu_element2_items": 2,
     }
     for name, count in expected_counts.items():
         assert _item_count(source, name) == count
@@ -82,15 +83,17 @@ def test_menu_page_counts_and_parent_links_are_complete():
     assert '{"WALL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_WALL}' in compact_source
     assert '{"CROSS",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_CROSS}' in compact_source
     assert '{"CROSSS",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_CROSS_SINGLE}' in compact_source
-    assert '{"DIFF",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_DIFF}' in compact_source
     assert '{"MODEL",0,MENU_META(MENU_ITEM_LINK,0,0),MENU_PAGE_MODEL}' in compact_source
     assert '{"<<WALL",menu_wall_items,MENU_ITEM_COUNT(menu_wall_items),MENU_PAGE_YUANSHU}' in compact_source
     assert '{"<<CROSS",menu_cross_items,MENU_ITEM_COUNT(menu_cross_items),MENU_PAGE_YUANSHU}' in compact_source
     assert (
+        '{"<<CENTER",menu_fly_center_items,'
+        'MENU_ITEM_COUNT(menu_fly_center_items),MENU_PAGE_FLY}' in compact_source
+    )
+    assert (
         '{"<<CROSSS",menu_cross_single_items,'
         'MENU_ITEM_COUNT(menu_cross_single_items),MENU_PAGE_YUANSHU}' in compact_source
     )
-    assert '{"<<DIFF",menu_diff_items,MENU_ITEM_COUNT(menu_diff_items),MENU_PAGE_HOME}' in compact_source
     assert '{"<<MODEL",menu_model_items,MENU_ITEM_COUNT(menu_model_items),MENU_PAGE_HOME}' in compact_source
     assert '{"<<TPL",menu_tpl_items,MENU_ITEM_COUNT(menu_tpl_items),MENU_PAGE_SENSOR}' in compact_source
     assert (
@@ -139,34 +142,12 @@ def test_menu_parameter_steps_match_tuning_contract():
     wall = _item_block(source, "menu_wall_items")
     assert "MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_1" in wall
     assert wall.count(
-        "MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10") == 2
+        "MENU_META(MENU_ITEM_INT16, 3, 0), MENU_INT_STEP_10") == 1
     assert "MENU_META(MENU_ITEM_FLOAT, 4, 1), MENU_FLOAT_STEP_1" in wall
 
     cross = _item_block(source, "menu_cross_items")
     assert cross.count("MENU_FLOAT_STEP_01") == 3
     assert "MENU_FLOAT_STEP_1" in cross
-
-    diff = _item_block(source, "menu_diff_items")
-    assert [
-        "MENU_FLOAT_STEP_001",
-        "MENU_FLOAT_STEP_001",
-        "MENU_FLOAT_STEP_1",
-        "MENU_FLOAT_STEP_01",
-    ] == re.findall(r"MENU_FLOAT_STEP_[0-9]+", diff)
-
-
-def test_diff_menu_exposes_switch_and_both_gains():
-    source = _read(MENU_C)
-    diff = _item_block(source, "menu_diff_items")
-
-    assert '"diff_en", &app.speed.diff_enable' in diff
-    assert "MENU_META(MENU_ITEM_BOOL, 1, 0), 0" in diff
-    assert '"inner_g", &app.speed.diff_inner_gain' in diff
-    assert '"outer_g", &app.speed.diff_outer_gain' in diff
-    assert diff.count("MENU_FLOAT_STEP_001") == 2
-    assert '"strong_sm", &app.angle.strong_signal_sum' in diff
-    assert '"sc_angle", &app.angle.strong_correct_angle' in diff
-    assert '"strong_en", &app.angle.strong_signal_enable' in diff
 
 
 def test_start_menu_exposes_encoder_stop_distance_in_centimeters():
@@ -222,11 +203,7 @@ def test_ring_menu_exposes_entry_ctrl_drive_subpages():
     assert '"kp2_Err", &app.ring.large_profile.kp2_Err' in large_in
 
     assert '"kp_Ang", &app.ring.small_profile.kp_Angle' in small_drive
-    assert '"inner_g", &app.ring.small_profile.diff_inner_gain' in small_drive
-    assert '"outer_g", &app.ring.small_profile.diff_outer_gain' in small_drive
     assert '"kp_Ang", &app.ring.large_profile.kp_Angle' in large_drive
-    assert '"inner_g", &app.ring.large_profile.diff_inner_gain' in large_drive
-    assert '"outer_g", &app.ring.large_profile.diff_outer_gain' in large_drive
 
 
 def test_menu_preserves_edit_and_special_page_semantics():
@@ -249,11 +226,17 @@ def test_fly_and_seesaw_modes_have_separate_row_bindings():
     source = _read(MENU_C)
     fly = _item_block(source, "menu_fly_items")
     seesaw = _item_block(source, "menu_seesaw_items")
+    fly_center = _item_block(source, "menu_fly_center_items")
+    seesaw_center = _item_block(source, "menu_seesaw_center_items")
 
     assert '"fly_speed", &app.fly.fly_speed' in fly
     assert '"recover_spd", &app.fly.fly_recover_speed' in fly
-    assert '"land_cnt", &app.fly.fly_land_confirm_count' in fly
     assert '"seesaw_spd", &app.fly.seesaw_speed' in seesaw
     assert '"wait_cnt", &app.fly.seesaw_wait_count' in seesaw
     assert '"creep_cm", &app.fly.seesaw_creep_cm' in seesaw
+    assert '"land_cnt", &app.fly.fly_land_confirm_count' in fly_center
+    assert '"release_stp", &app.fly.seesaw_release_step' in seesaw_center
+    assert '"c_a_1", &app.fly.center_a_1' in fly_center
+    assert '"c_a_1", &app.fly.center_a_1' in seesaw_center
     assert "if (menu_page == MENU_PAGE_FLY && app.fly.seesaw_mode != 0)" in source
+    assert "if (menu_page == MENU_PAGE_FLY_CENTER && app.fly.seesaw_mode != 0)" in source

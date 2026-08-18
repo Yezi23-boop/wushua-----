@@ -1,15 +1,15 @@
 #include "zf_common_headfile.h"
 
-/* 数据缓冲区覆盖逻辑槽位0~107，每个槽位占4字节。 */
-uint8 date_buff[432];
-/* 参数存储起始扇区：一扇区 512 字节，date_buff 占 432 字节不跨扇区。
+/* 数据缓冲区覆盖逻辑槽位0~99，每个槽位占4字节。 */
+uint8 date_buff[400];
+/* 参数存储起始扇区：一扇区 512 字节，date_buff 占 400 字节不跨扇区。
  * 换扇区后首次上电新扇区全 0xFF，初始化标志判为非首次，自动写入全套默认值，
  * 旧扇区里的现场参数不会携带过来，需重新调参保存。 */
 #define EEPROM_CONFIG_SECTOR_ADDR 0x200u
-/* 初始化标志槽位：固定在 107（字节428~431），是缓冲区最后一个槽位。
+/* 初始化标志槽位：固定在 99（字节396~399），是缓冲区最后一个槽位。
  * 标志随整包最后写入，读到标志有效即整包参数已写完；
  * 全部 float 参数加载时仍统一过 NaN 检测，防写中途掉电的半截脏数据进控制链。 */
-#define EEPROM_INIT_FLAG_SLOT 107
+#define EEPROM_INIT_FLAG_SLOT 99
 /* EEPROM 初始化标志位，用于判断是否为首次上电（0-首次，1-非首次） */
 static uint8 eeprom_init_time = 0;
 /* 全局配置结构体实例，运行时所有的参数都从这里读取 */
@@ -17,9 +17,9 @@ AppConfig app;
 
 /*
  * 槽位布局（按菜单显示顺序）：1~8 元素序列 E1~E8，9~13 START，14~19 CTRL，
- * 20~25 MODEL，26~31 DIFF，32~50 小圆环 RING，51~69 大圆环 RING，
- * 70~77 CYLINDER，78~81 WALL，82~92 FLY，93~99 CROSS，100~106 CROSSS，
- * 107 初始化标志。整片重烧时按默认值全量写入，现场调参后需重新保存。
+ * 20~25 MODEL，26~42 小圆环 RING，43~59 大圆环 RING，
+ * 60~67 CYLINDER，68~70 WALL，71~84 FLY，85~91 CROSS，
+ * 92~98 CROSSS，99 初始化标志。整片重烧时按默认值全量写入，现场调参后需重新保存。
  */
 
 /* 内部私有函数声明 */
@@ -54,130 +54,121 @@ typedef struct
 // #define TRACK_ELEMENT_SINGLE_CROSS 9     /**< 单十字元素编号，入口判定与双十字相同，仅序列区分。 */
 static const EepromConfigItem eeprom_config_items[] = {
     /* --- 元素序列（ELEM/ELEM2 页面，放最前便于现场调整序列） --- */
-    EEPROM_INT(start.element_seq[0], 1, TRACK_ELEMENT_NONE), // 元素序列槽位0
-    EEPROM_INT(start.element_seq[1], 2, TRACK_ELEMENT_NONE), // 元素序列槽位1
-    EEPROM_INT(start.element_seq[2], 3, TRACK_ELEMENT_NONE), // 元素序列槽位2
-    EEPROM_INT(start.element_seq[3], 4, TRACK_ELEMENT_NONE), // 元素序列槽位3
-    EEPROM_INT(start.element_seq[4], 5, TRACK_ELEMENT_NONE), // 元素序列槽位4
-    EEPROM_INT(start.element_seq[5], 6, TRACK_ELEMENT_NONE), // 元素序列槽位5
-    EEPROM_INT(start.element_seq[6], 7, TRACK_ELEMENT_NONE), // 元素序列槽位6
-    EEPROM_INT(start.element_seq[7], 8, TRACK_ELEMENT_NONE), // 元素序列槽位7
+    EEPROM_INT(start.element_seq[0], 1, TRACK_ELEMENT_SEESAW),          // 元素序列槽位0
+    EEPROM_INT(start.element_seq[1], 2, TRACK_ELEMENT_LARGE_RING_LEFT), // 元素序列槽位1
+    EEPROM_INT(start.element_seq[2], 3, TRACK_ELEMENT_CYLINDER),        // 元素序列槽位2
+    EEPROM_INT(start.element_seq[3], 4, TRACK_ELEMENT_RIGHT_RING),      // 元素序列槽位3
+    EEPROM_INT(start.element_seq[4], 5, TRACK_ELEMENT_WALL),            // 元素序列槽位4
+    EEPROM_INT(start.element_seq[5], 6, TRACK_ELEMENT_NONE),            // 元素序列槽位5
+    EEPROM_INT(start.element_seq[6], 7, TRACK_ELEMENT_NONE),            // 元素序列槽位6
+    EEPROM_INT(start.element_seq[7], 8, TRACK_ELEMENT_NONE),            // 元素序列槽位7
     /* --- START 页面 --- */
     EEPROM_INT(start.start_flag, 9, 1),                         // 启动标志：1-运行，0-待机
     EEPROM_INT(start.element_enable, 10, 1),                    // 赛道元素识别总开关
-    EEPROM_FLOAT(start.fuya_xili, 11, 80.0f),                   // 平地负压吸附百分比
+    EEPROM_FLOAT(start.fuya_xili, 11, 90.0f),                   // 平地负压吸附百分比
     EEPROM_FLOAT(angle.gyro_feedback_scale, 12, 1.80f),         // 角速度反馈缩放，匹配gyro_z量级
-    EEPROM_FLOAT(start.encoder_stop_distance_cm, 13, 12000.0f), // 上电累计里程达到后停车
+    EEPROM_FLOAT(start.encoder_stop_distance_cm, 13, 11500.0f), // 上电累计里程达到后停车
     /* --- CTRL 页面 --- */
-    EEPROM_FLOAT(speed.kp_Err, 14, 4.60f),        // 转向环比例系数Kp
+    EEPROM_FLOAT(speed.kp_Err, 14, 5.70f),        // 转向环比例系数Kp
     EEPROM_FLOAT(speed.kd_Err, 15, 9.0f),         // 转向环微分系数Kd
     EEPROM_FLOAT(speed.gyro_damp_Err, 16, 0.0f),  // 转向环陀螺仪阻尼，抑制高速摆振
-    EEPROM_FLOAT(speed.speed_run, 17, 60.0f),     // 赛道基础运行速度
+    EEPROM_FLOAT(speed.speed_run, 17, 50.0f),     // 赛道基础运行速度
     EEPROM_FLOAT(speed.limiting_Err, 18, 800.0f), // 转向输出限幅
-    EEPROM_FLOAT(speed.kp2_Err, 19, 0.010f),      // 转向环二次项非线性增强系数
+    EEPROM_FLOAT(speed.kp2_Err, 19, 0.015f),      // 转向环二次项非线性增强系数
     /* --- MODEL 页面 --- */
-    EEPROM_FLOAT(angle.kp_Angle, 20, 1.30f),       // 角速度内环比例系数Kp
-    EEPROM_FLOAT(angle.kd_Angle, 21, 1.20f),       // 角速度内环微分系数Kd
-    EEPROM_FLOAT(angle.limiting_Angle, 22, 55.0f), // 角速度内环输出限幅
+    EEPROM_FLOAT(angle.kp_Angle, 20, 1.21f),       // 角速度内环比例系数Kp
+    EEPROM_FLOAT(angle.kd_Angle, 21, 1.16f),       // 角速度内环微分系数Kd
+    EEPROM_FLOAT(angle.limiting_Angle, 22, 48.0f), // 角速度内环输出限幅
     EEPROM_FLOAT(angle.A_1, 23, 1.00f),            // 横向主差分权重
-    EEPROM_FLOAT(angle.B_1, 24, 1.40f),            // 竖向差分权重，斜入/斜出姿态修正
+    EEPROM_FLOAT(angle.B_1, 24, 1.20f),            // 竖向差分权重，斜入/斜出姿态修正
     EEPROM_FLOAT(angle.C_l, 25, 0.60f),            // 分母补偿权重，弱信号时抑制偏差放大
-    /* --- DIFF 页面（槽位按菜单显示顺序：diff_en/inner_g/outer_g/strong_sm/sc_angle/strong_en） --- */
-    EEPROM_INT(speed.diff_enable, 26, 0),                // 非线性内外轮差速开关
-    EEPROM_FLOAT(speed.diff_inner_gain, 27, 0.60f),      // 差速分配内轮减速增益
-    EEPROM_FLOAT(speed.diff_outer_gain, 28, 0.50f),      // 差速分配外轮增速增益
-    EEPROM_FLOAT(angle.strong_signal_sum, 29, 1200.0f),  // 强信号姿态锁定阈值，四路和超过即锁定航向
-    EEPROM_FLOAT(angle.strong_correct_angle, 30, 10.0f), // 强信号区反向修正角速度，带符号
-    EEPROM_INT(angle.strong_signal_enable, 31, 0),       // 强信号姿态锁定总开关：1-开启，0-关闭
     /* --- RING 页面（小圆环参数组） --- */
-    EEPROM_FLOAT(ring.small_profile.entry_straight_encoder, 32, 5.0f), // 小圆环入口识别后零角速度直走距离
+    EEPROM_FLOAT(ring.small_profile.entry_straight_encoder, 26, 5.0f), // 小圆环入口识别后零角速度直走距离
     /* 小圆环进环增益随目标速度的补偿斜率 */
-    EEPROM_FLOAT(ring.small_profile.gain_speed_slope, 33, 0.09f),
+    EEPROM_FLOAT(ring.small_profile.gain_speed_slope, 27, 0.09f),
     /* --- RING ENTRY 子页面 --- */
-    EEPROM_FLOAT(ring.small_profile.bias_entry_gain, 34, 2.30f),       // 小圆环进环阶段同侧两路电感放大倍数
-    EEPROM_FLOAT(ring.small_profile.bias_exit_gain, 35, 1.00f),        // 小圆环出环阶段对侧两路电感放大倍数
-    EEPROM_FLOAT(ring.small_profile.bias_entry_yaw, 36, 40.0f),        // 小圆环结束进环偏置的累计转角阈值
-    EEPROM_FLOAT(ring.small_profile.bias_entry_encoder, 37, 3.00f),    // 小圆环结束进环偏置的里程阈值
-    EEPROM_FLOAT(ring.small_profile.bias_finish_encoder, 38, 100.00f), // 小圆环出环判定的里程阈值
-    EEPROM_FLOAT(ring.small_profile.bias_finish_yaw, 39, 360.0f),      // 小圆环出环满圈角度积分阈值，与里程双条件确认
-    EEPROM_FLOAT(ring.small_profile.target_speed, 40, 60.0f),          // 小圆环进环/环内/出环目标速度
+    EEPROM_FLOAT(ring.small_profile.bias_entry_gain, 28, 2.30f),       // 小圆环进环阶段同侧两路电感放大倍数
+    EEPROM_FLOAT(ring.small_profile.bias_exit_gain, 29, 1.20f),        // 小圆环出环阶段对侧两路电感放大倍数
+    EEPROM_FLOAT(ring.small_profile.bias_entry_yaw, 30, 40.0f),        // 小圆环结束进环偏置的累计转角阈值
+    EEPROM_FLOAT(ring.small_profile.bias_entry_encoder, 31, 3.00f),    // 小圆环结束进环偏置的里程阈值
+    EEPROM_FLOAT(ring.small_profile.bias_finish_encoder, 32, 100.00f), // 小圆环出环判定的里程阈值
+    EEPROM_FLOAT(ring.small_profile.bias_finish_yaw, 33, 360.0f),      // 小圆环出环满圈角度积分阈值，与里程双条件确认
+    EEPROM_FLOAT(ring.small_profile.target_speed, 34, 50.0f),          // 小圆环进环/环内/出环目标速度
     /* --- RING CTRL 子页面 --- */
-    EEPROM_FLOAT(ring.small_profile.adc_a_1, 41, 1.0f),  // 小圆环阶段横向主差分权重
-    EEPROM_FLOAT(ring.small_profile.adc_b_1, 42, 1.20f), // 小圆环阶段辅助电感差分权重
-    EEPROM_FLOAT(ring.small_profile.adc_c_l, 43, 0.60f), // 小圆环阶段分母补偿权重
-    EEPROM_FLOAT(ring.small_profile.kp_Err, 44, 5.50f),  // 小圆环阶段方向环比例系数
-    EEPROM_FLOAT(ring.small_profile.kd_Err, 45, 9.0f),   // 小圆环阶段方向环微分系数
-    EEPROM_FLOAT(ring.small_profile.kp2_Err, 46, 0.01f), // 小圆环阶段方向环非线性增强系数
+    EEPROM_FLOAT(ring.small_profile.adc_a_1, 35, 1.0f),  // 小圆环阶段横向主差分权重
+    EEPROM_FLOAT(ring.small_profile.adc_b_1, 36, 1.20f), // 小圆环阶段辅助电感差分权重
+    EEPROM_FLOAT(ring.small_profile.adc_c_l, 37, 0.60f), // 小圆环阶段分母补偿权重
+    EEPROM_FLOAT(ring.small_profile.kp_Err, 38, 5.50f),  // 小圆环阶段方向环比例系数
+    EEPROM_FLOAT(ring.small_profile.kd_Err, 39, 9.0f),   // 小圆环阶段方向环微分系数
+    EEPROM_FLOAT(ring.small_profile.kp2_Err, 40, 0.01f), // 小圆环阶段方向环非线性增强系数
     /* --- RING DRIVE 子页面 --- */
-    EEPROM_FLOAT(ring.small_profile.kp_Angle, 47, 1.40f),        // 小圆环阶段角速度内环比例系数
-    EEPROM_FLOAT(ring.small_profile.kd_Angle, 48, 1.52f),        // 小圆环阶段角速度内环微分系数
-    EEPROM_FLOAT(ring.small_profile.diff_inner_gain, 49, 0.60f), // 小圆环阶段内轮减速增益
-    EEPROM_FLOAT(ring.small_profile.diff_outer_gain, 50, 0.50f), // 小圆环阶段外轮增速增益
-    /* --- LARGE RING 页面（大圆环独立参数组，槽位 51~69 紧跟小圆环，与菜单 RING 页顺序一致） --- */
-    EEPROM_FLOAT(ring.large_profile.entry_straight_encoder, 51, 5.0f), // 大圆环入口识别后零角速度直走距离
-    EEPROM_FLOAT(ring.large_profile.gain_speed_slope, 52, 0.09f),      // 大圆环进环增益随目标速度的补偿斜率
+    EEPROM_FLOAT(ring.small_profile.kp_Angle, 41, 1.40f), // 小圆环阶段角速度内环比例系数
+    EEPROM_FLOAT(ring.small_profile.kd_Angle, 42, 1.52f), // 小圆环阶段角速度内环微分系数
+    /* --- LARGE RING 页面（大圆环独立参数组，槽位 43~59 紧跟小圆环，与菜单 RING 页顺序一致） --- */
+    EEPROM_FLOAT(ring.large_profile.entry_straight_encoder, 43, 5.0f), // 大圆环入口识别后零角速度直走距离
+    EEPROM_FLOAT(ring.large_profile.gain_speed_slope, 44, 0.09f),      // 大圆环进环增益随目标速度的补偿斜率
     /* --- LARGE RING ENTRY 子页面 --- */
-    EEPROM_FLOAT(ring.large_profile.bias_entry_gain, 53, 2.30f),       // 大圆环进环阶段同侧两路电感放大倍数
-    EEPROM_FLOAT(ring.large_profile.bias_exit_gain, 54, 1.00f),        // 大圆环出环阶段对侧两路电感放大倍数
-    EEPROM_FLOAT(ring.large_profile.bias_entry_yaw, 55, 40.0f),        // 大圆环结束进环偏置的累计转角阈值
-    EEPROM_FLOAT(ring.large_profile.bias_entry_encoder, 56, 3.00f),    // 大圆环结束进环偏置的里程阈值
-    EEPROM_FLOAT(ring.large_profile.bias_finish_encoder, 57, 100.00f), // 大圆环出环判定的里程阈值
-    EEPROM_FLOAT(ring.large_profile.bias_finish_yaw, 58, 360.0f),      // 大圆环出环满圈角度积分阈值，与里程双条件确认
-    EEPROM_FLOAT(ring.large_profile.target_speed, 59, 60.0f),          // 大圆环进环/环内/出环目标速度
+    EEPROM_FLOAT(ring.large_profile.bias_entry_gain, 45, 1.80f),       // 大圆环进环阶段同侧两路电感放大倍数
+    EEPROM_FLOAT(ring.large_profile.bias_exit_gain, 46, 1.20f),        // 大圆环出环阶段对侧两路电感放大倍数
+    EEPROM_FLOAT(ring.large_profile.bias_entry_yaw, 47, 40.0f),        // 大圆环结束进环偏置的累计转角阈值
+    EEPROM_FLOAT(ring.large_profile.bias_entry_encoder, 48, 3.00f),    // 大圆环结束进环偏置的里程阈值
+    EEPROM_FLOAT(ring.large_profile.bias_finish_encoder, 49, 100.00f), // 大圆环出环判定的里程阈值
+    EEPROM_FLOAT(ring.large_profile.bias_finish_yaw, 50, 360.0f),      // 大圆环出环满圈角度积分阈值，与里程双条件确认
+    EEPROM_FLOAT(ring.large_profile.target_speed, 51, 50.0f),          // 大圆环进环/环内/出环目标速度
     /* --- LARGE RING CTRL 子页面 --- */
-    EEPROM_FLOAT(ring.large_profile.adc_a_1, 60, 1.0f),  // 大圆环阶段横向主差分权重
-    EEPROM_FLOAT(ring.large_profile.adc_b_1, 61, 1.20f), // 大圆环阶段辅助电感差分权重
-    EEPROM_FLOAT(ring.large_profile.adc_c_l, 62, 0.60f), // 大圆环阶段分母补偿权重
-    EEPROM_FLOAT(ring.large_profile.kp_Err, 63, 5.50f),  // 大圆环阶段方向环比例系数
-    EEPROM_FLOAT(ring.large_profile.kd_Err, 64, 9.0f),   // 大圆环阶段方向环微分系数
-    EEPROM_FLOAT(ring.large_profile.kp2_Err, 65, 0.01f), // 大圆环阶段方向环非线性增强系数
+    EEPROM_FLOAT(ring.large_profile.adc_a_1, 52, 1.0f),  // 大圆环阶段横向主差分权重
+    EEPROM_FLOAT(ring.large_profile.adc_b_1, 53, 1.20f), // 大圆环阶段辅助电感差分权重
+    EEPROM_FLOAT(ring.large_profile.adc_c_l, 54, 0.60f), // 大圆环阶段分母补偿权重
+    EEPROM_FLOAT(ring.large_profile.kp_Err, 55, 5.50f),  // 大圆环阶段方向环比例系数
+    EEPROM_FLOAT(ring.large_profile.kd_Err, 56, 9.0f),   // 大圆环阶段方向环微分系数
+    EEPROM_FLOAT(ring.large_profile.kp2_Err, 57, 0.01f), // 大圆环阶段方向环非线性增强系数
     /* --- LARGE RING DRIVE 子页面 --- */
-    EEPROM_FLOAT(ring.large_profile.kp_Angle, 66, 1.40f),        // 大圆环阶段角速度内环比例系数
-    EEPROM_FLOAT(ring.large_profile.kd_Angle, 67, 1.52f),        // 大圆环阶段角速度内环微分系数
-    EEPROM_FLOAT(ring.large_profile.diff_inner_gain, 68, 0.60f), // 大圆环阶段内轮减速增益
-    EEPROM_FLOAT(ring.large_profile.diff_outer_gain, 69, 0.50f), // 大圆环阶段外轮增速增益；大圆环组紧随小圆环组
+    EEPROM_FLOAT(ring.large_profile.kp_Angle, 58, 1.40f), // 大圆环阶段角速度内环比例系数
+    EEPROM_FLOAT(ring.large_profile.kd_Angle, 59, 1.52f), // 大圆环阶段角速度内环微分系数
     /* --- CYLINDER 页面 --- */
-    EEPROM_FLOAT(cylinder.encoder_target, 70, 300.0f),   // 圆桶编码器积分退出阈值
-    EEPROM_INT(cylinder.ad_both_high_threshold, 71, 45), // 圆桶双路强信号识别阈值
-    EEPROM_FLOAT(cylinder.adc_a_1, 72, 1.00f),           // 圆桶专用横向主差分权重
-    EEPROM_FLOAT(cylinder.adc_b_1, 73, 1.20f),           // 圆桶专用竖向差分权重
-    EEPROM_FLOAT(cylinder.adc_c_l, 74, 0.60f),           // 圆桶专用分母补偿权重
-    EEPROM_INT(cylinder.exit_slow_speed, 75, 60),        // 圆桶确认后阶梯减速的最低目标速度
-    EEPROM_FLOAT(cylinder.kp_Err, 76, 1.0f),             // 圆桶专用方向环比例系数
-    EEPROM_FLOAT(cylinder.kd_Err, 77, 1.0f),             // 圆桶专用方向环微分系数
+    EEPROM_FLOAT(cylinder.encoder_target, 60, 300.0f),   // 圆桶编码器积分退出阈值
+    EEPROM_INT(cylinder.ad_both_high_threshold, 61, 45), // 圆桶双路强信号识别阈值
+    EEPROM_FLOAT(cylinder.adc_a_1, 62, 1.00f),           // 圆桶专用横向主差分权重
+    EEPROM_FLOAT(cylinder.adc_b_1, 63, 1.20f),           // 圆桶专用竖向差分权重
+    EEPROM_FLOAT(cylinder.adc_c_l, 64, 0.60f),           // 圆桶专用分母补偿权重
+    EEPROM_INT(cylinder.exit_slow_speed, 65, 50),        // 圆桶确认后阶梯减速的最低目标速度
+    EEPROM_FLOAT(cylinder.kp_Err, 66, 1.0f),             // 圆桶专用方向环比例系数
+    EEPROM_FLOAT(cylinder.kd_Err, 67, 1.0f),             // 圆桶专用方向环微分系数
     /* --- WALL 页面 --- */
-    EEPROM_INT(wall.slow_speed, 78, 75),           // 墙面阶段降速目标值
-    EEPROM_INT(wall.slow_time, 79, 150),           // 墙面阶段降速持续时间，×2ms
-    EEPROM_INT(wall.timing_count, 80, 500),        // 墙面阶段下墙计时，×2ms
-    EEPROM_FLOAT(wall.encoder_target, 81, 250.0f), // 墙面退出编码器积分阈值
-    /* --- FLY 页面（飞坡参数 + 停止等待参数） --- */
-    EEPROM_INT(fly.seesaw_mode, 82, 1),              // 飞坡模式选择：0-飞坡，1-停止等待
-    EEPROM_INT(fly.fly_speed, 83, 15),               // 飞坡LOW阶段目标速度
-    EEPROM_INT(fly.fly_detect_count, 84, 5),         // 飞坡入口弱磁确认次数
-    EEPROM_INT(fly.fly_recover_speed, 85, 10),       // 飞坡COOLDOWN恢复速度
-    EEPROM_FLOAT(fly.fly_release_step, 86, 0.2f),    // 飞坡COOLDOWN调节步长
-    EEPROM_INT(fly.fly_land_confirm_count, 87, 10),  // 飞坡落地回升连续确认次数
-    EEPROM_INT(fly.seesaw_speed, 88, 15),            // 停止等待模式CREEP阶段目标速度
-    EEPROM_INT(fly.seesaw_detect_count, 89, 5),      // 跷跷板入口命中次数
-    EEPROM_INT(fly.seesaw_wait_count, 90, 10),       // 停止等待模式停车等待时间，×2ms
-    EEPROM_FLOAT(fly.seesaw_creep_cm, 91, 20.0f),    // 停止等待模式前挪距离
-    EEPROM_FLOAT(fly.seesaw_release_step, 92, 0.2f), // 停止等待COOLDOWN调节步长
+    EEPROM_INT(wall.entry_speed, 68, 50),           // 墙面全程目标速度，低于 speed_run 减速、高于则加速
+    EEPROM_INT(wall.timing_count, 69, 500),         // 墙面阶段下墙计时，×2ms
+    EEPROM_FLOAT(wall.encoder_target, 70, 250.0f),  // 墙面退出编码器积分阈值
+    /* --- FLY 页面（飞坡参数 + 停止等待参数 + 释放期居中权重） --- */
+    EEPROM_INT(fly.seesaw_mode, 71, 1),              // 飞坡模式选择：0-飞坡，1-停止等待
+    EEPROM_INT(fly.fly_speed, 72, 15),               // 飞坡LOW阶段目标速度
+    EEPROM_INT(fly.fly_detect_count, 73, 5),         // 飞坡入口弱磁确认次数
+    EEPROM_INT(fly.fly_recover_speed, 74, 10),       // 飞坡COOLDOWN恢复速度
+    EEPROM_FLOAT(fly.fly_release_step, 75, 0.3f),    // 飞坡COOLDOWN调节步长
+    EEPROM_INT(fly.fly_land_confirm_count, 76, 10),  // 飞坡落地回升连续确认次数
+    EEPROM_INT(fly.seesaw_speed, 77, 15),            // 停止等待模式CREEP阶段目标速度
+    EEPROM_INT(fly.seesaw_detect_count, 78, 3),      // 跷跷板入口命中次数
+    EEPROM_INT(fly.seesaw_wait_count, 79, 15),       // 停止等待模式停车等待时间，×2ms
+    EEPROM_FLOAT(fly.seesaw_creep_cm, 80, 25.0f),    // 停止等待模式前挪距离
+    EEPROM_FLOAT(fly.seesaw_release_step, 81, 0.3f), // 停止等待COOLDOWN调节步长
+    EEPROM_FLOAT(fly.center_a_1, 82, 1.00f),         // 释放期居中横向主差分权重
+    EEPROM_FLOAT(fly.center_b_1, 83, 1.20f),         // 释放期居中竖向差分权重
+    EEPROM_FLOAT(fly.center_c_l, 84, 0.60f),         // 释放期居中分母补偿权重
     /* --- CROSS 页面 --- */
-    EEPROM_FLOAT(cross.encoder_target, 93, 300.0f), // 双十字退出编码器积分阈值
-    EEPROM_FLOAT(cross.adc_a_1, 94, 1.0f),          // 双十字专用横向主差分权重
-    EEPROM_FLOAT(cross.adc_b_1, 95, 1.20f),         // 双十字专用竖向差分权重
-    EEPROM_FLOAT(cross.adc_c_l, 96, 0.60f),         // 双十字专用分母补偿权重
-    EEPROM_FLOAT(cross.kp_Err, 97, 5.60),           // 双十字专用方向环比例系数
-    EEPROM_FLOAT(cross.kd_Err, 98, 9.0f),           // 双十字专用方向环微分系数
-    EEPROM_FLOAT(cross.kp2_Err, 99, 0.020f),        // 双十字专用方向环非线性增强系数
+    EEPROM_FLOAT(cross.encoder_target, 85, 300.0f), // 双十字退出编码器积分阈值
+    EEPROM_FLOAT(cross.adc_a_1, 86, 1.0f),          // 双十字专用横向主差分权重
+    EEPROM_FLOAT(cross.adc_b_1, 87, 1.20f),         // 双十字专用竖向差分权重
+    EEPROM_FLOAT(cross.adc_c_l, 88, 0.60f),         // 双十字专用分母补偿权重
+    EEPROM_FLOAT(cross.kp_Err, 89, 5.60),           // 双十字专用方向环比例系数
+    EEPROM_FLOAT(cross.kd_Err, 90, 9.0f),           // 双十字专用方向环微分系数
+    EEPROM_FLOAT(cross.kp2_Err, 91, 0.020f),        // 双十字专用方向环非线性增强系数
     /* --- CROSSS 页面 --- */
-    EEPROM_FLOAT(cross_single.encoder_target, 100, 300.0f), // 单十字退出编码器积分阈值
-    EEPROM_FLOAT(cross_single.adc_a_1, 101, 1.0f),          // 单十字专用横向主差分权重
-    EEPROM_FLOAT(cross_single.adc_b_1, 102, 1.20f),         // 单十字专用竖向差分权重
-    EEPROM_FLOAT(cross_single.adc_c_l, 103, 0.60f),         // 单十字专用分母补偿权重
-    EEPROM_FLOAT(cross_single.kp_Err, 104, 5.55f),          // 单十字专用方向环比例系数
-    EEPROM_FLOAT(cross_single.kd_Err, 105, 12.0f),          // 单十字专用方向环微分系数
-    EEPROM_FLOAT(cross_single.kp2_Err, 106, 0.020f)};       // 单十字专用方向环非线性增强系数
+    EEPROM_FLOAT(cross_single.encoder_target, 92, 300.0f), // 单十字退出编码器积分阈值
+    EEPROM_FLOAT(cross_single.adc_a_1, 93, 1.0f),         // 单十字专用横向主差分权重
+    EEPROM_FLOAT(cross_single.adc_b_1, 94, 1.20f),        // 单十字专用竖向差分权重
+    EEPROM_FLOAT(cross_single.adc_c_l, 95, 0.60f),        // 单十字专用分母补偿权重
+    EEPROM_FLOAT(cross_single.kp_Err, 96, 5.55f),         // 单十字专用方向环比例系数
+    EEPROM_FLOAT(cross_single.kd_Err, 97, 12.0f),         // 单十字专用方向环微分系数
+    EEPROM_FLOAT(cross_single.kp2_Err, 98, 0.020f)};      // 单十字专用方向环非线性增强系数
 
 #define EEPROM_CONFIG_ITEM_COUNT \
     ((uint8)(sizeof(eeprom_config_items) / sizeof(eeprom_config_items[0])))
@@ -275,7 +266,7 @@ static void eeprom_write_config(void)
  * @details
  * 1. 初始化 IAP 模块。
  * 2. 读取配置起始扇区（EEPROM_CONFIG_SECTOR_ADDR）的全部数据到内存缓冲区。
- * 3. 检查缓冲区最末槽位 107 的初始化标志 `eeprom_init_time`。
+ * 3. 检查缓冲区最末槽位 99 的初始化标志 `eeprom_init_time`。
  *    - 若不为 1，说明是首次上电、Flash 被擦除或上次写中途掉电，此时加载默认参数并写入 Flash。
  *    - 若为 1，说明 Flash 中有有效配置，直接从 Flash 读取参数到 `app`。
  *      标志位于缓冲区末尾，标志有效即整包参数完整；float 参数仍由 NaN 检测兜底。
