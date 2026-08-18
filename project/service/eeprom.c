@@ -54,20 +54,20 @@ typedef struct
 // #define TRACK_ELEMENT_SINGLE_CROSS 9     /**< 单十字元素编号，入口判定与双十字相同，仅序列区分。 */
 static const EepromConfigItem eeprom_config_items[] = {
     /* --- 元素序列（ELEM/ELEM2 页面，放最前便于现场调整序列） --- */
-    EEPROM_INT(start.element_seq[0], 1, TRACK_ELEMENT_SEESAW), // 元素序列槽位0
+    EEPROM_INT(start.element_seq[0], 1, TRACK_ELEMENT_SEESAW),          // 元素序列槽位0
     EEPROM_INT(start.element_seq[1], 2, TRACK_ELEMENT_LARGE_RING_LEFT), // 元素序列槽位1
-    EEPROM_INT(start.element_seq[2], 3, TRACK_ELEMENT_CYLINDER), // 元素序列槽位2
-    EEPROM_INT(start.element_seq[3], 4, TRACK_ELEMENT_RIGHT_RING), // 元素序列槽位3
-    EEPROM_INT(start.element_seq[4], 5, TRACK_ELEMENT_WALL), // 元素序列槽位4
-    EEPROM_INT(start.element_seq[5], 6, TRACK_ELEMENT_NONE), // 元素序列槽位5
-    EEPROM_INT(start.element_seq[6], 7, TRACK_ELEMENT_NONE), // 元素序列槽位6
-    EEPROM_INT(start.element_seq[7], 8, TRACK_ELEMENT_NONE), // 元素序列槽位7
+    EEPROM_INT(start.element_seq[2], 3, TRACK_ELEMENT_CYLINDER),        // 元素序列槽位2
+    EEPROM_INT(start.element_seq[3], 4, TRACK_ELEMENT_RIGHT_RING),      // 元素序列槽位3
+    EEPROM_INT(start.element_seq[4], 5, TRACK_ELEMENT_WALL),            // 元素序列槽位4
+    EEPROM_INT(start.element_seq[5], 6, TRACK_ELEMENT_NONE),            // 元素序列槽位5
+    EEPROM_INT(start.element_seq[6], 7, TRACK_ELEMENT_NONE),            // 元素序列槽位6
+    EEPROM_INT(start.element_seq[7], 8, TRACK_ELEMENT_NONE),            // 元素序列槽位7
     /* --- START 页面 --- */
-    EEPROM_INT(start.start_flag, 9, 1),                         // 启动标志：1-运行，0-待机
-    EEPROM_INT(start.element_enable, 10, 1),                    // 赛道元素识别总开关
-    EEPROM_FLOAT(start.fuya_xili, 11, 90.0f),                   // 平地负压吸附百分比
-    EEPROM_FLOAT(angle.gyro_feedback_scale, 12, 1.80f),         // 角速度反馈缩放，匹配gyro_z量级
-    EEPROM_FLOAT(start.encoder_stop_distance_cm, 13, 11500.0f), // 上电累计里程达到后停车
+    EEPROM_INT(start.start_flag, 9, 1),                        // 启动标志：1-运行，0-待机
+    EEPROM_INT(start.element_enable, 10, 1),                   // 赛道元素识别总开关
+    EEPROM_FLOAT(start.fuya_xili, 11, 90.0f),                  // 平地负压吸附百分比
+    EEPROM_FLOAT(angle.gyro_feedback_scale, 12, 1.80f),        // 角速度反馈缩放，匹配gyro_z量级
+    EEPROM_FLOAT(start.encoder_stop_distance_cm, 13, 8000.0f), // 上电累计里程达到后停车
     /* --- CTRL 页面 --- */
     EEPROM_FLOAT(speed.kp_Err, 14, 6.30f),        // 转向环比例系数Kp
     EEPROM_FLOAT(speed.kd_Err, 15, 9.0f),         // 转向环微分系数Kd
@@ -92,7 +92,7 @@ static const EepromConfigItem eeprom_config_items[] = {
     EEPROM_FLOAT(ring.small_profile.bias_entry_yaw, 30, 40.0f),        // 小圆环结束进环偏置的累计转角阈值
     EEPROM_FLOAT(ring.small_profile.bias_entry_encoder, 31, 3.00f),    // 小圆环结束进环偏置的里程阈值
     EEPROM_FLOAT(ring.small_profile.bias_finish_encoder, 32, 100.00f), // 小圆环出环判定的里程阈值
-    EEPROM_FLOAT(ring.small_profile.bias_finish_yaw, 33, 350.0f),      // 小圆环出环满圈角度积分阈值，与里程双条件确认
+    EEPROM_FLOAT(ring.small_profile.bias_finish_yaw, 33, 340.0f),      // 小圆环出环满圈角度积分阈值，与里程双条件确认
     EEPROM_FLOAT(ring.small_profile.target_speed, 34, 60.0f),          // 小圆环进环/环内/出环目标速度
     /* --- RING CTRL 子页面 --- */
     EEPROM_FLOAT(ring.small_profile.adc_a_1, 35, 1.0f),  // 小圆环阶段横向主差分权重
@@ -113,7 +113,7 @@ static const EepromConfigItem eeprom_config_items[] = {
     EEPROM_FLOAT(ring.large_profile.bias_entry_yaw, 47, 40.0f),        // 大圆环结束进环偏置的累计转角阈值
     EEPROM_FLOAT(ring.large_profile.bias_entry_encoder, 48, 3.00f),    // 大圆环结束进环偏置的里程阈值
     EEPROM_FLOAT(ring.large_profile.bias_finish_encoder, 49, 100.00f), // 大圆环出环判定的里程阈值
-    EEPROM_FLOAT(ring.large_profile.bias_finish_yaw, 50, 350.0f),      // 大圆环出环满圈角度积分阈值，与里程双条件确认
+    EEPROM_FLOAT(ring.large_profile.bias_finish_yaw, 50, 340.0f),      // 大圆环出环满圈角度积分阈值，与里程双条件确认
     EEPROM_FLOAT(ring.large_profile.target_speed, 51, 60.0f),          // 大圆环进环/环内/出环目标速度
     /* --- LARGE RING CTRL 子页面 --- */
     EEPROM_FLOAT(ring.large_profile.adc_a_1, 52, 1.0f),  // 大圆环阶段横向主差分权重
@@ -132,12 +132,12 @@ static const EepromConfigItem eeprom_config_items[] = {
     EEPROM_FLOAT(cylinder.adc_b_1, 63, 1.20f),           // 圆桶专用竖向差分权重
     EEPROM_FLOAT(cylinder.adc_c_l, 64, 0.60f),           // 圆桶专用分母补偿权重
     EEPROM_INT(cylinder.exit_slow_speed, 65, 60),        // 圆桶确认后阶梯减速的最低目标速度
-    EEPROM_FLOAT(cylinder.kp_Err, 66, 1.0f),             // 圆桶专用方向环比例系数
-    EEPROM_FLOAT(cylinder.kd_Err, 67, 1.0f),             // 圆桶专用方向环微分系数
+    EEPROM_FLOAT(cylinder.kp_Err, 66, 5.70f),            // 圆桶专用方向环比例系数，默认与全局一致
+    EEPROM_FLOAT(cylinder.kd_Err, 67, 9.0f),             // 圆桶专用方向环微分系数，默认与全局一致
     /* --- WALL 页面 --- */
-    EEPROM_INT(wall.entry_speed, 68, 60),           // 墙面全程目标速度，低于 speed_run 减速、高于则加速
-    EEPROM_INT(wall.timing_count, 69, 500),         // 墙面阶段下墙计时，×2ms
-    EEPROM_FLOAT(wall.encoder_target, 70, 250.0f),  // 墙面退出编码器积分阈值
+    EEPROM_INT(wall.entry_speed, 68, 60),          // 墙面全程目标速度，低于 speed_run 减速、高于则加速
+    EEPROM_INT(wall.timing_count, 69, 500),        // 墙面阶段下墙计时，×2ms
+    EEPROM_FLOAT(wall.encoder_target, 70, 250.0f), // 墙面退出编码器积分阈值
     /* --- FLY 页面（飞坡参数 + 停止等待参数 + 释放期居中权重） --- */
     EEPROM_INT(fly.seesaw_mode, 71, 1),              // 飞坡模式选择：0-飞坡，1-停止等待
     EEPROM_INT(fly.fly_speed, 72, 15),               // 飞坡LOW阶段目标速度
@@ -163,12 +163,12 @@ static const EepromConfigItem eeprom_config_items[] = {
     EEPROM_FLOAT(cross.kp2_Err, 91, 0.020f),        // 双十字专用方向环非线性增强系数
     /* --- CROSSS 页面 --- */
     EEPROM_FLOAT(cross_single.encoder_target, 92, 300.0f), // 单十字退出编码器积分阈值
-    EEPROM_FLOAT(cross_single.adc_a_1, 93, 1.0f),         // 单十字专用横向主差分权重
-    EEPROM_FLOAT(cross_single.adc_b_1, 94, 1.20f),        // 单十字专用竖向差分权重
-    EEPROM_FLOAT(cross_single.adc_c_l, 95, 0.60f),        // 单十字专用分母补偿权重
-    EEPROM_FLOAT(cross_single.kp_Err, 96, 5.55f),         // 单十字专用方向环比例系数
-    EEPROM_FLOAT(cross_single.kd_Err, 97, 12.0f),         // 单十字专用方向环微分系数
-    EEPROM_FLOAT(cross_single.kp2_Err, 98, 0.020f)};      // 单十字专用方向环非线性增强系数
+    EEPROM_FLOAT(cross_single.adc_a_1, 93, 1.0f),          // 单十字专用横向主差分权重
+    EEPROM_FLOAT(cross_single.adc_b_1, 94, 1.20f),         // 单十字专用竖向差分权重
+    EEPROM_FLOAT(cross_single.adc_c_l, 95, 0.60f),         // 单十字专用分母补偿权重
+    EEPROM_FLOAT(cross_single.kp_Err, 96, 5.55f),          // 单十字专用方向环比例系数
+    EEPROM_FLOAT(cross_single.kd_Err, 97, 12.0f),          // 单十字专用方向环微分系数
+    EEPROM_FLOAT(cross_single.kp2_Err, 98, 0.020f)};       // 单十字专用方向环非线性增强系数
 
 #define EEPROM_CONFIG_ITEM_COUNT \
     ((uint8)(sizeof(eeprom_config_items) / sizeof(eeprom_config_items[0])))

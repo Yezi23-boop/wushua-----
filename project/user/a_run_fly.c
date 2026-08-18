@@ -51,7 +51,7 @@ volatile uint8 seesaw_centering_active = 0;  /**< 跷跷板前挪/恢复期临�
 #define SEESAW_LAND_SIDE_TH 25u      /* CHECK 阶段横向电感恢复阈值 */
 #define SEESAW_LAND_CENTER_TH 10u    /* CHECK 阶段竖向电感恢复阈值 */
 #define SEESAW_ENTRY_WINDOW_COUNT 20 /* 停止等待入口确认窗口，20 * 2ms = 40ms。 */
-#define SEESAW_BRAKE_COUNT 20        /* 10 * 2ms = 20ms，用零速闭环先抵消上板惯性。 */
+#define SEESAW_BRAKE_COUNT 10        /* 10 * 2ms = 20ms，用零速闭环先抵消上板惯性。 */
 
 /* --- 释放阶段共用限制 --- */
 #define FLY_PWM_LIMIT_RECOVER_START 6000             /* 释放起步 PWM 上限，给低速回线留纠偏余量。 */

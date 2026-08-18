@@ -5,20 +5,17 @@
 #include "zf_common_headfile.h"
 #include "a_run_cylinder.h"
 
-#define CYLINDER_AD_SINGLE_HIGH_THRESHOLD 70   /* 圆桶单路强信号阈值：ad1 或 ad4 任一路超过该值也算一次命中。 */
 #define CYLINDER_AD_VERTICAL_HIGH_THRESHOLD 70 /* 圆桶纵向强信号阈值：ad2 或 ad3 任一路超过该值也算一次命中。 */
+#define CYLINDER_AD5_HIGH_THRESHOLD 40u        /* 圆桶第五路横向中间电感强信号阈值，与横向/纵向强信号共同确认圆桶命中。 */
 #define CYLINDER_TOP_WINDOW_COUNT 250u         /* 圆桶命中统计窗口，2ms * 250 = 500ms。 */
 #define CYLINDER_TOP_HIT_COUNT 5               /* 500ms 窗口内强信号达到该次数才认定进入圆桶段。 */
-#define CYLINDER_SPEED_RAMP_STEP 0.05f         /* 圆桶确认后每个 2ms 周期的阶梯加减速步长。 */
-#define CYLINDER_PITCH_CHANGE_THRESHOLD 50.0f /* 圆桶全程pitch累计绝对变化阈值，单位度；桶内爬坡+下坡远超该值，平路噪声远低于。 */
+#define CYLINDER_SPEED_RAMP_STEP 0.3f          /* 圆桶确认后每个 2ms 周期的阶梯加减速步长。 */
 
 static CylinderState cylinder_state = CYLINDER_STATE_IDLE; /**< 圆桶状态机阶段，由 2ms 主环推进。 */
 static uint8 cylinder_top_count = 0;                       /**< 圆桶窗口内命中次数，达到阈值后认定进入圆桶段。 */
 static uint8 cylinder_top_window_count = 0;                /**< 圆桶命中统计窗口计数，首个强信号后开始计时。 */
 static float cylinder_encoder_sum = 0.0f;                  /**< 圆桶编码器里程积分，用于判断行驶距离。 */
 static float cylinder_ramp_speed = 0.0f;                   /**< 圆桶阶梯加减速的当前目标速度。 */
-static float cylinder_pitch_sum = 0.0f;                    /**< DECEL 窗口内 |pitch变化| 累计，单位度。 */
-static float cylinder_pitch_last = 0.0f;                   /**< 上一拍 pitch 采样值，进 DECEL 时初始化。 */
 
 /**
  * @brief 读取当前圆桶状态机阶段。
@@ -40,8 +37,6 @@ void a_run_cylinder_reset(void)
     cylinder_top_window_count = 0;
     cylinder_encoder_sum = 0.0f;
     cylinder_ramp_speed = 0.0f;
-    cylinder_pitch_sum = 0.0f;
-    cylinder_pitch_last = 0.0f;
     cylinder_state = CYLINDER_STATE_IDLE;
 }
 
@@ -90,7 +85,6 @@ uint8 a_run_cylinder_update_2ms(float *speed)
     int both_high_threshold;
     int exit_slow_speed;
     float encoder_target;
-    float pitch_delta;
 
     cylinder_ad_high = 0;
     both_high_threshold = app.cylinder.ad_both_high_threshold;
@@ -105,12 +99,11 @@ uint8 a_run_cylinder_update_2ms(float *speed)
         encoder_target = 0.0f;
     }
 
-    if ((ad1 > (uint16)both_high_threshold &&
-         ad4 > (uint16)both_high_threshold) ||
-        ad1 > CYLINDER_AD_SINGLE_HIGH_THRESHOLD ||
-        ad4 > CYLINDER_AD_SINGLE_HIGH_THRESHOLD ||
-        ad2 > CYLINDER_AD_VERTICAL_HIGH_THRESHOLD ||
-        ad3 > CYLINDER_AD_VERTICAL_HIGH_THRESHOLD)
+    if (((ad1 > (uint16)both_high_threshold &&
+          ad4 > (uint16)both_high_threshold) ||
+         ad2 > CYLINDER_AD_VERTICAL_HIGH_THRESHOLD ||
+         ad3 > CYLINDER_AD_VERTICAL_HIGH_THRESHOLD) &&
+        ad5 > CYLINDER_AD5_HIGH_THRESHOLD)
     {
         cylinder_ad_high = 1;
     }
@@ -139,9 +132,6 @@ uint8 a_run_cylinder_update_2ms(float *speed)
                 cylinder_top_window_count = 0;
                 cylinder_encoder_sum = 0.0f;
                 cylinder_ramp_speed = *speed;
-                /* pitch 窗口从进桶拍开始：以当前俯仰角为基准，后续逐拍累计绝对变化。 */
-                cylinder_pitch_last = imu660rc_pitch;
-                cylinder_pitch_sum = 0.0f;
                 cylinder_state = CYLINDER_STATE_DECEL;
             }
             else if (cylinder_top_window_count >= CYLINDER_TOP_WINDOW_COUNT)
@@ -155,14 +145,6 @@ uint8 a_run_cylinder_update_2ms(float *speed)
     case CYLINDER_STATE_DECEL:
         /* 0.012f：里程积分系数，由采样周期(2ms)和轮径/编码器标定共同决定，将速度值转为每周期行驶距离(cm)。 */
         cylinder_encoder_sum += (speed_l + speed_r) * 0.5f * 0.012f;
-        /* 逐拍累计俯仰角绝对变化：进桶上坡与出桶下坡都计入，不受符号往返影响。 */
-        pitch_delta = imu660rc_pitch - cylinder_pitch_last;
-        if (pitch_delta < 0.0f)
-        {
-            pitch_delta = -pitch_delta;
-        }
-        cylinder_pitch_sum += pitch_delta;
-        cylinder_pitch_last = imu660rc_pitch;
         cylinder_ramp_speed -= CYLINDER_SPEED_RAMP_STEP;
         if (cylinder_ramp_speed < (float)exit_slow_speed)
         {
@@ -171,14 +153,9 @@ uint8 a_run_cylinder_update_2ms(float *speed)
         *speed = cylinder_ramp_speed;
         if (cylinder_encoder_sum >= encoder_target)
         {
-            if (cylinder_pitch_sum >= CYLINDER_PITCH_CHANGE_THRESHOLD)
-            {
-//									stop=1;
-                cylinder_state = CYLINDER_STATE_RELEASE;
-                return 1; /* pitch 变化达标，圆桶有效，推进序列。 */
-            }
-            /* 里程够但 pitch 几乎没动：判为误触发，复位重等真圆桶，不推进序列。 */
-            a_run_cylinder_reset();
+//					stop=1;
+            cylinder_state = CYLINDER_STATE_RELEASE;
+            return 1;
         }
         break;
 

@@ -8,7 +8,7 @@
 #define RING_ENTRY_CONFIRM_COUNT 5u     /* 300ms窗口累计命中次数，2ms调用下最快约 10ms。 */
 #define RING_GAIN_REFERENCE_SPEED 50.0f /* 基础进环增益对应的目标速度。 */
 #define RING_YAW_DT_SCALE 0.40f         /* gyro_z已缩放0.005，二者相乘等效 2ms 角度积分。 */
-#define RING_SPEED_RELEASE_STEP 0.1f    /* 出环后每个 2ms 周期的阶梯加速步长，与圆桶保持一致。 */
+#define RING_SPEED_RELEASE_STEP 0.3f    /* 出环后每个 2ms 周期的阶梯加速步长，与圆桶保持一致。 */
 
 static RingState ring_state = RING_STATE_IDLE; /**< 当前圆环状态机阶段，左右圆环共用。 */
 RingStruct ring_data = {0};                    /**< 圆环方向、积分量和软定时器。 */

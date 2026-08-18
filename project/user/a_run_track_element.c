@@ -11,6 +11,8 @@
 #include "a_run_wall.h"
 #include "a_run_cross.h"
 
+#define ELEMENT_AFTER_RING_COOLDOWN_MS 500 /**< 圆环完成后到重新开放元素识别的冷却时间(ms)，避免出环电磁残留误判下一元素入口。 */
+
 enum TrackElement
 {
     ELEMENT_NONE = TRACK_ELEMENT_NONE,                      /**< 无特殊元素；保留给后续模式切换或保护降级。 */
@@ -33,6 +35,8 @@ static void track_element_reset_state(void);
 static enum TrackElement expected_element = ELEMENT_NONE; /**< 当前期望赛道元素，用于串行屏蔽非当前元素的入口识别。 */
 static uint8 element_index = 0;                           /**< 当前元素序列下标，只在 2ms 元素仲裁中更新。 */
 static uint8 element_sequence_started = 0;                /**< 元素识别开启后是否已经按 E1~E8 完成首元素初始化。 */
+static uint8 element_hold_active = 0;                      /**< 1-处于圆环后冷却期，屏蔽所有元素入口识别与序列推进。 */
+static uint32 element_hold_timer = 0;                      /**< 圆环后冷却计时，timeadd 以 10ms 粒度累加，500ms 到点推进序列。 */
 
 /**
  * @brief 读取当前期望赛道元素。
@@ -64,7 +68,7 @@ void a_run_track_element_apply_steer_params(float *kp, float *kd, float *kp2)
 
     if (a_run_cylinder_get_state() == CYLINDER_STATE_DECEL)
     {
-        /* 圆桶减速阶段沿用圆桶专用Kp/Kd，Kp2保持全局值。 */
+        /* 圆桶减速阶段沿用圆桶专用Kp/Kd（默认与全局一致，现场可单独微调），Kp2保持全局值。 */
         *kp = app.cylinder.kp_Err;
         *kd = app.cylinder.kd_Err;
     }
@@ -248,6 +252,8 @@ static void track_element_enter_from_index(uint8 start_index)
 static void track_element_reset_state(void)
 {
     element_sequence_started = 0;
+    element_hold_active = 0;
+    timedestroy(&element_hold_timer);
     track_element_enter(ELEMENT_NONE);
 }
 
@@ -279,33 +285,49 @@ void a_run_track_element_update_gate(float *speed, float *angle_target)
     a_run_ring_update_release_speed(speed);
     a_run_seesaw_update_release_speed(speed);
 
+    /* 圆环完成后进入 500ms 冷却：期间只保留释放阶梯收尾，屏蔽入口识别与序列推进。 */
+    if (element_hold_active != 0)
+    {
+        if (timeadd(&element_hold_timer, ELEMENT_AFTER_RING_COOLDOWN_MS))
+        {
+            element_hold_active = 0;
+            timedestroy(&element_hold_timer);
+            track_element_enter_from_index((uint8)(element_index + 1));
+        }
+        return;
+    }
+
     switch (expected_element)
     {
     case ELEMENT_LEFT_RING:
         if (a_run_ring_update_2ms(1, &app.ring.small_profile) != 0)
         {
-            track_element_enter_from_index((uint8)(element_index + 1));
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
         }
         break;
 
     case ELEMENT_RIGHT_RING:
         if (a_run_ring_update_2ms(-1, &app.ring.small_profile) != 0)
         {
-            track_element_enter_from_index((uint8)(element_index + 1));
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
         }
         break;
 
     case ELEMENT_LARGE_RING_LEFT:
         if (a_run_ring_update_2ms(1, &app.ring.large_profile) != 0)
         {
-            track_element_enter_from_index((uint8)(element_index + 1));
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
         }
         break;
 
     case ELEMENT_LARGE_RING_RIGHT:
         if (a_run_ring_update_2ms(-1, &app.ring.large_profile) != 0)
         {
-            track_element_enter_from_index((uint8)(element_index + 1));
+            timedestroy(&element_hold_timer);
+            element_hold_active = 1;
         }
         break;
 
